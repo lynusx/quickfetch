@@ -3,7 +3,7 @@ import Home from './pages/home'
 
 function App() {
   return (
-    <Theme appearance="light" accentColor="blue" radius="medium">
+    <Theme appearance="light" accentColor="blue" radius="large" panelBackground="solid">
       <Home />
     </Theme>
   )
