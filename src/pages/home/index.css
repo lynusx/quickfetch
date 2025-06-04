@@ -2,3 +2,18 @@
 .rt-Button[disabled] {
   cursor: not-allowed !important;
 }
+
+/* Cursor styles for interactive elements */
+.rt-Button:not([disabled]) {
+  cursor: pointer !important;
+}
+
+.rt-RadioGroupItem,
+.rt-CheckboxGroupItem {
+  cursor: pointer !important;
+}
+
+.rt-RadioGroupItem[disabled],
+.rt-CheckboxGroupItem[disabled] {
+  cursor: not-allowed !important;
+}
