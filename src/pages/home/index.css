@@ -1,0 +1,4 @@
+/* Disabled button cursor styles */
+.rt-Button[disabled] {
+  cursor: not-allowed !important;
+}
