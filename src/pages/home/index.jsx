@@ -293,7 +293,7 @@ function Home() {
               style={{ width: '100%' }}
             >
               {isScanning ? (
-                <Flex gap="2" align="center" justify="center">
+                <Flex gap="2\" align="center\" justify="center">
                   <Spinner /> 扫描中...
                 </Flex>
               ) : (
@@ -320,7 +320,7 @@ function Home() {
               style={{ width: '100%' }}
             >
               {isCopying ? (
-                <Flex gap="2" align="center" justify="center">
+                <Flex gap="2\" align="center\" justify="center">
                   <Spinner /> 复制中...
                 </Flex>
               ) : (
