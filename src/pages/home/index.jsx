@@ -61,6 +61,7 @@ function Home() {
     try {
       setFiles([])
       setScanError(null)
+      setCopiedCount(0)
 
       const rootDirHandle = await showDirectoryPicker({
         startIn: 'desktop',
