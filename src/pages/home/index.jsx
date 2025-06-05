@@ -172,10 +172,15 @@ function Home() {
           图片批量拷贝工具
         </Heading>
 
-        <Box mb="6">
-          <Card variant="surface">
-            <Flex align="center" gap="4" p="4">
-              <Text size="3" weight="bold" color="blue" style={{ minWidth: '80px' }}>
+        <Card mb="2">
+          <Box>
+            <Flex align="center" gap="4" pr="4" py="4">
+              <Text
+                size="3"
+                weight="bold"
+                color="blue"
+                style={{ minWidth: '80px' }}
+              >
                 厂区选择
               </Text>
               <RadioGroup.Root defaultValue={plant} onValueChange={setPlant}>
@@ -189,13 +194,16 @@ function Home() {
                 </Flex>
               </RadioGroup.Root>
             </Flex>
-          </Card>
-        </Box>
+          </Box>
 
-        <Box mb="6">
-          <Card variant="surface">
-            <Flex align="center" gap="4" p="4">
-              <Text size="3" weight="bold" color="blue" style={{ minWidth: '80px' }}>
+          <Box>
+            <Flex align="center" gap="4" pr="4" py="4">
+              <Text
+                size="3"
+                weight="bold"
+                color="blue"
+                style={{ minWidth: '80px' }}
+              >
                 类型选择
               </Text>
               <CheckboxGroup.Root
@@ -213,8 +221,8 @@ function Home() {
                 </Flex>
               </CheckboxGroup.Root>
             </Flex>
-          </Card>
-        </Box>
+          </Box>
+        </Card>
 
         <Card variant="surface" mb="6">
           <Callout.Root size="2" mb="4" color="blue">
