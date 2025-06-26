@@ -1,7 +1,7 @@
-import ImageCopyPage from './pages/image-copy'
+import RootPage from './pages/root'
 
 function App() {
-  return <ImageCopyPage />
+  return <RootPage />
 }
 
 export default App
