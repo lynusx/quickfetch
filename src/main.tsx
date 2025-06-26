@@ -1,9 +1,20 @@
 import { createRoot } from 'react-dom/client'
+import { Theme } from '@radix-ui/themes'
 import '@radix-ui/themes/styles.css'
-import './index.css'
+
 import App from './App.tsx'
+import './index.css'
 
 const root = document.getElementById('root') as HTMLElement
 if (root) {
-  createRoot(root).render(<App />)
+  createRoot(root).render(
+    <Theme
+      appearance="light"
+      accentColor="blue"
+      radius="large"
+      panelBackground="solid"
+    >
+      <App />
+    </Theme>,
+  )
 }
