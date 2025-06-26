@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react'
+import { useCallback } from 'react'
 import useStore from '../../store'
 import {
   Container,
@@ -71,7 +71,7 @@ interface UseToast {
   hideToast: () => void
 }
 
-function Home() {
+function ImageCopyPage() {
   const {
     files,
     plant,
@@ -141,7 +141,7 @@ function Home() {
         queryParams.date,
         queryParams.shift,
         queryParams.times,
-        _types,
+        _types.filter((item): item is string => typeof item === 'string'),
       )
 
       const out: any[] = []
@@ -429,4 +429,4 @@ function Home() {
   )
 }
 
-export default Home
+export default ImageCopyPage

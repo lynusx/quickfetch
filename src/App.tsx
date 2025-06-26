@@ -1,5 +1,5 @@
 import { Theme } from '@radix-ui/themes'
-import Home from './pages/home'
+import ImageCopyPage from './pages/image-copy'
 
 function App() {
   return (
@@ -9,7 +9,7 @@ function App() {
       radius="large"
       panelBackground="solid"
     >
-      <Home />
+      <ImageCopyPage />
     </Theme>
   )
 }
