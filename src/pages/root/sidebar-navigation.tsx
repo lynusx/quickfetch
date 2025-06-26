@@ -1,5 +1,6 @@
 import React, { useState, type FC } from 'react'
 import { Box, Flex, Text, IconButton, TextField } from '@radix-ui/themes'
+import { NavLink, useLocation } from 'react-router'
 import {
   DashboardIcon,
   MagnifyingGlassIcon,
@@ -12,6 +13,7 @@ import {
 import './siderbar-navigation.css'
 
 const SiderbarNavigation: FC = () => {
+  const location = useLocation()
   const [darkMode, setDarkMode] = useState(false)
 
   const navItems = [
@@ -29,7 +31,7 @@ const SiderbarNavigation: FC = () => {
     },
   ]
 
-  const isActive = (path: string) => true
+  const isActive = (path: string) => location.pathname === path
 
   return (
     <Box
@@ -95,59 +97,61 @@ const SiderbarNavigation: FC = () => {
         <Box className="navigation-list">
           {navItems.map((item) => (
             <Box key={item.path} className="navigation-item">
-              <Box
-                p="3"
-                style={{
-                  backgroundColor: isActive(item.path)
-                    ? 'var(--accent-3)'
-                    : 'transparent',
-                  borderRadius: '8px',
-                  position: 'relative',
-                  zIndex: 1,
-                }}
-                className={isActive(item.path) ? 'nav-active' : ''}
-              >
-                <Flex align="center" gap="3">
-                  <Box
-                    className="nav-icon"
-                    style={{
-                      color: isActive(item.path)
-                        ? 'var(--accent-11)'
-                        : 'var(--gray-11)',
-                      minWidth: '20px',
-                    }}
-                  >
-                    {React.cloneElement(item.icon, { width: 20, height: 20 })}
-                  </Box>
-                  <Box flexGrow="1">
-                    <Text
-                      size="3"
-                      weight={isActive(item.path) ? 'medium' : 'regular'}
+              <NavLink to={item.path} className="nav-link">
+                <Box
+                  p="3"
+                  style={{
+                    backgroundColor: isActive(item.path)
+                      ? 'var(--accent-3)'
+                      : 'transparent',
+                    borderRadius: '8px',
+                    position: 'relative',
+                    zIndex: 1,
+                  }}
+                  className={isActive(item.path) ? 'nav-active' : ''}
+                >
+                  <Flex align="center" gap="3">
+                    <Box
+                      className="nav-icon"
                       style={{
                         color: isActive(item.path)
-                          ? 'var(--accent-12)'
-                          : 'var(--gray-12)',
-                        display: 'block',
-                        lineHeight: '1.4',
+                          ? 'var(--accent-11)'
+                          : 'var(--gray-11)',
+                        minWidth: '20px',
                       }}
                     >
-                      {item.label}
-                    </Text>
-                    <Text
-                      size="1"
-                      style={{
-                        color: isActive(item.path)
-                          ? 'var(--accent-10)'
-                          : 'var(--gray-10)',
-                        display: 'block',
-                        marginTop: '2px',
-                      }}
-                    >
-                      {item.description}
-                    </Text>
-                  </Box>
-                </Flex>
-              </Box>
+                      {React.cloneElement(item.icon, { width: 20, height: 20 })}
+                    </Box>
+                    <Box flexGrow="1">
+                      <Text
+                        size="3"
+                        weight={isActive(item.path) ? 'medium' : 'regular'}
+                        style={{
+                          color: isActive(item.path)
+                            ? 'var(--accent-12)'
+                            : 'var(--gray-12)',
+                          display: 'block',
+                          lineHeight: '1.4',
+                        }}
+                      >
+                        {item.label}
+                      </Text>
+                      <Text
+                        size="1"
+                        style={{
+                          color: isActive(item.path)
+                            ? 'var(--accent-10)'
+                            : 'var(--gray-10)',
+                          display: 'block',
+                          marginTop: '2px',
+                        }}
+                      >
+                        {item.description}
+                      </Text>
+                    </Box>
+                  </Flex>
+                </Box>
+              </NavLink>
             </Box>
           ))}
         </Box>

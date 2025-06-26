@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client'
 import { Theme } from '@radix-ui/themes'
+import { BrowserRouter } from 'react-router'
 import '@radix-ui/themes/styles.css'
 
 import App from './App.tsx'
@@ -14,7 +15,9 @@ if (root) {
       radius="large"
       panelBackground="solid"
     >
-      <App />
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
     </Theme>,
   )
 }

@@ -1,5 +1,7 @@
 import { Box, Container, Flex } from '@radix-ui/themes'
+
 import SiderbarNavigation from './sidebar-navigation'
+import NavViewContainer from './nav-view-container'
 
 const RootPage = () => {
   return (
@@ -19,6 +21,7 @@ const RootPage = () => {
         >
           <Container size="4" p="6">
             {/* 内容视图 */}
+            <NavViewContainer />
           </Container>
         </Box>
       </Flex>
