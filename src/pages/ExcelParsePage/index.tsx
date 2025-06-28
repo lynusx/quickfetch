@@ -1,8 +1,7 @@
-import { type FC } from 'react'
 import { Badge, Box, Button, Card, Flex, Text } from '@radix-ui/themes'
 import { FileTextIcon } from '@radix-ui/react-icons'
 
-const ExcelParsePage: FC = () => {
+const ExcelParsePage = () => {
   return (
     <Box>
       {/* 页面标题 */}

@@ -22,9 +22,10 @@ import {
   writePathsToFile,
   copyFilesInBatches,
 } from '../../utils/common'
-import { Toast } from '../../components/Toast'
+
 import './index.css'
 import { useToast } from '../../hooks/useToast'
+import { Toast } from '../../components/Toast/Toast'
 
 // 定义 useStore 返回值类型
 interface StoreState {

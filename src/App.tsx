@@ -1,4 +1,4 @@
-import RootPage from './pages/root'
+import RootPage from './pages/RootPage'
 
 function App() {
   return <RootPage />

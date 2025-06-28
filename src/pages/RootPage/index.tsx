@@ -1,7 +1,7 @@
 import { Box, Container, Flex } from '@radix-ui/themes'
 
-import SiderbarNavigation from './sidebar-navigation'
-import NavViewContainer from './nav-view-container'
+import SiderbarNavigation from '../../components/SiderbarNavigation'
+import NavViewContainer from '../../components/NavViewContainer'
 
 const RootPage = () => {
   return (

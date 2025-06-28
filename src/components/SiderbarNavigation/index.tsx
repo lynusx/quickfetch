@@ -10,7 +10,7 @@ import {
   FileTextIcon,
 } from '@radix-ui/react-icons'
 
-import './siderbar-navigation.css'
+import './index.css'
 
 const SiderbarNavigation: FC = () => {
   const location = useLocation()
