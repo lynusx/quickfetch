@@ -1,12 +1,19 @@
-import { Badge, Box, Flex, Text } from '@radix-ui/themes'
+import { Badge, Box, Card, Flex, Text } from '@radix-ui/themes'
 import { FileTextIcon } from '@radix-ui/react-icons'
 
-import ExcelUploadZone from '../../components/ExcelUploadZone'
 import { useExcelUpload } from '../../hooks/useExcelUpload'
+import ExcelUploadZone from '../../components/ExcelUploadZone'
+import ExcelViewer from '../../components/ExcelViewer'
 
 const ExcelParsePage = () => {
-  const { currentFile, isDragging, isProcessing, setIsDragging, uploadFile } =
-    useExcelUpload()
+  const {
+    currentFile,
+    isDragging,
+    isProcessing,
+    setIsDragging,
+    uploadFile,
+    clearFile,
+  } = useExcelUpload()
 
   return (
     <Box>
@@ -30,14 +37,24 @@ const ExcelParsePage = () => {
         </Text>
       </Box>
 
-      {/* 上传区域 */}
-      <ExcelUploadZone
-        onFileSelected={uploadFile}
-        isDragging={isDragging}
-        onDragStateChange={setIsDragging}
-        isProcessing={isProcessing}
-        hasFile={!!currentFile}
-      />
+      {/* 功能卡片 */}
+      <Flex direction="column" gap="4">
+        {/* 上传区域 */}
+        <Card size="3">
+          <ExcelUploadZone
+            onFileSelected={uploadFile}
+            isDragging={isDragging}
+            onDragStateChange={setIsDragging}
+            isProcessing={isProcessing}
+            hasFile={!!currentFile}
+          />
+        </Card>
+
+        {/* Excel文件查看器 */}
+        {currentFile && (
+          <ExcelViewer file={currentFile} onClearFile={clearFile} />
+        )}
+      </Flex>
     </Box>
   )
 }
