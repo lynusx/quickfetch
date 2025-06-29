@@ -97,7 +97,8 @@ export const useExcelUpload = () => {
               sheets,
             }
 
-            resolve(excelFile)
+            // resolve(excelFile)
+            setTimeout(() => resolve(excelFile), 1000)
           } catch (error) {
             const excelFile: ExcelFile = {
               id:

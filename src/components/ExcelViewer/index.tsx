@@ -36,6 +36,60 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
     }
   }
 
+  if (file.status === 'error') {
+    return (
+      <Card>
+        <Flex align="center" justify="between" mb="4">
+          <Flex align="center" gap="3">
+            <FileTextIcon
+              width="20"
+              height="20"
+              style={{ color: 'var(--red-9)' }}
+            />
+            <Text size="4" weight="medium">
+              文件解析失败
+            </Text>
+            <Badge color="red" variant="soft">
+              错误
+            </Badge>
+          </Flex>
+          <IconButton variant="soft" color="red" onClick={onClearFile}>
+            <Cross2Icon width="16" height="16" />
+          </IconButton>
+        </Flex>
+
+        <Box
+          p="4"
+          style={{
+            background: 'var(--red-2)',
+            borderRadius: '8px',
+            border: '1px solid var(--red-6)',
+          }}
+        >
+          <Text
+            size="3"
+            weight="medium"
+            mb="2"
+            style={{ color: 'var(--red-11)' }}
+          >
+            {file.name}
+          </Text>
+          <Text size="2" style={{ color: 'var(--red-10)' }}>
+            错误信息: {file.error || '未知错误'}
+          </Text>
+          <Flex align="center" gap="3" mt="2">
+            <Text size="2" style={{ color: 'var(--gray-10)' }}>
+              文件大小: {file.size}
+            </Text>
+            <Text size="2" style={{ color: 'var(--gray-10)' }}>
+              上传时间: {file.uploadTime}
+            </Text>
+          </Flex>
+        </Box>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <Flex align="center" justify="between" mb="4">
@@ -82,6 +136,20 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
           </Text>
         </Flex>
       </Box>
+
+      {file.status === 'processing' && (
+        <Box p="6" style={{ textAlign: 'center' }}>
+          <div className="processing-indicator">
+            <FileTextIcon width="32" height="32" />
+          </div>
+          <Text size="3" weight="medium" mt="3">
+            正在解析 Excel 文件...
+          </Text>
+          <Text size="2" style={{ color: 'var(--gray-10)' }} mt="1">
+            请稍候，正在读取工作表数据
+          </Text>
+        </Box>
+      )}
     </Card>
   )
 }
