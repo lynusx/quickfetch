@@ -1,0 +1,12 @@
+#!/bin/sh
+# 运行版本更新
+if ! node ./scripts/auto-version.cjs "$(cat "$1")"; then
+    echo "版本号更新失败!" >&2
+    exit 1
+fi
+
+# 如果package.json被修改，自动加入暂存区
+if git diff --name-only -- package.json | grep -q "package.json"; then
+    git add package.json
+    echo "版本号更新已加入暂存区，请继续提交..."
+fi
