@@ -10,6 +10,7 @@ import {
   FileTextIcon,
 } from '@radix-ui/react-icons'
 
+import { getAppVersion } from '../../utils/common'
 import './index.css'
 
 const SiderbarNavigation: FC = () => {
@@ -160,7 +161,7 @@ const SiderbarNavigation: FC = () => {
       {/* 底部信息 */}
       <Box mt="auto" pt="6" style={{ borderTop: '1px solid var(--gray-6)' }}>
         <Text size="1" style={{ color: 'var(--gray-10)' }}>
-          版本 1.0.0
+          版本 {getAppVersion()}
         </Text>
       </Box>
     </Box>
