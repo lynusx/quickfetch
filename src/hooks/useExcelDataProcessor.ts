@@ -17,6 +17,10 @@ interface FilterWithParams {
   targetDefects?: string[]
 }
 
+interface CounterResult {
+  [key: string]: number
+}
+
 export const uesExcelDataProcessor = () => {
   /**
    * 将工作表数据转换为 JSON 数组
@@ -82,8 +86,6 @@ export const uesExcelDataProcessor = () => {
           processMap.get(currentProcess)?.fields.push(headerField)
         }
       }
-
-      console.log(processMap)
 
       // 处理制程数据
       for (let rowIndex = 2; rowIndex < sheet.rowCount; rowIndex++) {
@@ -167,8 +169,31 @@ export const uesExcelDataProcessor = () => {
     return filteredSheet
   }
 
+  /**
+   * 根据指定键对对象数组进行分组统计
+   * @typeParam T 数组元素的类型
+   * @param arr 需要进行分组统计的数组
+   * @param keyExtractor 键提取函数，用于从元素中提取分组键
+   * @returns 分组统计结果对象，键为分组键值，值为该组元素的数量
+   */
+  const counterByKey = <T>(
+    arr: T[],
+    keyExtractor: (item: T) => string,
+  ): CounterResult => {
+    return arr.reduce((acc, item) => {
+      const key = keyExtractor(item)
+      acc[key] = (acc[key] || 0) + 1
+      return acc
+    }, {} as CounterResult)
+  }
+
   // 分组统计 JSON 数组
-  const counterWith = (jsonData: any[]) => {}
+  const counterWith = (jsonSheet: SheetJSONData): CounterResult[] => {
+    const result = Object.values(jsonSheet).map((records) =>
+      counterByKey(records, (record) => String(record['设备ID'] ?? '')),
+    )
+    return result
+  }
 
   // 生成工作表数据
   const generateSheetData = (jsonData: any[]) => {}

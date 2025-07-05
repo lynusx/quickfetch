@@ -3,7 +3,7 @@ import type { ExcelFile, ExcelSheet } from './useExcelUpload'
 import { uesExcelDataProcessor } from './useExcelDataProcessor'
 
 export const useExcelViewer = (file: ExcelFile) => {
-  const { sheet2json, filterWith } = uesExcelDataProcessor()
+  const { sheet2json, filterWith, counterWith } = uesExcelDataProcessor()
 
   // 获取状态颜色
   const getStatusColor = (status: string) => {
@@ -53,7 +53,10 @@ export const useExcelViewer = (file: ExcelFile) => {
             // targetDefects: ['脏污', '划伤'],
           })
 
-          console.log(filteredData)
+          // 3. 对筛选后的数据进行分组统计
+          const countedData = counterWith(filteredData)
+
+          console.log(countedData)
         } catch (sheetError) {
           console.error(`处理工作表 ${sheet.name} 时出错: `, sheetError)
         }
