@@ -18,7 +18,7 @@ const SheetTablePreview: FC<SheetTablePreviewProps> = ({ sheet, mode }) => {
   if (sheet.data.length === 0) {
     return (
       <Flex align="center" justify="center" height="100%">
-        <Text size="1">暂无可显示的数据</Text>
+        <Text size="3">暂无可显示的数据</Text>
       </Flex>
     )
   }

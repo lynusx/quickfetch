@@ -192,6 +192,15 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
             </Flex>
           </Flex>
 
+          {/* 空值检查 */}
+          {currentDisplayData.length === 0 && (
+            <Box height="400px">
+              <Flex align="center" justify="center" height="100%">
+                <Text size="3">暂无可显示的数据</Text>
+              </Flex>
+            </Box>
+          )}
+
           {/* 工作表选项卡 */}
           <Tabs.Root
             value={selectedSheet.toString()}
