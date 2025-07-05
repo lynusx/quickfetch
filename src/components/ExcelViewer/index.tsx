@@ -33,10 +33,12 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
   )
   const [selectedSheet, setSelectedSheet] = useState(0)
 
-  const { getStatusColor, getStatusText } = useExcelViewer()
+  const { getStatusColor, getStatusText, generatePreviewData } =
+    useExcelViewer(file)
 
   // 获取当前显示数据
-  const currentDisplayData = previewMode === 'result' ? [] : file.sheets
+  const currentDisplayData =
+    previewMode === 'result' ? generatePreviewData : file.sheets
 
   // 当文件变化时重置选中的工作表
   useEffect(() => {
