@@ -11,6 +11,12 @@ interface SheetJSONData {
   [process: string]: ProcessRecord[]
 }
 
+interface FilterWithParams {
+  jsonSheet: SheetJSONData
+  targetLines?: string[]
+  targetDefects?: string[]
+}
+
 export const uesExcelDataProcessor = () => {
   /**
    * 将工作表数据转换为 JSON 数组
@@ -123,8 +129,43 @@ export const uesExcelDataProcessor = () => {
     }
   }
 
-  // 过滤 JSON 数组
-  const filterWith = (jsonData: any[]) => {}
+  /**
+   * 根据目标产线和不良项筛选数据
+   * @param jsonSheet 需要筛选的对象
+   * @param targetLines 目标产线（默认为空数组）
+   * @param targetDefects 目标不良项（默认为空数组）
+   * @returns 筛选后的数据
+   */
+  const filterWith = ({
+    jsonSheet,
+    targetLines = [],
+    targetDefects = [],
+  }: FilterWithParams): SheetJSONData => {
+    const filteredSheet: SheetJSONData = {}
+
+    // 预计算筛选条件状态避免重复判断
+    const shouldFilterLines = targetLines.length > 0
+    const shouldFilterDefects = targetDefects.length > 0
+
+    Object.entries(jsonSheet).forEach(([process, records]) => {
+      // 单次便利同时应用两个筛选条件
+      filteredSheet[process] = records.filter((record) => {
+        // 检查产线条件
+        const lineMatch =
+          !shouldFilterLines ||
+          targetLines.includes(String(record['线别'] ?? ''))
+
+        // 检查不良项条件
+        const defectMatch =
+          !shouldFilterDefects ||
+          targetDefects.includes(String(record['不良项'] ?? ''))
+
+        return lineMatch && defectMatch
+      })
+    })
+
+    return filteredSheet
+  }
 
   // 分组统计 JSON 数组
   const counterWith = (jsonData: any[]) => {}

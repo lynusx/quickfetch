@@ -3,7 +3,7 @@ import type { ExcelFile, ExcelSheet } from './useExcelUpload'
 import { uesExcelDataProcessor } from './useExcelDataProcessor'
 
 export const useExcelViewer = (file: ExcelFile) => {
-  const { sheet2json } = uesExcelDataProcessor()
+  const { sheet2json, filterWith } = uesExcelDataProcessor()
 
   // 获取状态颜色
   const getStatusColor = (status: string) => {
@@ -47,7 +47,13 @@ export const useExcelViewer = (file: ExcelFile) => {
           // 1. 将工作表数据转换为 JSON 数组
           const jsonData = sheet2json(sheet)
 
-          console.log(jsonData)
+          // 2. 根据目标产线和不良项筛选数据
+          const filteredData = filterWith({
+            jsonSheet: jsonData,
+            // targetDefects: ['脏污', '划伤'],
+          })
+
+          console.log(filteredData)
         } catch (sheetError) {
           console.error(`处理工作表 ${sheet.name} 时出错: `, sheetError)
         }
