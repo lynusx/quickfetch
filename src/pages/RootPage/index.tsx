@@ -1,6 +1,6 @@
 import { Box, Container, Flex } from '@radix-ui/themes'
 
-import SiderbarNavigation from '../../components/SiderbarNavigation'
+import SidebarNavigation from '../../components/SidebarNavigation'
 import NavViewContainer from '../../components/NavViewContainer'
 
 const RootPage = () => {
@@ -8,7 +8,7 @@ const RootPage = () => {
     <Box style={{ minHeight: '100vh', background: 'var(--gray-1)' }}>
       <Flex>
         {/* 左侧导航 */}
-        <SiderbarNavigation />
+        <SidebarNavigation />
 
         {/* 右侧内容区域 */}
         <Box
