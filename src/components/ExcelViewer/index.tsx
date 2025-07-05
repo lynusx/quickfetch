@@ -1,6 +1,19 @@
-import type { FC } from 'react'
-import { Badge, Box, Card, Flex, IconButton, Text } from '@radix-ui/themes'
-import { Cross2Icon, FileTextIcon } from '@radix-ui/react-icons'
+import { useState, type FC } from 'react'
+import {
+  Badge,
+  Box,
+  Button,
+  Card,
+  Flex,
+  IconButton,
+  Text,
+} from '@radix-ui/themes'
+import {
+  Cross2Icon,
+  EyeClosedIcon,
+  EyeOpenIcon,
+  FileTextIcon,
+} from '@radix-ui/react-icons'
 
 import type { ExcelFile } from '../../hooks/useExcelUpload'
 import { useExcelViewer } from '../../hooks/useExcelViewer'
@@ -11,6 +24,10 @@ interface ExcelViewerProps {
 }
 
 const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
+  const [previewMode, setPreviewMode] = useState<'result' | 'original'>(
+    'result',
+  )
+
   const { getStatusColor, getStatusText } = useExcelViewer()
 
   if (file.status === 'error') {
@@ -113,6 +130,46 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
           </Text>
         </Flex>
       </Box>
+
+      {file.status === 'completed' && (
+        <>
+          {/* 预览模式切换 */}
+          <Flex align="center" justify="between" mb="4">
+            <Text size="3" weight="medium">
+              预览模式
+            </Text>
+
+            <Flex align="center" gap="2">
+              <Button
+                variant={previewMode === 'result' ? 'solid' : 'soft'}
+                size="2"
+                onClick={() => setPreviewMode('result')}
+              >
+                {previewMode === 'result' ? (
+                  <EyeOpenIcon width="14" height="14" />
+                ) : (
+                  <EyeClosedIcon width="14" height="14" />
+                )}
+                解析结果
+              </Button>
+              <Button
+                variant={previewMode === 'original' ? 'solid' : 'soft'}
+                size="2"
+                onClick={() => setPreviewMode('original')}
+              >
+                {previewMode === 'original' ? (
+                  <EyeOpenIcon width="14" height="14" />
+                ) : (
+                  <EyeClosedIcon width="14" height="14" />
+                )}
+                原始数据
+              </Button>
+            </Flex>
+          </Flex>
+
+          {/* 工作表选项卡 */}
+        </>
+      )}
 
       {file.status === 'processing' && (
         <Box p="6" style={{ textAlign: 'center' }}>
