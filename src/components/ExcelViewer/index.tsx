@@ -43,6 +43,16 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
     setSelectedSheet(0)
   }, [file.id])
 
+  // 当预览模式发生变化时，确保选中的工作表索引有效
+  useEffect(() => {
+    if (
+      currentDisplayData.length > 0 &&
+      selectedSheet >= currentDisplayData.length
+    ) {
+      setSelectedSheet(0)
+    }
+  }, [currentDisplayData.length, selectedSheet, previewMode])
+
   if (file.status === 'error') {
     return (
       <Card>
