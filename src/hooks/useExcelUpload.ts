@@ -14,7 +14,7 @@ export interface ExcelFile {
 
 export interface ExcelSheet {
   name: string
-  data: any[][]
+  data: (string | number | null)[][]
   rowCount: number
   colCount: number
 }

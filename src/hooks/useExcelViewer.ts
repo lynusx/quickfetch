@@ -1,7 +1,10 @@
 import { useMemo } from 'react'
 import type { ExcelFile, ExcelSheet } from './useExcelUpload'
+import { uesExcelDataProcessor } from './useExcelDataProcessor'
 
 export const useExcelViewer = (file: ExcelFile) => {
+  const { sheet2json } = uesExcelDataProcessor()
+
   // 获取状态颜色
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -41,6 +44,10 @@ export const useExcelViewer = (file: ExcelFile) => {
     try {
       file.sheets.forEach((sheet) => {
         try {
+          // 1. 将工作表数据转换为 JSON 数组
+          const jsonData = sheet2json(sheet)
+
+          console.log(jsonData)
         } catch (sheetError) {
           console.error(`处理工作表 ${sheet.name} 时出错: `, sheetError)
         }
