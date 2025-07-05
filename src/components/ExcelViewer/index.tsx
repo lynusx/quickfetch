@@ -1,4 +1,4 @@
-import { useState, type FC } from 'react'
+import { useEffect, useState, type FC } from 'react'
 import {
   Badge,
   Box,
@@ -37,6 +37,11 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
 
   // 获取当前显示数据
   const currentDisplayData = previewMode === 'result' ? [] : file.sheets
+
+  // 当文件变化时重置选中的工作表
+  useEffect(() => {
+    setSelectedSheet(0)
+  }, [file.id])
 
   if (file.status === 'error') {
     return (
