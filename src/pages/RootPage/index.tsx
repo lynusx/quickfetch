@@ -13,6 +13,7 @@ const RootPage = () => {
         {/* 右侧内容区域 */}
         <Box
           flexGrow="1"
+          minWidth="960px"
           style={{
             background: 'var(--gray-1)',
             minHeight: '100vh',

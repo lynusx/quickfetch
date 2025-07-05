@@ -36,7 +36,8 @@ const SiderbarNavigation: FC = () => {
 
   return (
     <Box
-      width="280px"
+      width="260px"
+      minWidth="260px"
       height="100vh"
       pt="6"
       px="5"
