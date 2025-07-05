@@ -6,10 +6,13 @@ import {
   Card,
   Flex,
   IconButton,
+  Tabs,
   Text,
 } from '@radix-ui/themes'
 import {
+  CopyIcon,
   Cross2Icon,
+  DownloadIcon,
   EyeClosedIcon,
   EyeOpenIcon,
   FileTextIcon,
@@ -17,6 +20,7 @@ import {
 
 import type { ExcelFile } from '../../hooks/useExcelUpload'
 import { useExcelViewer } from '../../hooks/useExcelViewer'
+import SheetTablePreview from '../SheetTablePreview'
 
 interface ExcelViewerProps {
   file: ExcelFile
@@ -27,8 +31,12 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
   const [previewMode, setPreviewMode] = useState<'result' | 'original'>(
     'result',
   )
+  const [selectedSheet, setSelectedSheet] = useState(0)
 
   const { getStatusColor, getStatusText } = useExcelViewer()
+
+  // 获取当前显示数据
+  const currentDisplayData = previewMode === 'result' ? [] : file.sheets
 
   if (file.status === 'error') {
     return (
@@ -168,6 +176,58 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
           </Flex>
 
           {/* 工作表选项卡 */}
+          <Tabs.Root
+            value={selectedSheet.toString()}
+            onValueChange={(value) => setSelectedSheet(parseInt(value))}
+          >
+            <Tabs.List>
+              {currentDisplayData.map((sheet, index) => (
+                <Tabs.Trigger key={index} value={index.toString()}>
+                  <Flex align="center" gap="2">
+                    <Text size="2">{sheet.name}</Text>
+                    <Badge variant="soft" size="1">
+                      {sheet.rowCount}行
+                    </Badge>
+                  </Flex>
+                </Tabs.Trigger>
+              ))}
+            </Tabs.List>
+
+            {currentDisplayData.map((sheet, index) => (
+              <Tabs.Content key={index} value={index.toString()}>
+                <Card mb="4">
+                  <Flex align="center" justify="between" mb="3">
+                    <Flex align="center" gap="3">
+                      <Text size="2" weight="bold">
+                        {sheet.name}
+                      </Text>
+                      <Badge variant="soft">
+                        {sheet.rowCount}行 x {sheet.colCount}列
+                      </Badge>
+                    </Flex>
+
+                    {previewMode === 'result' && (
+                      <Flex align="center" gap="3">
+                        <Button variant="soft" size="2">
+                          <CopyIcon width="14" height="14" />
+                          复制到剪切板
+                        </Button>
+                        <Button variant="soft" size="2">
+                          <DownloadIcon width="14" height="14" />
+                          导出为 Excel
+                        </Button>
+                      </Flex>
+                    )}
+                  </Flex>
+
+                  {/* 渲染表格数据 */}
+                  <Box height="400px">
+                    <SheetTablePreview sheet={sheet} mode={previewMode} />
+                  </Box>
+                </Card>
+              </Tabs.Content>
+            ))}
+          </Tabs.Root>
         </>
       )}
 
