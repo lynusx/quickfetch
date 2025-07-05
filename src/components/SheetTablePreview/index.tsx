@@ -1,6 +1,6 @@
 import type { FC } from 'react'
 import type { ExcelSheet } from '../../hooks/useExcelUpload'
-import { Box, Flex, ScrollArea, Table, Text } from '@radix-ui/themes'
+import { Flex, ScrollArea, Table, Text } from '@radix-ui/themes'
 
 interface SheetTablePreviewProps {
   sheet: ExcelSheet
