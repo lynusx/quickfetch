@@ -1,10 +1,16 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+
 import type { ExcelFile, ExcelSheet } from './useExcelUpload'
 import { uesExcelDataProcessor } from './useExcelDataProcessor'
+import { useExcelOperations } from './useExcelOpertions'
 
 export const useExcelViewer = (file: ExcelFile) => {
+  const [isCopied, setIsCopied] = useState(false)
+  const [isExported, setIsExported] = useState(false)
+
   const { sheet2json, filterWith, counterWith, generateSheetData } =
     uesExcelDataProcessor()
+  const { copyToClipboard, exportToExcel } = useExcelOperations()
 
   // 获取状态颜色
   const getStatusColor = (status: string) => {
@@ -73,9 +79,37 @@ export const useExcelViewer = (file: ExcelFile) => {
     return previewData
   }, [file])
 
+  // 处理复制操作
+  const handleCopyToClipboard = async (sheet: ExcelSheet) => {
+    try {
+      setIsCopied(true)
+      await copyToClipboard(sheet)
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '复制失败，请重试')
+    } finally {
+      setIsCopied(false)
+    }
+  }
+
+  // 处理导出操作
+  const handleExportToExcel = async (sheet: ExcelSheet) => {
+    try {
+      setIsExported(true)
+      await exportToExcel(sheet)
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '导出失败，请重试')
+    } finally {
+      setIsExported(false)
+    }
+  }
+
   return {
     getStatusColor,
     getStatusText,
     generatePreviewData,
+    handleCopyToClipboard,
+    handleExportToExcel,
+    isCopied,
+    isExported,
   }
 }

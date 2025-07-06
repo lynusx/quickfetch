@@ -10,6 +10,7 @@ import {
   Text,
 } from '@radix-ui/themes'
 import {
+  CheckIcon,
   CopyIcon,
   Cross2Icon,
   DownloadIcon,
@@ -33,8 +34,15 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
   )
   const [selectedSheet, setSelectedSheet] = useState(0)
 
-  const { getStatusColor, getStatusText, generatePreviewData } =
-    useExcelViewer(file)
+  const {
+    getStatusColor,
+    getStatusText,
+    generatePreviewData,
+    handleCopyToClipboard,
+    handleExportToExcel,
+    isCopied,
+    isExported,
+  } = useExcelViewer(file)
 
   // 获取当前显示数据
   const currentDisplayData =
@@ -234,11 +242,30 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
 
                     {previewMode === 'result' && (
                       <Flex align="center" gap="3">
-                        <Button variant="soft" size="2">
-                          <CopyIcon width="14" height="14" />
-                          复制到剪切板
+                        <Button
+                          variant="soft"
+                          size="2"
+                          disabled={isCopied}
+                          onClick={() => handleCopyToClipboard(sheet)}
+                        >
+                          {isCopied ? (
+                            <>
+                              <CheckIcon width="14" height="14" />
+                              已复制
+                            </>
+                          ) : (
+                            <>
+                              <CopyIcon width="14" height="14" />
+                              复制到剪切板
+                            </>
+                          )}
                         </Button>
-                        <Button variant="soft" size="2">
+                        <Button
+                          variant="soft"
+                          size="2"
+                          disabled={isExported}
+                          onClick={() => handleExportToExcel(sheet)}
+                        >
                           <DownloadIcon width="14" height="14" />
                           导出为 Excel
                         </Button>
