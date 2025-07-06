@@ -38,7 +38,7 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
 
   // 获取第一个工作表的数据
   const displayData =
-    generatePreviewData.length > 0 ? generatePreviewData[0] : null
+    generatePreviewData.rowCount > 0 ? generatePreviewData : null
 
   if (file.status === 'error') {
     return (

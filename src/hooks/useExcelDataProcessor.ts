@@ -17,10 +17,6 @@ interface FilterWithParams {
   targetDefects?: string[]
 }
 
-interface CounterResult {
-  [key: string]: number
-}
-
 export const uesExcelDataProcessor = () => {
   /**
    * 将工作表数据转换为 JSON 数组
@@ -182,16 +178,19 @@ export const uesExcelDataProcessor = () => {
   const counterByKey = <T>(
     arr: T[],
     keyExtractor: (item: T) => string,
-  ): CounterResult => {
-    return arr.reduce((acc, item) => {
-      const key = keyExtractor(item)
-      acc[key] = (acc[key] || 0) + 1
-      return acc
-    }, {} as CounterResult)
+  ): Record<string, number> => {
+    return arr.reduce(
+      (acc, item) => {
+        const key = keyExtractor(item)
+        acc[key] = (acc[key] || 0) + 1
+        return acc
+      },
+      {} as Record<string, number>,
+    )
   }
 
   // 分组统计 JSON 数组
-  const counterWith = (jsonSheet: SheetJSONData): CounterResult[] => {
+  const counterWith = (jsonSheet: SheetJSONData): Record<string, number>[] => {
     // 如果jsonSheet为空，则返回空数组
     if (Object.keys(jsonSheet).length === 0) return []
 
@@ -420,7 +419,7 @@ export const uesExcelDataProcessor = () => {
    * @returns 格式化后的 ExcelSheet 对象，包含工作表名称、数据、行数和列数
    */
   const generateSheetData = (
-    array: CounterResult[],
+    array: Record<string, number>[],
     sheetName: string,
   ): ExcelSheet => {
     let sheetData: ExcelSheet = {

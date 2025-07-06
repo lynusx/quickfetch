@@ -42,38 +42,43 @@ export const useExcelViewer = (file: ExcelFile) => {
 
   // 生成预览数据
   const generatePreviewData = useMemo(() => {
-    if (file.status !== 'completed') {
-      return []
+    const previewData: ExcelSheet = {
+      name: '',
+      data: [],
+      rowCount: 0,
+      colCount: 0,
     }
 
-    const previewData: ExcelSheet[] = []
+    if (file.status !== 'completed') {
+      return previewData
+    }
 
     try {
-      file.sheets.forEach((sheet) => {
-        try {
-          // 1. 将工作表数据转换为 JSON 数组
-          const jsonData = sheet2json(sheet)
+      // 默认只处理第一个工作表
+      const firstSheetData = file.sheets[0]
 
-          // 2. 根据目标产线和不良项筛选数据
-          const filteredData = filterWith({
-            jsonSheet: jsonData,
-            // targetDefects: ['脏污', '划伤'],
-          })
+      // 1. 将工作表数据转换为 JSON 数组
+      const jsonData = sheet2json(firstSheetData)
 
-          // 3. 对筛选后的数据进行分组统计
-          const countedData = counterWith(filteredData)
-
-          // 4. 将分组统计结果转换为表格格式数据
-          const sheetData = generateSheetData(countedData, sheet.name)
-
-          previewData.push(sheetData)
-        } catch (sheetError) {
-          console.error(`处理工作表 ${sheet.name} 时出错: `, sheetError)
-        }
+      // 2. 根据目标产线和不良项筛选数据
+      const filteredData = filterWith({
+        jsonSheet: jsonData,
+        // targetDefects: ['脏污', '划伤'],
       })
+
+      // 3. 对筛选后的数据进行分组统计
+      const countedData = counterWith(filteredData)
+
+      // 4. 将分组统计结果转换为表格格式数据
+      const sheetData = generateSheetData(countedData, firstSheetData.name)
+
+      previewData.name = firstSheetData.name
+      previewData.data = sheetData.data
+      previewData.rowCount = sheetData.rowCount
+      previewData.colCount = sheetData.colCount
     } catch (error) {
       console.error('生成预览数据失败:', error)
-      return []
+      return previewData
     }
 
     return previewData
