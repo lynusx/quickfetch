@@ -145,6 +145,9 @@ export const uesExcelDataProcessor = () => {
   }: FilterWithParams): SheetJSONData => {
     const filteredSheet: SheetJSONData = {}
 
+    // 如果jsonSheet为空，则返回空对象
+    if (Object.keys(jsonSheet).length === 0) return filteredSheet
+
     // 预计算筛选条件状态避免重复判断
     const shouldFilterLines = targetLines.length > 0
     const shouldFilterDefects = targetDefects.length > 0
@@ -189,6 +192,9 @@ export const uesExcelDataProcessor = () => {
 
   // 分组统计 JSON 数组
   const counterWith = (jsonSheet: SheetJSONData): CounterResult[] => {
+    // 如果jsonSheet为空，则返回空数组
+    if (Object.keys(jsonSheet).length === 0) return []
+
     const result = Object.values(jsonSheet).map((records) =>
       counterByKey(records, (record) => String(record['设备ID'] ?? '')),
     )
@@ -417,14 +423,16 @@ export const uesExcelDataProcessor = () => {
     array: CounterResult[],
     sheetName: string,
   ): ExcelSheet => {
+    let sheetData: ExcelSheet = {
+      name: sheetName,
+      data: [],
+      rowCount: 0,
+      colCount: 0,
+    }
+
     // 如果数组为空，则返回空的工作表
-    if (array.length === 0) {
-      return {
-        name: sheetName,
-        data: [],
-        rowCount: 0,
-        colCount: 0,
-      }
+    if (array.length === 0 || Object.keys(array[0]).length === 0) {
+      return sheetData
     }
 
     try {
@@ -448,20 +456,14 @@ export const uesExcelDataProcessor = () => {
         tableData.unshift(headerRow)
       }
 
-      return {
-        name: sheetName,
-        data: tableData,
-        rowCount: tableData.length,
-        colCount: tableData[0].length,
-      }
+      sheetData.data = tableData
+      sheetData.rowCount = tableData.length
+      sheetData.colCount = tableData[0].length
+
+      return sheetData
     } catch (error) {
       console.error(`generateSheetData 生成工作表 ${sheetName} 时出错: `, error)
-      return {
-        name: sheetName,
-        data: [],
-        rowCount: 0,
-        colCount: 0,
-      }
+      throw new Error('generateSheetData 生成工作表时出错')
     }
   }
 
