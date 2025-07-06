@@ -3,7 +3,8 @@ import type { ExcelFile, ExcelSheet } from './useExcelUpload'
 import { uesExcelDataProcessor } from './useExcelDataProcessor'
 
 export const useExcelViewer = (file: ExcelFile) => {
-  const { sheet2json, filterWith, counterWith } = uesExcelDataProcessor()
+  const { sheet2json, filterWith, counterWith, generateSheetData } =
+    uesExcelDataProcessor()
 
   // 获取状态颜色
   const getStatusColor = (status: string) => {
@@ -56,7 +57,10 @@ export const useExcelViewer = (file: ExcelFile) => {
           // 3. 对筛选后的数据进行分组统计
           const countedData = counterWith(filteredData)
 
-          console.log(countedData)
+          // 4. 将分组统计结果转换为表格格式数据
+          const sheetData = generateSheetData(countedData, sheet.name)
+
+          previewData.push(sheetData)
         } catch (sheetError) {
           console.error(`处理工作表 ${sheet.name} 时出错: `, sheetError)
         }
