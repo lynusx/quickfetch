@@ -1,4 +1,4 @@
-import { type FC } from 'react'
+import { useEffect, useMemo, useState, type FC } from 'react'
 import {
   Badge,
   Box,
@@ -27,6 +27,17 @@ interface ExcelViewerProps {
 }
 
 const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
+  const [selectedLines, setSelectedLines] = useState<string[]>([])
+  const [selectedDefects, setSelectedDefects] = useState<string[]>([])
+
+  const filterOptions = useMemo(
+    () => ({
+      selectedLines,
+      selectedDefects,
+    }),
+    [selectedLines, selectedDefects],
+  )
+
   const {
     getStatusColor,
     getStatusText,
@@ -35,11 +46,17 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
     handleExportToExcel,
     isCopied,
     isExported,
-  } = useExcelViewer(file)
+  } = useExcelViewer(file, filterOptions)
+
+  const { lines, defects, previewData } = generatePreviewData
 
   // 获取第一个工作表的数据
-  const displayData =
-    generatePreviewData.rowCount > 0 ? generatePreviewData : null
+  const displayData = previewData.rowCount > 0 ? previewData : null
+
+  useEffect(() => {
+    setSelectedLines([...lines])
+    setSelectedDefects([...defects])
+  }, [file.id])
 
   if (file.status === 'error') {
     return (
@@ -155,12 +172,12 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
 
           {/* 过滤面板 */}
           <FilterPanel
-            lines={new Set(['线别1', '线别2', '线别3'])}
-            defects={new Set(['不良项1', '不良项2', '不良项3'])}
-            selectedLines={['线别1']}
-            selectedDefects={['不良项1']}
-            onLinesChange={(lines) => console.log(lines)}
-            onDefectsChange={(defects) => console.log(defects)}
+            lines={lines}
+            defects={defects}
+            selectedLines={selectedLines}
+            selectedDefects={selectedDefects}
+            onLinesChange={setSelectedLines}
+            onDefectsChange={setSelectedDefects}
           />
 
           {/* 第一个工作表内容 */}

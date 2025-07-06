@@ -4,7 +4,15 @@ import type { ExcelFile, ExcelSheet } from './useExcelUpload'
 import { uesExcelDataProcessor } from './useExcelDataProcessor'
 import { useExcelOperations } from './useExcelOpertions'
 
-export const useExcelViewer = (file: ExcelFile) => {
+interface FilterOptions {
+  selectedLines: string[]
+  selectedDefects: string[]
+}
+
+export const useExcelViewer = (
+  file: ExcelFile,
+  filterOptions: FilterOptions,
+) => {
   const [isCopied, setIsCopied] = useState(false)
   const [isExported, setIsExported] = useState(false)
 
@@ -50,7 +58,11 @@ export const useExcelViewer = (file: ExcelFile) => {
     }
 
     if (file.status !== 'completed') {
-      return previewData
+      return {
+        lines: new Set<string>(),
+        defects: new Set<string>(),
+        previewData,
+      }
     }
 
     try {
@@ -58,12 +70,13 @@ export const useExcelViewer = (file: ExcelFile) => {
       const firstSheetData = file.sheets[0]
 
       // 1. 将工作表数据转换为 JSON 数组
-      const jsonData = sheet2json(firstSheetData)
+      const { jsonSheet, lines, defects } = sheet2json(firstSheetData)
 
       // 2. 根据目标产线和不良项筛选数据
       const filteredData = filterWith({
-        jsonSheet: jsonData,
-        // targetDefects: ['脏污', '划伤'],
+        jsonSheet: jsonSheet,
+        targetLines: filterOptions.selectedLines,
+        targetDefects: filterOptions.selectedDefects,
       })
 
       // 3. 对筛选后的数据进行分组统计
@@ -76,13 +89,21 @@ export const useExcelViewer = (file: ExcelFile) => {
       previewData.data = sheetData.data
       previewData.rowCount = sheetData.rowCount
       previewData.colCount = sheetData.colCount
+
+      return {
+        lines,
+        defects,
+        previewData,
+      }
     } catch (error) {
       console.error('生成预览数据失败:', error)
-      return previewData
+      return {
+        lines: new Set<string>(),
+        defects: new Set<string>(),
+        previewData,
+      }
     }
-
-    return previewData
-  }, [file])
+  }, [file, filterOptions])
 
   // 处理复制操作
   const handleCopyToClipboard = async (sheet: ExcelSheet) => {

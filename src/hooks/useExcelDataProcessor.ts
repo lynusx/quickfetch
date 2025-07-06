@@ -23,10 +23,18 @@ export const uesExcelDataProcessor = () => {
    * @param sheet 工作表数据
    * @returns 转换后的 JSON 数据
    */
-  const sheet2json = (sheet: ExcelSheet): SheetJSONData => {
-    const result: SheetJSONData = {}
+  const sheet2json = (
+    sheet: ExcelSheet,
+  ): {
+    jsonSheet: SheetJSONData
+    lines: Set<string>
+    defects: Set<string>
+  } => {
+    const jsonSheet: SheetJSONData = {}
+    const lines = new Set<string>()
+    const defects = new Set<string>()
 
-    if (sheet.rowCount < 3) return result
+    if (sheet.rowCount < 3) return { jsonSheet, lines, defects }
 
     try {
       const headerRow1 = sheet.data[0]
@@ -75,7 +83,7 @@ export const uesExcelDataProcessor = () => {
                 startCol: col,
                 fields: [headerField],
               })
-              result[currentProcess] = []
+              jsonSheet[currentProcess] = []
             }
           }
         } else if (currentProcess && headerField) {
@@ -91,6 +99,13 @@ export const uesExcelDataProcessor = () => {
           WaferID: String(row[waferIdCol] ?? ''),
           线别: String(row[lineCol] ?? ''),
           不良项: String(row[defectCol] ?? ''),
+        }
+
+        if (row[lineCol]) {
+          lines.add((row[lineCol] as string).trim())
+        }
+        if (row[defectCol]) {
+          defects.add((row[defectCol] as string).trim())
         }
 
         for (const [process, { startCol, fields }] of processMap.entries()) {
@@ -115,15 +130,15 @@ export const uesExcelDataProcessor = () => {
           }
 
           if (hasData) {
-            result[process].push(processRecord)
+            jsonSheet[process].push(processRecord)
           }
         }
       }
 
-      return result
+      return { jsonSheet, lines, defects }
     } catch (error) {
       console.error(`sheet2json 处理工作表 ${sheet.name} 时出错: `, error)
-      return result
+      return { jsonSheet, lines, defects }
     }
   }
 

@@ -73,15 +73,14 @@ const ExcelParsePage = () => {
               </Box>
               <Box>
                 <Text size="3" weight="medium" mb="1" mr="1">
-                  2. 预览数据
+                  2. 解析数据
                 </Text>
                 <Text size="2" style={{ color: 'var(--gray-11)' }}>
-                  解析所有工作表，解析完成后根据{' '}
+                  自动解析<Strong>第1个</Strong>工作表，解析完成后根据{' '}
                   <Badge color="blue" variant="soft">
                     设备ID
                   </Badge>{' '}
-                  进行分组统计，提供<Strong>解析结果</Strong>和
-                  <Strong>原始数据</Strong>两种预览模式
+                  进行分组统计
                 </Text>
               </Box>
               <Box>
@@ -102,10 +101,10 @@ const ExcelParsePage = () => {
               </Box>
               <Box>
                 <Text size="3" weight="medium" mb="1" mr="1">
-                  3. 导出数据
+                  4. 导出数据
                 </Text>
                 <Text size="2" style={{ color: 'var(--gray-11)' }}>
-                  可将任意工作表<Strong>复制到剪切板</Strong>或
+                  可将筛选结果<Strong>复制到剪切板</Strong>或
                   <Strong>导出为 xlsx</Strong>
                   格式文件
                 </Text>
