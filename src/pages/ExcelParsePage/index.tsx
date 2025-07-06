@@ -1,4 +1,4 @@
-import { Badge, Box, Card, Flex, Text } from '@radix-ui/themes'
+import { Badge, Box, Card, Flex, Strong, Text } from '@radix-ui/themes'
 import { FileTextIcon } from '@radix-ui/react-icons'
 
 import { useExcelUpload } from '../../hooks/useExcelUpload'
@@ -33,7 +33,7 @@ const ExcelParsePage = () => {
           </Badge>
         </Flex>
         <Text size="3" style={{ color: 'var(--gray-11)' }}>
-          解析和处理 Excel 文件，支持数据提取、格式转换和批量处理
+          解析和处理 Excel 文件，支持单文件数据解析、数据筛选、数据导出
         </Text>
       </Box>
 
@@ -53,6 +53,65 @@ const ExcelParsePage = () => {
         {/* Excel文件查看器 */}
         {currentFile && (
           <ExcelViewer file={currentFile} onClearFile={clearFile} />
+        )}
+
+        {/* 使用说明 */}
+        {!currentFile && (
+          <Card size="3">
+            <Text size="4" weight="medium" mb="4">
+              使用说明
+            </Text>
+            <Flex direction="column" gap="3">
+              <Box>
+                <Text size="3" weight="medium" mb="1" mr="1">
+                  1. 上传文件
+                </Text>
+                <Text size="2" style={{ color: 'var(--gray-11)' }}>
+                  支持拖拽或点击上传<Strong>单个Excel</Strong>文件（.xlsx 或
+                  .xls 格式）
+                </Text>
+              </Box>
+              <Box>
+                <Text size="3" weight="medium" mb="1" mr="1">
+                  2. 预览数据
+                </Text>
+                <Text size="2" style={{ color: 'var(--gray-11)' }}>
+                  解析所有工作表，解析完成后根据{' '}
+                  <Badge color="blue" variant="soft">
+                    设备ID
+                  </Badge>{' '}
+                  进行分组统计，提供<Strong>解析结果</Strong>和
+                  <Strong>原始数据</Strong>两种预览模式
+                </Text>
+              </Box>
+              <Box>
+                <Text size="3" weight="medium" mb="1" mr="1">
+                  3. 筛选数据
+                </Text>
+                <Text size="2" style={{ color: 'var(--gray-11)' }}>
+                  支持根据{' '}
+                  <Badge color="blue" variant="soft">
+                    线别
+                  </Badge>{' '}
+                  和{' '}
+                  <Badge color="blue" variant="soft">
+                    不良项
+                  </Badge>{' '}
+                  筛选数据
+                </Text>
+              </Box>
+              <Box>
+                <Text size="3" weight="medium" mb="1" mr="1">
+                  3. 导出数据
+                </Text>
+                <Text size="2" style={{ color: 'var(--gray-11)' }}>
+                  可将任意工作表<Strong>复制到剪切板</Strong>或
+                  <Strong>导出为 xlsx</Strong>
+                  格式文件
+                </Text>
+              </Box>
+            </Flex>
+          </Card>
         )}
       </Flex>
     </Box>
