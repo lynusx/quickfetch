@@ -19,6 +19,7 @@ import {
 import type { ExcelFile } from '../../hooks/useExcelUpload'
 import { useExcelViewer } from '../../hooks/useExcelViewer'
 import SheetTablePreview from '../SheetTablePreview'
+import FilterPanel from '../FilterPanel'
 
 interface ExcelViewerProps {
   file: ExcelFile
@@ -151,6 +152,16 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
               </Flex>
             </Box>
           )}
+
+          {/* 过滤面板 */}
+          <FilterPanel
+            lines={new Set(['线别1', '线别2', '线别3'])}
+            defects={new Set(['不良项1', '不良项2', '不良项3'])}
+            selectedLines={['线别1']}
+            selectedDefects={['不良项1']}
+            onLinesChange={(lines) => console.log(lines)}
+            onDefectsChange={(defects) => console.log(defects)}
+          />
 
           {/* 第一个工作表内容 */}
           {displayData && (
