@@ -1,4 +1,4 @@
-import { useEffect, useState, type FC } from 'react'
+import { type FC } from 'react'
 import {
   Badge,
   Box,
@@ -6,7 +6,6 @@ import {
   Card,
   Flex,
   IconButton,
-  Tabs,
   Text,
 } from '@radix-ui/themes'
 import {
@@ -14,8 +13,6 @@ import {
   CopyIcon,
   Cross2Icon,
   DownloadIcon,
-  EyeClosedIcon,
-  EyeOpenIcon,
   FileTextIcon,
 } from '@radix-ui/react-icons'
 
@@ -29,11 +26,6 @@ interface ExcelViewerProps {
 }
 
 const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
-  const [previewMode, setPreviewMode] = useState<'result' | 'original'>(
-    'result',
-  )
-  const [selectedSheet, setSelectedSheet] = useState(0)
-
   const {
     getStatusColor,
     getStatusText,
@@ -44,24 +36,9 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
     isExported,
   } = useExcelViewer(file)
 
-  // 获取当前显示数据
-  const currentDisplayData =
-    previewMode === 'result' ? generatePreviewData : file.sheets
-
-  // 当文件变化时重置选中的工作表
-  useEffect(() => {
-    setSelectedSheet(0)
-  }, [file.id])
-
-  // 当预览模式发生变化时，确保选中的工作表索引有效
-  useEffect(() => {
-    if (
-      currentDisplayData.length > 0 &&
-      selectedSheet >= currentDisplayData.length
-    ) {
-      setSelectedSheet(0)
-    }
-  }, [currentDisplayData.length, selectedSheet, previewMode])
+  // 获取第一个工作表的数据
+  const displayData =
+    generatePreviewData.length > 0 ? generatePreviewData[0] : null
 
   if (file.status === 'error') {
     return (
@@ -166,42 +143,8 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
 
       {file.status === 'completed' && (
         <>
-          {/* 预览模式切换 */}
-          <Flex align="center" justify="between" mb="4">
-            <Text size="3" weight="medium">
-              预览模式
-            </Text>
-
-            <Flex align="center" gap="2">
-              <Button
-                variant={previewMode === 'result' ? 'solid' : 'soft'}
-                size="2"
-                onClick={() => setPreviewMode('result')}
-              >
-                {previewMode === 'result' ? (
-                  <EyeOpenIcon width="14" height="14" />
-                ) : (
-                  <EyeClosedIcon width="14" height="14" />
-                )}
-                解析结果
-              </Button>
-              <Button
-                variant={previewMode === 'original' ? 'solid' : 'soft'}
-                size="2"
-                onClick={() => setPreviewMode('original')}
-              >
-                {previewMode === 'original' ? (
-                  <EyeOpenIcon width="14" height="14" />
-                ) : (
-                  <EyeClosedIcon width="14" height="14" />
-                )}
-                原始数据
-              </Button>
-            </Flex>
-          </Flex>
-
           {/* 空值检查 */}
-          {currentDisplayData.length === 0 && (
+          {!displayData && (
             <Box height="400px">
               <Flex align="center" justify="center" height="100%">
                 <Text size="3">暂无可显示的数据</Text>
@@ -209,78 +152,56 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
             </Box>
           )}
 
-          {/* 工作表选项卡 */}
-          <Tabs.Root
-            value={selectedSheet.toString()}
-            onValueChange={(value) => setSelectedSheet(parseInt(value))}
-          >
-            <Tabs.List>
-              {currentDisplayData.map((sheet, index) => (
-                <Tabs.Trigger key={index} value={index.toString()}>
-                  <Flex align="center" gap="2">
-                    <Text size="2">{sheet.name}</Text>
-                    <Badge variant="soft" size="1">
-                      {sheet.rowCount}行
-                    </Badge>
-                  </Flex>
-                </Tabs.Trigger>
-              ))}
-            </Tabs.List>
+          {/* 第一个工作表内容 */}
+          {displayData && (
+            <Card>
+              <Flex align="center" justify="between" mb="3">
+                <Flex align="center" gap="3">
+                  <Text size="2" weight="bold">
+                    {displayData.name}
+                  </Text>
+                  <Badge variant="soft">
+                    {displayData.rowCount}行 x {displayData.colCount}列
+                  </Badge>
+                </Flex>
 
-            {currentDisplayData.map((sheet, index) => (
-              <Tabs.Content key={index} value={index.toString()}>
-                <Card mb="4">
-                  <Flex align="center" justify="between" mb="3">
-                    <Flex align="center" gap="3">
-                      <Text size="2" weight="bold">
-                        {sheet.name}
-                      </Text>
-                      <Badge variant="soft">
-                        {sheet.rowCount}行 x {sheet.colCount}列
-                      </Badge>
-                    </Flex>
-
-                    {previewMode === 'result' && (
-                      <Flex align="center" gap="3">
-                        <Button
-                          variant="soft"
-                          size="2"
-                          disabled={isCopied}
-                          onClick={() => handleCopyToClipboard(sheet)}
-                        >
-                          {isCopied ? (
-                            <>
-                              <CheckIcon width="14" height="14" />
-                              已复制
-                            </>
-                          ) : (
-                            <>
-                              <CopyIcon width="14" height="14" />
-                              复制到剪切板
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          variant="soft"
-                          size="2"
-                          disabled={isExported}
-                          onClick={() => handleExportToExcel(sheet)}
-                        >
-                          <DownloadIcon width="14" height="14" />
-                          导出为 Excel
-                        </Button>
-                      </Flex>
+                <Flex align="center" gap="3">
+                  <Button
+                    variant="soft"
+                    size="2"
+                    disabled={isCopied}
+                    onClick={() => handleCopyToClipboard(displayData)}
+                  >
+                    {isCopied ? (
+                      <>
+                        <CheckIcon width="14" height="14" />
+                        已复制
+                      </>
+                    ) : (
+                      <>
+                        <CopyIcon width="14" height="14" />
+                        复制到剪切板
+                      </>
                     )}
-                  </Flex>
+                  </Button>
+                  <Button
+                    variant="soft"
+                    size="2"
+                    disabled={isExported}
+                    onClick={() => handleExportToExcel(displayData)}
+                  >
+                    <DownloadIcon width="14" height="14" />
+                    导出为 Excel
+                  </Button>
+                </Flex>
+              </Flex>
 
-                  {/* 渲染表格数据 */}
-                  <Box height="400px">
-                    <SheetTablePreview sheet={sheet} mode={previewMode} />
-                  </Box>
-                </Card>
-              </Tabs.Content>
-            ))}
-          </Tabs.Root>
+              {/* 渲染表格数据 */}
+              <Box height="400px">
+                <SheetTablePreview sheet={displayData} mode="result" />
+              </Box>
+            </Card>
+          )}
         </>
       )}
 
