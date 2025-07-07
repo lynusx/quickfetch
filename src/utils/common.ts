@@ -1,5 +1,11 @@
 // 验证各机目录合法性
-export const createValidators = (dirs, date, shift, times, types) => [
+export const createValidators = (
+  dirs: string[],
+  date: string,
+  shift: string,
+  times: (string | number)[],
+  types: string[],
+) => [
   /**
    * @dirs []
    * @date string
@@ -10,26 +16,32 @@ export const createValidators = (dirs, date, shift, times, types) => [
   // A01-A\EL\20250528\夜班\2\NG_脏污_C\D1A_BIN081_1750660441_315_NG_133_脏污_20250529020856_plain.png
 
   // 第0层级：['A01-A', 'A01-B', ..., 'A10-A', 'A10-B']
-  (name) => dirs.includes(name),
+  (name: string) => dirs.includes(name),
 
   // 第1层级：EL
-  (name) => name === 'EL',
+  (name: string) => name === 'EL',
 
   // 第2层级：20250528
-  (name) => name === date,
+  (name: string) => name === date,
 
   // 第3层级：夜班
-  (name) => name === shift,
+  (name: string) => name === shift,
 
   // 第4层级：[0, 1, 2, ..., 21, 22, 23]
-  (name) => times.includes(name),
+  (name: string) => times.includes(name),
 
   // 第5层级：['NG_脏污_B', 'NG_脏污_C', 'NG_划伤_C']
-  (name) => types.includes(name),
+  (name: string) => types.includes(name),
 ]
 
 // 递归处理目录层级
-export async function traverse(handle, depth, validators, path, out) {
+export async function traverse(
+  handle: any,
+  depth: number,
+  validators: ((name: string) => boolean)[],
+  path: string,
+  out: any[],
+) {
   for await (const entry of handle.values()) {
     if (depth === validators.length) {
       // const file = await entry.getFile();
@@ -53,7 +65,11 @@ export async function traverse(handle, depth, validators, path, out) {
 }
 
 // Write paths to pictures.txt
-export async function writePathsToFile(dirHandle, paths, filename) {
+export async function writePathsToFile(
+  dirHandle: any,
+  paths: string[],
+  filename: string,
+) {
   try {
     const fileHandle = await dirHandle.getFileHandle(filename, {
       create: true,
@@ -70,8 +86,8 @@ export async function writePathsToFile(dirHandle, paths, filename) {
 
 // 文件复制
 export async function copyFileToDirectory(
-  sourceFileHandle,
-  targetDirectoryHandle,
+  sourceFileHandle: any,
+  targetDirectoryHandle: any,
 ) {
   try {
     // 获取源文件内容
@@ -103,10 +119,10 @@ export async function copyFileToDirectory(
 
 // 批量文件复制
 export const copyFilesInBatches = async (
-  files,
-  targetDirHandle,
+  files: any[],
+  targetDirHandle: any,
   batchSize = 10,
-  onProgress,
+  onProgress?: (progress: number) => void,
 ) => {
   const total = files.length
   const batches = Math.ceil(total / batchSize)
@@ -117,7 +133,7 @@ export const copyFilesInBatches = async (
     const batch = files.slice(start, end)
 
     await Promise.all(
-      batch.map(async (file) => {
+      batch.map(async (file: any) => {
         await copyFileToDirectory(file.handle, targetDirHandle)
         onProgress && onProgress(start + batch.indexOf(file) + 1)
       }),
@@ -126,7 +142,7 @@ export const copyFilesInBatches = async (
 }
 
 // 获取班次信息
-export function getShiftInfo(timestamp) {
+export function getShiftInfo(timestamp: number | Date) {
   const date = new Date(timestamp)
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -193,4 +209,16 @@ export function getShiftInfo(timestamp) {
   let finalHoursArray = hoursArray.map((item) => item.toString())
 
   return [finalDateStr, shift, finalHoursArray]
+}
+
+// 获取应用版本信息
+export function getAppVersion(): string {
+  try {
+    // 在 Vite 环境中，可以通过 import.meta.env 获取版本信息
+    // 或者从 package.json 中读取
+    return import.meta.env.VITE_APP_VERSION || '0.0.0'
+  } catch (error) {
+    console.warn('无法获取版本信息:', error)
+    return '0.0.0'
+  }
 }

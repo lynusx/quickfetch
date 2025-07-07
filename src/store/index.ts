@@ -30,16 +30,23 @@ const useStore = create((set) => ({
   },
 
   // Actions
-  setFiles: (files) => set({ files }),
-  setPlant: (plant) => set({ plant }),
-  setTypes: (types) => set({ types }),
-  setScanningState: (isScanning) => set({ isScanning }),
-  setScanError: (error) => set({ scanError: error }),
-  setCopiedCount: (count) => set({ copiedCount: count }),
-  setCopyingState: (isCopying) => set({ isCopying }),
-  setCopyError: (error) => set({ copyError: error }),
-  updateQueryParams: (params) =>
-    set((state) => ({
+  setFiles: (files: any[]) => set({ files }),
+  setPlant: (plant: string) => set({ plant }),
+  setTypes: (types: string[]) => set({ types }),
+  setScanningState: (isScanning: boolean) => set({ isScanning }),
+  setScanError: (error: string | null) => set({ scanError: error }),
+  setCopiedCount: (count: number) => set({ copiedCount: count }),
+  setCopyingState: (isCopying: boolean) => set({ isCopying }),
+  setCopyError: (error: string | null) => set({ copyError: error }),
+  updateQueryParams: (
+    params: Partial<{
+      dirs: string[]
+      date: string
+      shift: string
+      times: string[]
+    }>,
+  ) =>
+    set((state: any) => ({
       queryParams: { ...state.queryParams, ...params },
     })),
 }))

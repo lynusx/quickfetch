@@ -1,0 +1,152 @@
+/* 侧边栏样式优化 */
+.sidebar-container {
+  background: linear-gradient(180deg, var(--gray-2) 0%, var(--gray-3) 100%);
+  border-right: 1px solid var(--gray-6);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.04);
+}
+
+/* 品牌标识优化 */
+.brand-icon {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+
+.brand-icon svg {
+  display: block;
+  margin: 0;
+  padding: 0;
+  vertical-align: top;
+}
+
+/* NavigationMenu 样式重置 - 移除小圆点 */
+.navigation-root {
+  width: 100%;
+}
+
+.navigation-list {
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.navigation-item {
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100%;
+  position: relative;
+}
+
+.navigation-item::before {
+  display: none !important;
+}
+
+/* 搜索框优化 */
+.search-input {
+  background: var(--gray-1);
+  border: 1px solid var(--gray-6);
+  transition: all 0.2s ease;
+}
+
+.search-input:focus-within {
+  border-color: var(--accent-8);
+  box-shadow: 0 0 0 2px var(--accent-3);
+}
+
+/* 导航链接优化 */
+.nav-link {
+  display: block;
+  text-decoration: none;
+  margin-bottom: 4px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+}
+
+.nav-link:hover {
+  background: var(--gray-4) !important;
+  transform: translateX(2px);
+}
+
+.nav-link:hover::before {
+  opacity: 1;
+}
+
+.nav-link::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent 0%, var(--accent-3) 100%);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+/* 激活状态优化 */
+.nav-active {
+  background: var(--accent-3) !important;
+  color: var(--accent-11);
+  position: relative;
+}
+
+.nav-active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 24px;
+  background: var(--accent-9);
+  border-radius: 0 4px 4px 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.nav-active:hover {
+  transform: none !important;
+}
+
+/* 图标动画 */
+.nav-icon {
+  transition: all 0.2s ease;
+}
+
+.nav-link:hover .nav-icon {
+  transform: scale(1.1);
+}
+
+/* 主题切换按钮优化 */
+.theme-toggle {
+  background: var(--gray-1);
+  border: 1px solid var(--gray-6);
+  transition: all 0.2s ease;
+}
+
+.theme-toggle:hover {
+  background: var(--gray-3);
+  transform: rotate(180deg);
+}
+
+/* 响应式优化 */
+@media (max-width: 768px) {
+  .sidebar-container {
+    width: 200px !important;
+  }
+}

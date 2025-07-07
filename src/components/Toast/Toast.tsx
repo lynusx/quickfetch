@@ -3,20 +3,29 @@ import * as RadixToast from '@radix-ui/react-toast'
 import { motion, AnimatePresence } from 'framer-motion'
 import { clsx } from 'clsx'
 import { Card, Text, Flex, IconButton } from '@radix-ui/themes'
+import React from 'react'
 
-const textColor = {
-  info: {
-    color: 'blue',
-  },
-  success: {
-    color: 'jade',
-  },
-  error: {
-    color: 'red',
-  },
+const textColor: Record<string, { color: 'blue' | 'jade' | 'red' }> = {
+  info: { color: 'blue' },
+  success: { color: 'jade' },
+  error: { color: 'red' },
 }
 
-export function Toast({ open, setOpen, title, description, type = 'info' }) {
+export interface ToastProps {
+  open: boolean
+  setOpen: (open: boolean) => void
+  title: React.ReactNode
+  description: React.ReactNode
+  type?: 'info' | 'success' | 'error'
+}
+
+export function Toast({
+  open,
+  setOpen,
+  title,
+  description,
+  type = 'info',
+}: ToastProps) {
   const color = textColor[type]?.color
 
   return (

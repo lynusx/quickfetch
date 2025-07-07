@@ -22,11 +22,57 @@ import {
   writePathsToFile,
   copyFilesInBatches,
 } from '../../utils/common'
-import { Toast } from '../../components/Toast'
+
 import './index.css'
 import { useToast } from '../../hooks/useToast'
+import { Toast } from '../../components/Toast/Toast'
 
-function Home() {
+// 定义 useStore 返回值类型
+interface StoreState {
+  files: any[]
+  plant: string
+  types: string[]
+  isScanning: boolean
+  scanError: string | null
+  copiedCount: number
+  isCopying: boolean
+  copyError: string | null
+  queryParams: {
+    dirs: string[]
+    date: string
+    shift: string
+    times: string[]
+  }
+  setFiles: (files: any[]) => void
+  setPlant: (plant: string) => void
+  setTypes: (types: string[]) => void
+  setScanningState: (isScanning: boolean) => void
+  setScanError: (error: string | null) => void
+  setCopiedCount: (count: number) => void
+  setCopyingState: (isCopying: boolean) => void
+  setCopyError: (error: string | null) => void
+  updateQueryParams: (params: Partial<StoreState['queryParams']>) => void
+}
+
+// 定义 useToast 返回值类型
+interface ToastState {
+  open: boolean
+  title?: string
+  description?: string
+  type?: 'info' | 'success' | 'error'
+}
+
+interface UseToast {
+  toast: ToastState
+  showToast: (
+    title: string,
+    description: string,
+    type?: 'info' | 'success' | 'error',
+  ) => void
+  hideToast: () => void
+}
+
+function ImageCopyPage() {
   const {
     files,
     plant,
@@ -45,9 +91,9 @@ function Home() {
     setCopiedCount,
     setCopyingState,
     setCopyError,
-  } = useStore()
+  } = useStore() as StoreState
 
-  const { toast, showToast, hideToast } = useToast()
+  const { toast, showToast, hideToast } = useToast() as UseToast
 
   const _types = types.flatMap((item) => {
     if (item === '脏污') {
@@ -57,17 +103,24 @@ function Home() {
     }
   })
 
+  // @ts-ignore
+  const showDirectoryPicker: any =
+    (window as any).showDirectoryPicker || undefined
+
   const handleSourceClick = useCallback(async () => {
     try {
       setFiles([])
       setScanError(null)
       setCopiedCount(0)
 
-      const rootDirHandle = await showDirectoryPicker({
-        startIn: 'desktop',
-      }).catch(() => {
-        throw new Error('请选择有效目录')
-      })
+      // @ts-ignore
+      const rootDirHandle = await (window as any)
+        .showDirectoryPicker({
+          startIn: 'desktop',
+        })
+        .catch(() => {
+          throw new Error('请选择有效目录')
+        })
 
       if (rootDirHandle.name !== 'DC') {
         throw new Error('请选择名为 DC 的目录')
@@ -76,10 +129,9 @@ function Home() {
       setScanningState(true)
       showToast('扫描开始', '正在扫描文件...', 'info')
 
-      const dirs = []
+      const dirs: string[] = []
       for await (const entry of rootDirHandle.values()) {
         const regStr = new RegExp(`^${plant}\\d+`)
-
         if (entry.kind === 'directory' && regStr.test(entry.name)) {
           dirs.push(entry.name)
         }
@@ -90,15 +142,15 @@ function Home() {
         queryParams.date,
         queryParams.shift,
         queryParams.times,
-        _types,
+        _types.filter((item): item is string => typeof item === 'string'),
       )
 
-      const out = []
+      const out: any[] = []
       await traverse(rootDirHandle, 0, validators, '', out)
       setFiles(out)
 
       showToast('扫描完成', `共找到 ${out.length} 张图片`, 'success')
-    } catch (error) {
+    } catch (error: any) {
       setScanError(error.message)
       showToast('扫描失败', error.message, 'error')
       console.error('Scanning error:', error)
@@ -124,11 +176,14 @@ function Home() {
       setCopyError(null)
       setCopiedCount(0)
 
-      const targetDirHandle = await showDirectoryPicker({
-        startIn: 'desktop',
-      }).catch(() => {
-        throw new Error('请选择有效的目录')
-      })
+      // @ts-ignore
+      const targetDirHandle = await (window as any)
+        .showDirectoryPicker({
+          startIn: 'desktop',
+        })
+        .catch(() => {
+          throw new Error('请选择有效的目录')
+        })
 
       if (
         (await targetDirHandle.queryPermission({ mode: 'readwrite' })) !==
@@ -152,12 +207,17 @@ function Home() {
         'source.txt',
       )
 
-      await copyFilesInBatches(files, targetDirHandle, 10, (progress) => {
-        setCopiedCount(progress)
-      })
+      await copyFilesInBatches(
+        files,
+        targetDirHandle,
+        10,
+        (progress: number) => {
+          setCopiedCount(progress)
+        },
+      )
 
       showToast('复制完成', `已复制 ${files.length} 张图片`, 'success')
-    } catch (error) {
+    } catch (error: any) {
       setCopyError(error.message)
       showToast('复制失败', error.message, 'error')
     } finally {
@@ -167,7 +227,10 @@ function Home() {
 
   return (
     <Container size="2">
-      <Card size="4" style={{ marginTop: '2rem', maxWidth: '800px', margin: '2rem auto' }}>
+      <Card
+        size="4"
+        style={{ marginTop: '2rem', maxWidth: '800px', margin: '2rem auto' }}
+      >
         <Heading size="6" align="center" mb="6" color="blue" trim="both">
           图片批量拷贝工具
         </Heading>
@@ -259,12 +322,7 @@ function Home() {
               <DataList.Value>
                 <Flex gap="2" wrap="wrap">
                   {queryParams.times.map((item) => (
-                    <Badge
-                      color="blue"
-                      variant="soft"
-                      radius="full"
-                      key={item}
-                    >
+                    <Badge color="blue" variant="soft" radius="full" key={item}>
                       {item}点
                     </Badge>
                   ))}
@@ -276,12 +334,7 @@ function Home() {
               <DataList.Value>
                 <Flex gap="2" wrap="wrap">
                   {_types.map((item) => (
-                    <Badge
-                      color="blue"
-                      variant="soft"
-                      radius="full"
-                      key={item}
-                    >
+                    <Badge color="blue" variant="soft" radius="full" key={item}>
                       {item}
                     </Badge>
                   ))}
@@ -377,4 +430,4 @@ function Home() {
   )
 }
 
-export default Home
+export default ImageCopyPage
