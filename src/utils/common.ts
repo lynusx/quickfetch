@@ -44,16 +44,18 @@ export async function traverse(
 ) {
   for await (const entry of handle.values()) {
     if (depth === validators.length) {
-      // const file = await entry.getFile();
-      // console.log(path, entry);
-      const file = {
-        path: path.concat('/', entry.name),
-        handle: entry,
+      // 判断entry是否为图片
+      const imageExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.gif']
+      const isImage = imageExtensions.some((ext) =>
+        entry.name.toLowerCase().endsWith(ext),
+      )
+      if (isImage) {
+        const file = {
+          path: path.concat('/', entry.name),
+          handle: entry,
+        }
+        out.push(file)
       }
-
-      out.push(file)
-
-      // console.log(out);
     }
 
     if (depth < validators.length && validators[depth](entry.name)) {
