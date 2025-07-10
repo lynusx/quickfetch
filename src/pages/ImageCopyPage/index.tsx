@@ -1,5 +1,4 @@
-import { useCallback } from 'react'
-import useStore from '../../store'
+import { useCallback, useEffect, useMemo } from 'react'
 import {
   Box,
   Button,
@@ -25,92 +24,64 @@ import {
   DownloadIcon,
   FileIcon,
 } from '@radix-ui/react-icons'
+
+import useImageCopyStore from '../../store/imageCopyStore'
+
 import {
   traverse,
   createValidators,
   writePathsToFile,
   copyFilesInBatches,
+  getShiftInfo,
 } from '../../utils/common'
 
 import './index.css'
 import { useToast } from '../../hooks/useToast'
 import { Toast } from '../../components/Toast/Toast'
 
-// 定义 useStore 返回值类型
-interface StoreState {
-  files: any[]
-  plant: string
-  types: string[]
-  isScanning: boolean
-  scanError: string | null
-  copiedCount: number
-  isCopying: boolean
-  copyError: string | null
-  queryParams: {
-    dirs: string[]
-    date: string
-    shift: string
-    times: string[]
-  }
-  setFiles: (files: any[]) => void
-  setPlant: (plant: string) => void
-  setTypes: (types: string[]) => void
-  setScanningState: (isScanning: boolean) => void
-  setScanError: (error: string | null) => void
-  setCopiedCount: (count: number) => void
-  setCopyingState: (isCopying: boolean) => void
-  setCopyError: (error: string | null) => void
-  updateQueryParams: (params: Partial<StoreState['queryParams']>) => void
-}
-
-// 定义 useToast 返回值类型
-interface ToastState {
-  open: boolean
-  title?: string
-  description?: string
-  type?: 'info' | 'success' | 'error'
-}
-
-interface UseToast {
-  toast: ToastState
-  showToast: (
-    title: string,
-    description: string,
-    type?: 'info' | 'success' | 'error',
-  ) => void
-  hideToast: () => void
-}
-
-function ImageCopyPage() {
+const ImageCopyPage = () => {
   const {
-    files,
-    plant,
-    types,
+    selectedPlant,
+    selectedTypes,
+    currentScanRange,
+    setSelectedPlant,
+    setSelectedTypes,
+    setCurrentScanRange,
+    scannedFiles,
     isScanning,
     scanError,
-    copiedCount,
     isCopying,
     copyError,
-    queryParams,
-    setFiles,
-    setPlant,
-    setTypes,
-    setScanningState,
+    copiedFileCount,
+    setScannedFiles,
     setScanError,
-    setCopiedCount,
+    setCopiedFileCount,
+    setScanningState,
     setCopyingState,
     setCopyError,
-  } = useStore() as StoreState
+  } = useImageCopyStore()
 
-  const { toast, showToast, hideToast } = useToast() as UseToast
+  useEffect(() => {
+    const shiftInfo = getShiftInfo(new Date())
+    setCurrentScanRange({
+      date: shiftInfo[0] as string,
+      shift: shiftInfo[1] as string,
+      times: shiftInfo[2] as string[],
+    })
+  }, [])
 
-  const _types = types.flatMap((item) => {
-    if (item === '脏污') {
-      return ['NG_脏污_B', 'NG_脏污_C']
-    } else if (item === '划伤') {
-      return ['NG_划伤_B', 'NG_划伤_C']
+  const displayTypes = useMemo(() => {
+    const typeMap = {
+      脏污: ['NG_脏污_B', 'NG_脏污_C'],
+      划伤: ['NG_划伤_B', 'NG_划伤_C'],
     }
-  })
+
+    return selectedTypes.flatMap(
+      (item) => typeMap[item as keyof typeof typeMap],
+    )
+  }, [selectedTypes])
+
+  const { toast, showToast, hideToast } = useToast()
 
   // @ts-ignore
   const showDirectoryPicker: any =
@@ -118,9 +89,9 @@ function ImageCopyPage() {
 
   const handleSourceClick = useCallback(async () => {
     try {
-      setFiles([])
+      setScannedFiles([])
       setScanError(null)
-      setCopiedCount(0)
+      setCopiedFileCount(0)
 
       // @ts-ignore
       const rootDirHandle = await (window as any)
@@ -140,7 +111,7 @@ function ImageCopyPage() {
 
       const dirs: string[] = []
       for await (const entry of rootDirHandle.values()) {
-        const regStr = new RegExp(`^${plant}\\d+`)
+        const regStr = new RegExp(`^${selectedPlant}\\d+`)
         if (entry.kind === 'directory' && regStr.test(entry.name)) {
           dirs.push(entry.name)
         }
@@ -148,15 +119,15 @@ function ImageCopyPage() {
 
       const validators = createValidators(
         dirs,
-        queryParams.date,
-        queryParams.shift,
-        queryParams.times,
-        _types.filter((item): item is string => typeof item === 'string'),
+        currentScanRange.date,
+        currentScanRange.shift,
+        currentScanRange.times,
+        displayTypes.filter((item): item is string => typeof item === 'string'),
       )
 
       const out: any[] = []
       await traverse(rootDirHandle, 0, validators, '', out)
-      setFiles(out)
+      setScannedFiles(out)
 
       showToast('扫描完成', `共找到 ${out.length} 张图片`, 'success')
     } catch (error: any) {
@@ -167,23 +138,23 @@ function ImageCopyPage() {
       setScanningState(false)
     }
   }, [
-    setFiles,
+    setScannedFiles,
     setScanError,
     setScanningState,
     showToast,
-    queryParams.date,
-    queryParams.shift,
-    queryParams.times,
-    _types,
-    plant,
+    currentScanRange.date,
+    currentScanRange.shift,
+    currentScanRange.times,
+    displayTypes,
+    selectedPlant,
   ])
 
   const handleTargetClick = useCallback(async () => {
-    if (!files.length) return
+    if (!scannedFiles.length) return
 
     try {
       setCopyError(null)
-      setCopiedCount(0)
+      setCopiedFileCount(0)
 
       // @ts-ignore
       const targetDirHandle = await (window as any)
@@ -212,27 +183,33 @@ function ImageCopyPage() {
 
       await writePathsToFile(
         targetDirHandle,
-        files.map((file) => file.path),
+        scannedFiles.map((file) => file.path),
         'source.txt',
       )
 
       await copyFilesInBatches(
-        files,
+        scannedFiles,
         targetDirHandle,
         10,
         (progress: number) => {
-          setCopiedCount(progress)
+          setCopiedFileCount(progress)
         },
       )
 
-      showToast('复制完成', `已复制 ${files.length} 张图片`, 'success')
+      showToast('复制完成', `已复制 ${scannedFiles.length} 张图片`, 'success')
     } catch (error: any) {
       setCopyError(error.message)
       showToast('复制失败', error.message, 'error')
     } finally {
       setCopyingState(false)
     }
-  }, [files, setCopyError, setCopiedCount, showToast, setCopyingState])
+  }, [
+    scannedFiles,
+    setCopyError,
+    setCopiedFileCount,
+    showToast,
+    setCopyingState,
+  ])
 
   return (
     <Box>
@@ -281,7 +258,10 @@ function ImageCopyPage() {
                 >
                   厂区选择
                 </Text>
-                <RadioGroup.Root defaultValue={plant} onValueChange={setPlant}>
+                <RadioGroup.Root
+                  defaultValue={selectedPlant}
+                  onValueChange={setSelectedPlant}
+                >
                   <Flex gap="4">
                     <RadioGroup.Item value="A">
                       <Text size="2">东区</Text>
@@ -305,9 +285,9 @@ function ImageCopyPage() {
                   类型选择
                 </Text>
                 <CheckboxGroup.Root
-                  defaultValue={types}
+                  defaultValue={selectedTypes}
                   name="types"
-                  onValueChange={setTypes}
+                  onValueChange={setSelectedTypes}
                 >
                   <Flex gap="4">
                     <CheckboxGroup.Item value="脏污">
@@ -341,7 +321,7 @@ function ImageCopyPage() {
                 <DataList.Label minWidth="60px">厂区</DataList.Label>
                 <DataList.Value>
                   <Badge color="blue" variant="soft">
-                    {plant === 'A' ? '东区' : '西区'}
+                    {selectedPlant === 'A' ? '东区' : '西区'}
                   </Badge>
                 </DataList.Value>
               </DataList.Item>
@@ -349,7 +329,7 @@ function ImageCopyPage() {
                 <DataList.Label minWidth="60px">日期</DataList.Label>
                 <DataList.Value>
                   <Badge color="blue" variant="soft">
-                    {queryParams.date}
+                    {currentScanRange.date}
                   </Badge>
                 </DataList.Value>
               </DataList.Item>
@@ -357,7 +337,7 @@ function ImageCopyPage() {
                 <DataList.Label minWidth="60px">班次</DataList.Label>
                 <DataList.Value>
                   <Badge color="blue" variant="soft">
-                    {queryParams.shift}
+                    {currentScanRange.shift}
                   </Badge>
                 </DataList.Value>
               </DataList.Item>
@@ -365,7 +345,7 @@ function ImageCopyPage() {
                 <DataList.Label minWidth="60px">时段</DataList.Label>
                 <DataList.Value>
                   <Flex gap="1" wrap="wrap">
-                    {queryParams.times.map((time) => (
+                    {currentScanRange.times.map((time) => (
                       <Badge key={time} color="blue" variant="soft" size="1">
                         {time}点
                       </Badge>
@@ -377,9 +357,9 @@ function ImageCopyPage() {
                 <DataList.Label minWidth="60px">类型</DataList.Label>
                 <DataList.Value>
                   <Flex gap="1" wrap="wrap">
-                    {_types.map((item) => (
-                      <Badge color="blue" variant="soft" size="1" key={item}>
-                        {item}
+                    {displayTypes.map((type) => (
+                      <Badge color="blue" variant="soft" size="1" key={type}>
+                        {type}
                       </Badge>
                     ))}
                   </Flex>
@@ -427,10 +407,10 @@ function ImageCopyPage() {
                       扫描源目录
                     </Text>
                   </Flex>
-                  {files.length > 0 && (
+                  {scannedFiles.length > 0 && (
                     <Badge color="green" variant="soft" size="1">
                       <CheckIcon width="12" height="12" />
-                      {files.length} 张
+                      {scannedFiles.length} 张
                     </Badge>
                   )}
                 </Flex>
@@ -473,7 +453,9 @@ function ImageCopyPage() {
                         height: '32px',
                         borderRadius: '50%',
                         background:
-                          files.length > 0 ? 'var(--green-9)' : 'var(--gray-8)',
+                          scannedFiles.length > 0
+                            ? 'var(--green-9)'
+                            : 'var(--gray-8)',
                         color: 'white',
                         display: 'flex',
                         alignItems: 'center',
@@ -488,10 +470,13 @@ function ImageCopyPage() {
                       复制到目标目录
                     </Text>
                   </Flex>
-                  {copiedCount > 0 && (
+                  {copiedFileCount > 0 && (
                     <Badge color="green" variant="soft" size="1">
                       <CheckIcon width="12" height="12" />
-                      {Math.round((copiedCount / files.length) * 100)}%
+                      {Math.round(
+                        (copiedFileCount / scannedFiles.length) * 100,
+                      )}
+                      %
                     </Badge>
                   )}
                 </Flex>
@@ -501,7 +486,7 @@ function ImageCopyPage() {
                   variant="solid"
                   color="green"
                   onClick={handleTargetClick}
-                  disabled={!files.length || isScanning || isCopying}
+                  disabled={!scannedFiles.length || isScanning || isCopying}
                   style={{ width: '100%' }}
                 >
                   {isCopying ? (
@@ -526,7 +511,7 @@ function ImageCopyPage() {
             </Flex>
 
             {/* 复制进度 */}
-            {copiedCount > 0 && (
+            {copiedFileCount > 0 && (
               <Box
                 mt="4"
                 p="4"
@@ -549,11 +534,11 @@ function ImageCopyPage() {
                     weight="medium"
                     style={{ color: 'var(--green-11)' }}
                   >
-                    {Math.round((copiedCount / files.length) * 100)}%
+                    {Math.round((copiedFileCount / scannedFiles.length) * 100)}%
                   </Text>
                 </Flex>
                 <Progress
-                  value={(copiedCount / files.length) * 100}
+                  value={(copiedFileCount / scannedFiles.length) * 100}
                   color="green"
                   size="3"
                   radius="full"
@@ -567,7 +552,7 @@ function ImageCopyPage() {
                   }}
                   mt="2"
                 >
-                  已复制 {copiedCount} / {files.length} 张图片
+                  已复制 {copiedFileCount} / {scannedFiles.length} 张图片
                 </Text>
               </Box>
             )}
