@@ -36,11 +36,11 @@ const SiderbarNavigation: FC = () => {
 
   return (
     <Box
-      width="260px"
-      minWidth="260px"
+      width="280px"
+      minWidth="280px"
       height="100vh"
-      pt="6"
-      px="5"
+      pt="4"
+      px="3"
       className="sidebar-container"
       style={{
         position: 'sticky',
@@ -49,7 +49,7 @@ const SiderbarNavigation: FC = () => {
       }}
     >
       {/* 顶部品牌标识和切换按钮 */}
-      <Flex justify="between" align="center" mb="6">
+      <Flex justify="between" align="center" mb="5">
         <Flex align="center" gap="3">
           <Box className="brand-icon">
             <DashboardIcon color="white" width="20" height="20" />
@@ -76,7 +76,7 @@ const SiderbarNavigation: FC = () => {
       </Flex>
 
       {/* 搜索框 */}
-      <Box mb="6">
+      <Box mb="5">
         <TextField.Root
           radius="large"
           placeholder="搜索工具..."
@@ -90,7 +90,7 @@ const SiderbarNavigation: FC = () => {
       </Box>
 
       {/* 导航标题 */}
-      <Text size="2" weight="medium" mb="3" style={{ color: 'var(--gray-11)' }}>
+      <Text size="2" weight="medium" mb="2" style={{ color: 'var(--gray-11)' }}>
         工具列表
       </Text>
 
@@ -160,7 +160,7 @@ const SiderbarNavigation: FC = () => {
       </Box>
 
       {/* 底部信息 */}
-      <Box mt="auto" pt="6" style={{ borderTop: '1px solid var(--gray-6)' }}>
+      <Box mt="auto" pt="4" style={{ borderTop: '1px solid var(--gray-6)' }}>
         <Text size="1" style={{ color: 'var(--gray-10)' }}>
           版本 {getAppVersion()}
         </Text>
