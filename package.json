@@ -30,6 +30,7 @@
     "@eslint/js": "^9.27.0",
     "@types/react": "^19.1.5",
     "@types/react-dom": "^19.1.5",
+    "@types/wicg-file-system-access": "^2023.10.6",
     "@vitejs/plugin-react": "^4.5.0",
     "autoprefixer": "^10.4.17",
     "eslint": "^9.27.0",

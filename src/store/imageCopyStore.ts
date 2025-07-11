@@ -10,13 +10,13 @@ interface ScanRange {
 
 interface ImageCopyState {
   // 文件扫描状态
-  scannedFiles: any[]
+  scannedFiles: { path: string; fileHandle: FileSystemFileHandle }[]
   isScanning: boolean
   scanError: string | null
 
   // 配置参数
-  selectedPlant: string
-  selectedTypes: string[]
+  plant: string
+  types: string[]
 
   // 扫描范围
   currentScanRange: ScanRange
@@ -29,13 +29,15 @@ interface ImageCopyState {
 
 interface ImageCopyAction {
   // 文件扫描状态
-  setScannedFiles: (files: any[]) => void
+  setScannedFiles: (
+    files: { path: string; fileHandle: FileSystemFileHandle }[],
+  ) => void
   setScanningState: (isScanning: boolean) => void
   setScanError: (error: string | null) => void
 
   // 配置参数
-  setSelectedPlant: (plant: string) => void
-  setSelectedTypes: (types: string[]) => void
+  setPlant: (plant: string) => void
+  setTypes: (types: string[]) => void
 
   // 扫描范围
   setCurrentScanRange: (range: Partial<ScanRange>) => void
@@ -53,8 +55,8 @@ const useImageCopyStore = create<ImageCopyState & ImageCopyAction>()(
     isScanning: false,
     scanError: null,
 
-    selectedPlant: 'A',
-    selectedTypes: ['脏污', '划伤'],
+    plant: 'A',
+    types: ['脏污', '划伤'],
 
     currentScanRange: {
       directories: [],
@@ -72,8 +74,8 @@ const useImageCopyStore = create<ImageCopyState & ImageCopyAction>()(
     setScanningState: (isScanning) => set({ isScanning }),
     setScanError: (error) => set({ scanError: error }),
 
-    setSelectedPlant: (plant) => set({ selectedPlant: plant }),
-    setSelectedTypes: (types) => set({ selectedTypes: types }),
+    setPlant: (plant) => set({ plant: plant }),
+    setTypes: (types) => set({ types: types }),
 
     setCurrentScanRange: (range) =>
       set((state) => ({

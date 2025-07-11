@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useMemo } from 'react'
 import {
   Box,
   Button,
@@ -25,191 +24,32 @@ import {
   FileIcon,
 } from '@radix-ui/react-icons'
 
-import useImageCopyStore from '../../store/imageCopyStore'
-
-import {
-  traverse,
-  createValidators,
-  writePathsToFile,
-  copyFilesInBatches,
-  getShiftInfo,
-} from '../../utils/common'
-
-import './index.css'
-import { useToast } from '../../hooks/useToast'
+import { useImageCopy } from '../../hooks/useImageCopy'
 import { Toast } from '../../components/Toast/Toast'
+import { useToast } from '../../hooks/useToast'
+import './index.css'
 
 const ImageCopyPage = () => {
+  const { toast, hideToast, showToast } = useToast()
   const {
-    selectedPlant,
-    selectedTypes,
     currentScanRange,
-    setSelectedPlant,
-    setSelectedTypes,
-    setCurrentScanRange,
+    ngTypes,
+    plant,
+    types,
     scannedFiles,
     isScanning,
-    scanError,
     isCopying,
+    scanError,
     copyError,
     copiedFileCount,
-    setScannedFiles,
-    setScanError,
-    setCopiedFileCount,
-    setScanningState,
-    setCopyingState,
-    setCopyError,
-  } = useImageCopyStore()
-
-  useEffect(() => {
-    const shiftInfo = getShiftInfo(new Date())
-    setCurrentScanRange({
-      date: shiftInfo[0] as string,
-      shift: shiftInfo[1] as string,
-      times: shiftInfo[2] as string[],
-    })
-  }, [])
-
-  const displayTypes = useMemo(() => {
-    const typeMap = {
-      脏污: ['NG_脏污_B', 'NG_脏污_C'],
-      划伤: ['NG_划伤_B', 'NG_划伤_C'],
-    }
-
-    return selectedTypes.flatMap(
-      (item) => typeMap[item as keyof typeof typeMap],
-    )
-  }, [selectedTypes])
-
-  const { toast, showToast, hideToast } = useToast()
-
-  // @ts-ignore
-  const showDirectoryPicker: any =
-    (window as any).showDirectoryPicker || undefined
-
-  const handleSourceClick = useCallback(async () => {
-    try {
-      setScannedFiles([])
-      setScanError(null)
-      setCopiedFileCount(0)
-
-      // @ts-ignore
-      const rootDirHandle = await (window as any)
-        .showDirectoryPicker({
-          startIn: 'desktop',
-        })
-        .catch(() => {
-          throw new Error('请选择有效目录')
-        })
-
-      if (rootDirHandle.name !== 'DC') {
-        throw new Error('请选择名为 DC 的目录')
-      }
-
-      setScanningState(true)
-      showToast('扫描开始', '正在扫描文件...', 'info')
-
-      const dirs: string[] = []
-      for await (const entry of rootDirHandle.values()) {
-        const regStr = new RegExp(`^${selectedPlant}\\d+`)
-        if (entry.kind === 'directory' && regStr.test(entry.name)) {
-          dirs.push(entry.name)
-        }
-      }
-
-      const validators = createValidators(
-        dirs,
-        currentScanRange.date,
-        currentScanRange.shift,
-        currentScanRange.times,
-        displayTypes.filter((item): item is string => typeof item === 'string'),
-      )
-
-      const out: any[] = []
-      await traverse(rootDirHandle, 0, validators, '', out)
-      setScannedFiles(out)
-
-      showToast('扫描完成', `共找到 ${out.length} 张图片`, 'success')
-    } catch (error: any) {
-      setScanError(error.message)
-      showToast('扫描失败', error.message, 'error')
-      console.error('Scanning error:', error)
-    } finally {
-      setScanningState(false)
-    }
-  }, [
-    setScannedFiles,
-    setScanError,
-    setScanningState,
-    showToast,
-    currentScanRange.date,
-    currentScanRange.shift,
-    currentScanRange.times,
-    displayTypes,
-    selectedPlant,
-  ])
-
-  const handleTargetClick = useCallback(async () => {
-    if (!scannedFiles.length) return
-
-    try {
-      setCopyError(null)
-      setCopiedFileCount(0)
-
-      // @ts-ignore
-      const targetDirHandle = await (window as any)
-        .showDirectoryPicker({
-          startIn: 'desktop',
-        })
-        .catch(() => {
-          throw new Error('请选择有效的目录')
-        })
-
-      if (
-        (await targetDirHandle.queryPermission({ mode: 'readwrite' })) !==
-        'granted'
-      ) {
-        if (
-          (await targetDirHandle.requestPermission({ mode: 'readwrite' })) !==
-          'granted'
-        ) {
-          throw new Error('写入目标目录权限被拒绝')
-        }
-      }
-
-      showToast('复制开始', '正在复制文件...', 'info')
-
-      setCopyingState(true)
-
-      await writePathsToFile(
-        targetDirHandle,
-        scannedFiles.map((file) => file.path),
-        'source.txt',
-      )
-
-      await copyFilesInBatches(
-        scannedFiles,
-        targetDirHandle,
-        10,
-        (progress: number) => {
-          setCopiedFileCount(progress)
-        },
-      )
-
-      showToast('复制完成', `已复制 ${scannedFiles.length} 张图片`, 'success')
-    } catch (error: any) {
-      setCopyError(error.message)
-      showToast('复制失败', error.message, 'error')
-    } finally {
-      setCopyingState(false)
-    }
-  }, [
-    scannedFiles,
-    setCopyError,
-    setCopiedFileCount,
-    showToast,
-    setCopyingState,
-  ])
+    setTypes,
+    setPlant,
+    handleSourceScan,
+    handleCopyFiles,
+    canStartScan,
+    canStartCopy,
+    getCopyProgress,
+  } = useImageCopy({ showToast })
 
   return (
     <Box>
@@ -258,10 +98,7 @@ const ImageCopyPage = () => {
                 >
                   厂区选择
                 </Text>
-                <RadioGroup.Root
-                  defaultValue={selectedPlant}
-                  onValueChange={setSelectedPlant}
-                >
+                <RadioGroup.Root defaultValue={plant} onValueChange={setPlant}>
                   <Flex gap="4">
                     <RadioGroup.Item value="A">
                       <Text size="2">东区</Text>
@@ -285,9 +122,9 @@ const ImageCopyPage = () => {
                   类型选择
                 </Text>
                 <CheckboxGroup.Root
-                  defaultValue={selectedTypes}
+                  defaultValue={types}
                   name="types"
-                  onValueChange={setSelectedTypes}
+                  onValueChange={setTypes}
                 >
                   <Flex gap="4">
                     <CheckboxGroup.Item value="脏污">
@@ -321,7 +158,7 @@ const ImageCopyPage = () => {
                 <DataList.Label minWidth="60px">厂区</DataList.Label>
                 <DataList.Value>
                   <Badge color="blue" variant="soft">
-                    {selectedPlant === 'A' ? '东区' : '西区'}
+                    {plant === 'A' ? '东区' : '西区'}
                   </Badge>
                 </DataList.Value>
               </DataList.Item>
@@ -357,7 +194,7 @@ const ImageCopyPage = () => {
                 <DataList.Label minWidth="60px">类型</DataList.Label>
                 <DataList.Value>
                   <Flex gap="1" wrap="wrap">
-                    {displayTypes.map((type) => (
+                    {ngTypes.map((type) => (
                       <Badge color="blue" variant="soft" size="1" key={type}>
                         {type}
                       </Badge>
@@ -419,8 +256,8 @@ const ImageCopyPage = () => {
                   size="3"
                   variant="solid"
                   color="blue"
-                  onClick={handleSourceClick}
-                  disabled={isScanning || isCopying}
+                  onClick={handleSourceScan}
+                  disabled={!canStartScan() || types.length === 0}
                   style={{ width: '100%' }}
                 >
                   {isScanning ? (
@@ -485,8 +322,8 @@ const ImageCopyPage = () => {
                   size="3"
                   variant="solid"
                   color="green"
-                  onClick={handleTargetClick}
-                  disabled={!scannedFiles.length || isScanning || isCopying}
+                  onClick={handleCopyFiles}
+                  disabled={!canStartCopy()}
                   style={{ width: '100%' }}
                 >
                   {isCopying ? (
@@ -534,11 +371,11 @@ const ImageCopyPage = () => {
                     weight="medium"
                     style={{ color: 'var(--green-11)' }}
                   >
-                    {Math.round((copiedFileCount / scannedFiles.length) * 100)}%
+                    {getCopyProgress()}%
                   </Text>
                 </Flex>
                 <Progress
-                  value={(copiedFileCount / scannedFiles.length) * 100}
+                  value={getCopyProgress()}
                   color="green"
                   size="3"
                   radius="full"
