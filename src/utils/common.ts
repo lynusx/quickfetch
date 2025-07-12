@@ -1,218 +1,3 @@
-// 验证各机目录合法性
-export const createValidators = (
-  dirs: string[],
-  date: string,
-  shift: string,
-  times: (string | number)[],
-  types: string[],
-) => [
-  /**
-   * @dirs []
-   * @date string
-   * @shift string
-   * @times []
-   * @types []
-   */
-  // A01-A\EL\20250528\夜班\2\NG_脏污_C\D1A_BIN081_1750660441_315_NG_133_脏污_20250529020856_plain.png
-
-  // 第0层级：['A01-A', 'A01-B', ..., 'A10-A', 'A10-B']
-  (name: string) => dirs.includes(name),
-
-  // 第1层级：EL
-  (name: string) => name === 'EL',
-
-  // 第2层级：20250528
-  (name: string) => name === date,
-
-  // 第3层级：夜班
-  (name: string) => name === shift,
-
-  // 第4层级：[0, 1, 2, ..., 21, 22, 23]
-  (name: string) => times.includes(name),
-
-  // 第5层级：['NG_脏污_B', 'NG_脏污_C', 'NG_划伤_C']
-  (name: string) => types.includes(name),
-]
-
-// 递归处理目录层级
-export async function traverse(
-  handle: any,
-  depth: number,
-  validators: ((name: string) => boolean)[],
-  path: string,
-  out: any[],
-) {
-  for await (const entry of handle.values()) {
-    if (depth === validators.length) {
-      // 判断entry是否为图片
-      const imageExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.gif']
-      const isImage = imageExtensions.some((ext) =>
-        entry.name.toLowerCase().endsWith(ext),
-      )
-      if (isImage) {
-        const file = {
-          path: path.concat('/', entry.name),
-          handle: entry,
-        }
-        out.push(file)
-      }
-    }
-
-    if (depth < validators.length && validators[depth](entry.name)) {
-      const newPath =
-        depth === 0 ? path.concat(entry.name) : path.concat('/', entry.name)
-      await traverse(entry, depth + 1, validators, newPath, out)
-    }
-  }
-}
-
-// Write paths to pictures.txt
-export async function writePathsToFile(
-  dirHandle: any,
-  paths: string[],
-  filename: string,
-) {
-  try {
-    const fileHandle = await dirHandle.getFileHandle(filename, {
-      create: true,
-    })
-    const writableStream = await fileHandle.createWritable()
-    const content = paths.join('\n')
-    await writableStream.write(content)
-    await writableStream.close()
-    // eslint-disable-next-line no-unused-vars
-  } catch (err) {
-    throw new Error(`文件 ${filename} 创建失败`)
-  }
-}
-
-// 文件复制
-export async function copyFileToDirectory(
-  sourceFileHandle: any,
-  targetDirectoryHandle: any,
-) {
-  try {
-    // 获取源文件内容
-    const sourceFile = await sourceFileHandle.getFile()
-
-    // 在目标目录中创建新文件
-    const newFileHandle = await targetDirectoryHandle.getFileHandle(
-      sourceFile.name,
-      {
-        create: true,
-      },
-    )
-
-    // 创建可写流
-    const writableStream = await newFileHandle.createWritable()
-
-    // 将源文件内容写入新文件
-    await writableStream.write(await sourceFile.arrayBuffer())
-
-    // 关闭流
-    await writableStream.close()
-
-    return `文件${sourceFile.name}已成功复制到目标目录`
-  } catch (err) {
-    // throw new Error(`复制失败：${err.message}`);
-    console.log(err)
-  }
-}
-
-// 批量文件复制
-export const copyFilesInBatches = async (
-  files: any[],
-  targetDirHandle: any,
-  batchSize = 10,
-  onProgress?: (progress: number) => void,
-) => {
-  const total = files.length
-  const batches = Math.ceil(total / batchSize)
-
-  for (let i = 0; i < batches; i++) {
-    const start = i * batchSize
-    const end = Math.min(start + batchSize, total)
-    const batch = files.slice(start, end)
-
-    await Promise.all(
-      batch.map(async (file: any) => {
-        await copyFileToDirectory(file.handle, targetDirHandle)
-        onProgress && onProgress(start + batch.indexOf(file) + 1)
-      }),
-    )
-  }
-}
-
-// 获取班次信息
-export function getShiftInfo(timestamp: number | Date) {
-  const date = new Date(timestamp)
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hour = date.getHours()
-  const minute = date.getMinutes()
-
-  // 1. 确定班次和日期
-  let shift
-  let finalDateStr
-
-  // 判断白班条件：8:30-20:30（包含8:30，不包含20:30）
-  if (
-    (hour > 8 && hour < 20) ||
-    (hour === 8 && minute >= 30) ||
-    (hour === 20 && minute < 30)
-  ) {
-    shift = '白班'
-    finalDateStr = `${year}${month}${day}` // 白班使用当天日期
-  } else {
-    shift = '夜班'
-    // 夜班跨天处理：0:00-8:30 使用前一天日期
-    if (hour < 8 || (hour === 8 && minute < 30)) {
-      const prevDay = new Date(timestamp)
-      prevDay.setDate(prevDay.getDate() - 1)
-      const prevYear = prevDay.getFullYear()
-      const prevMonth = String(prevDay.getMonth() + 1).padStart(2, '0')
-      const prevDayNum = String(prevDay.getDate()).padStart(2, '0')
-      finalDateStr = `${prevYear}${prevMonth}${prevDayNum}`
-    } else {
-      finalDateStr = `${year}${month}${day}` // 20:30-23:59 使用当天日期
-    }
-  }
-
-  // 2. 计算整点数组
-  const hoursArray = []
-
-  if (shift === '白班') {
-    const start = 8
-    const end = hour < 20 ? hour : 19 // 20点整是下班点，只取到19
-    for (let h = start; h <= end; h++) {
-      hoursArray.push(h)
-    }
-  } else {
-    // 夜班处理
-    if (hour >= 20) {
-      // 当天20点至当前小时
-      for (let h = 20; h <= hour; h++) {
-        hoursArray.push(h)
-      }
-    } else {
-      // 跨天部分：前一天20-23 + 当天0-当前小时
-      for (let h = 20; h <= 23; h++) {
-        hoursArray.push(h)
-      }
-      const endHour = hour === 8 ? 7 : hour // 8点整是下班点，只取到7
-      for (let h = 0; h <= endHour; h++) {
-        hoursArray.push(h)
-      }
-    }
-  }
-
-  // 3. 将数组转为字符串数字
-  let finalHoursArray = hoursArray.map((item) => item.toString())
-
-  return [finalDateStr, shift, finalHoursArray]
-}
-
 // 获取应用版本信息
 export function getAppVersion(): string {
   try {
@@ -223,4 +8,203 @@ export function getAppVersion(): string {
     console.warn('无法获取版本信息:', error)
     return '0.0.0'
   }
+}
+
+// 获取班次信息
+export const getShiftInfo = (timestamp: Date) => {
+  const date = new Date(timestamp)
+  const hour = date.getHours()
+  const minute = date.getMinutes()
+
+  // 1. 确定班次和日期
+  // 白班：8:30-20:30（包含8:30，不包含20:30），夜班：20:30-8:30（包含20:30，不包含8:30）
+  const isDayShift =
+    (hour > 8 && hour < 20) ||
+    (hour === 8 && minute >= 30) ||
+    (hour === 20 && minute < 30)
+
+  const shift = isDayShift ? '白班' : '夜班'
+
+  // 计算日期（跨天处理）
+  const baseData = new Date(date)
+  if (!isDayShift && (hour < 8 || (hour === 8 && minute < 30))) {
+    baseData.setDate(baseData.getDate() - 1) // 跨天处理
+  }
+  const dateStr = formatDate(baseData)
+
+  // 2. 计算整点数组
+  const hoursArray = getShiftHours(shift, hour, minute)
+
+  return { shift, date: dateStr, times: hoursArray }
+}
+
+// 格式化日期为 YYYYMMDD
+const formatDate = (date: Date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}${month}${day}`
+}
+
+// 计算班次对应的小时数组
+const getShiftHours = (
+  shift: string,
+  currentHour: number,
+  currentMinute: number,
+) => {
+  if (shift === '白班') {
+    const endHour = currentHour < 20 ? currentHour : 19 // 20点整是下班点，只取到19
+    return generateHourRange(8, endHour)
+  }
+
+  // 夜班处理
+  if (currentHour >= 20) {
+    return generateHourRange(20, currentHour)
+  }
+
+  // 跨天夜班：前一天20-23 + 当天0-当前小时
+  return [
+    ...generateHourRange(20, 23),
+    ...generateHourRange(
+      0,
+      currentHour === 8 && currentMinute < 30 ? 7 : currentHour,
+    ),
+  ]
+}
+
+// 生成小时范围数组
+const generateHourRange = (start: number, end: number) => {
+  return Array.from({ length: end - start + 1 }, (_, i) => String(start + i))
+}
+
+// 将路径列表写入指定文件
+export const writePathsToFile = async (
+  dirHandle: FileSystemDirectoryHandle,
+  paths: string[],
+  filename: string,
+): Promise<void> => {
+  let writableStream: FileSystemWritableFileStream | null = null
+
+  try {
+    // 1. 获取或创建文件句柄
+    const fileHandle = await dirHandle.getFileHandle(filename, {
+      create: true,
+    })
+
+    // 2. 创建可写流
+    writableStream = await fileHandle.createWritable()
+
+    // 3. 分块写入（避免在内存中拼接大字符串）
+    for (let i = 0; i < paths.length; i += 100) {
+      const chunk = paths.slice(i, i + 100)
+
+      // 将路径列表拼接为字符串
+      const content = chunk.join('\n')
+      await writableStream.write(content)
+    }
+
+    // 4. 确保写入完成
+    await writableStream.close()
+    writableStream = null
+  } catch (error) {
+    // 5. 错误处理
+    const errorMessage = error instanceof Error ? error.message : '未知错误'
+
+    throw new Error(`文件 ${filename} 写入失败: ${errorMessage}`)
+  } finally {
+    // 6. 确保资源清理
+    if (writableStream) {
+      try {
+        await writableStream.close()
+      } catch (cleanupError) {
+        console.error('关闭可写流时出错:', cleanupError)
+      }
+    }
+  }
+}
+
+// 文件复制
+export const copyFileToDirectory = async (
+  sourceFileHandle: FileSystemFileHandle,
+  targetDirectoryHandle: FileSystemDirectoryHandle,
+): Promise<void> => {
+  let sourceFile: File | null = null
+  let writableStream: FileSystemWritableFileStream | null = null
+
+  try {
+    // 1. 获取源文件内容
+    sourceFile = await sourceFileHandle.getFile()
+
+    // 2. 在目标目录中创建新文件
+    const newFileHandle = await targetDirectoryHandle.getFileHandle(
+      sourceFile.name,
+      { create: true },
+    )
+
+    // 3. 创建可写流
+    writableStream = await newFileHandle.createWritable()
+
+    // 4. 使用流式传输复制文件内容
+    const readableStream = sourceFile.stream()
+    await readableStream.pipeTo(writableStream)
+  } catch (error) {
+    // 5. 错误处理
+    const fileName = sourceFile?.name || '未知文件'
+    const errorMessage = error instanceof Error ? error.message : '复制失败'
+
+    throw new Error(`文件 ${fileName} 复制失败: ${errorMessage}`)
+  }
+}
+
+// 批量复制文件
+export const copyFilesInBatches = async (
+  files: FileSystemFileHandle[],
+  targetDirHandle: FileSystemDirectoryHandle,
+  options: {
+    batchSize?: number
+    onProgress?: (copiedCount: number, total: number) => void
+    onError?: (error: Error, file: FileSystemFileHandle) => void
+  } = {},
+): Promise<void> => {
+  const { batchSize = 10, onProgress, onError } = options
+
+  const total = files.length
+  let copiedCount = 0
+
+  // 1. 按批次处理文件
+  for (let i = 0; i < total; i += batchSize) {
+    const batch = files.slice(i, i + batchSize)
+    const results = await Promise.allSettled(
+      batch.map((file) => copyFileToDirectory(file, targetDirHandle)),
+    )
+
+    // 2. 处理本批次结果
+    for (let j = 0; j < results.length; j++) {
+      const result = results[j]
+
+      if (result.status === 'fulfilled') {
+        copiedCount++
+      } else {
+        const file = batch[j]
+        const error = new Error(`文件复制失败: ${result.reason.message}`)
+
+        if (onError) {
+          onError(error, file)
+        } else {
+          console.error(error)
+        }
+      }
+
+      // 3. 更新进度
+      if (onProgress) {
+        onProgress(copiedCount, total)
+      }
+    }
+  }
+}
+
+// 判断是否为图片
+export const isImage = (file: FileSystemFileHandle) => {
+  const imageExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.gif']
+  return imageExtensions.some((ext) => file.name.toLowerCase().endsWith(ext))
 }

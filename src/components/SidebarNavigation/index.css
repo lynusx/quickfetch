@@ -23,7 +23,6 @@
   display: block;
   margin: 0;
   padding: 0;
-  vertical-align: top;
 }
 
 /* NavigationMenu 样式重置 - 移除小圆点 */
@@ -147,6 +146,8 @@
 /* 响应式优化 */
 @media (max-width: 768px) {
   .sidebar-container {
-    width: 200px !important;
+    width: 180px !important;
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
   }
 }

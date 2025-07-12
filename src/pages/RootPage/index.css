@@ -1,0 +1,55 @@
+/* RootPage 样式 */
+.root-page-container {
+  background: var(--gray-1);
+}
+
+.app-main-container {
+  width: 100%;
+  max-width: 1400px;
+  min-height: 100vh;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.08);
+  background: white;
+  border-radius: 12px;
+}
+
+.content-area {
+  background: var(--gray-1);
+  min-height: 100vh;
+  border-left: 1px solid var(--gray-6);
+  border-radius: 0 12px 12px 0;
+  overflow: hidden;
+}
+
+.content-container {
+  max-width: 100%;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* 响应式优化 */
+@media (max-width: 1440px) {
+  .app-main-container {
+    max-width: 100%;
+    margin: 0;
+    box-shadow: none;
+    border-radius: 0;
+  }
+}
+
+@media (max-width: 1200px) {
+  .content-container {
+    padding: 1rem !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-main-container {
+    flex-direction: column;
+  }
+
+  .content-area {
+    border-left: none;
+    border-top: 1px solid var(--gray-6);
+    border-radius: 0;
+  }
+}
