@@ -112,35 +112,43 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
       fileCollector = [],
     } = options
 
-    // 1. 获取当前目录下的所有项
-    for await (const entry of dirHandle.values()) {
-      // 2. 如果是文件且达到最大深度，处理文件
-      if (currentDepth === maxDepth) {
-        if (entry.kind === 'file') {
-          // 检查是否为图片文件
-          if (isImage(entry)) {
-            const fullPath = `${currentPath}/${entry.name}`
-            fileCollector.push({
-              path: fullPath,
-              fileHandle: entry,
-            })
+    try {
+      // 1. 获取当前目录下的所有项
+      for await (const entry of dirHandle.values()) {
+        // 2. 如果是文件且达到最大深度，处理文件
+        if (currentDepth === maxDepth) {
+          if (entry.kind === 'file') {
+            // 检查是否为图片文件
+            if (isImage(entry)) {
+              const fullPath = `${currentPath}/${entry.name}`
+              fileCollector.push({
+                path: fullPath,
+                fileHandle: entry,
+              })
+            }
           }
+          continue
         }
-        continue
-      }
 
-      // 3. 如果是目录且通过当前层级验证，递归处理
-      if (entry.kind === 'directory' && validators[currentDepth](entry.name)) {
-        const newPath =
-          currentDepth === 0 ? entry.name : `${currentPath}/${entry.name}`
+        // 3. 如果是目录且通过当前层级验证，递归处理
+        if (
+          entry.kind === 'directory' &&
+          validators[currentDepth](entry.name)
+        ) {
+          const newPath =
+            currentDepth === 0 ? entry.name : `${currentPath}/${entry.name}`
 
-        await traverseDirectory(entry, validators, {
-          currentDepth: currentDepth + 1,
-          currentPath: newPath,
-          maxDepth,
-          fileCollector,
-        })
+          await traverseDirectory(entry, validators, {
+            currentDepth: currentDepth + 1,
+            currentPath: newPath,
+            maxDepth,
+            fileCollector,
+          })
+        }
       }
+    } catch (error) {
+      console.error('扫描出错:', error)
+      throw error
     }
 
     return fileCollector
