@@ -1,4 +1,4 @@
-import React, { useState, type FC } from 'react'
+import React, { useState } from 'react'
 import { Box, Flex, Text, IconButton, TextField } from '@radix-ui/themes'
 import { NavLink, useLocation } from 'react-router'
 import {
@@ -13,7 +13,7 @@ import {
 import { getAppVersion } from '../../utils/common'
 import './index.css'
 
-const SiderbarNavigation: FC = () => {
+const Siderbar = () => {
   const location = useLocation()
   const [darkMode, setDarkMode] = useState(false)
 
@@ -169,4 +169,4 @@ const SiderbarNavigation: FC = () => {
   )
 }
 
-export default SiderbarNavigation
+export default Siderbar

@@ -1,27 +1,27 @@
+import { Outlet } from 'react-router'
 import { Container, Flex } from '@radix-ui/themes'
 
-import SidebarNavigation from '../../components/SidebarNavigation'
-import NavViewContainer from '../../components/NavViewContainer'
+import Sidebar from '../../components/Sidebar'
 
 import './index.css'
 
-const RootPage = () => {
+const LayoutPage = () => {
   return (
     <Flex
       minHeight="100vh"
       justify="center"
       align="start"
-      className="root-page-container"
+      className="layout-page-container"
     >
       <Flex className="app-main-container">
         {/* 左侧导航 */}
-        <SidebarNavigation />
+        <Sidebar />
 
         {/* 右侧内容区域 */}
         <Flex direction="column" flexGrow="1" className="content-area">
           <Container size="4" p="4" className="content-container">
             {/* 内容视图 */}
-            <NavViewContainer />
+            <Outlet />
           </Container>
         </Flex>
       </Flex>
@@ -29,4 +29,4 @@ const RootPage = () => {
   )
 }
 
-export default RootPage
+export default LayoutPage
