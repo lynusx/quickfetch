@@ -23,7 +23,7 @@ export const getShiftInfo = (timestamp: Date) => {
     (hour === 8 && minute >= 30) ||
     (hour === 20 && minute < 30)
 
-  const shift = isDayShift ? '白班' : '夜班'
+  const shift: '白班' | '夜班' = isDayShift ? '白班' : '夜班'
 
   // 计算日期（跨天处理）
   const baseData = new Date(date)
@@ -48,7 +48,7 @@ const formatDate = (date: Date) => {
 
 // 计算班次对应的小时数组
 const getShiftHours = (
-  shift: string,
+  shift: '白班' | '夜班',
   currentHour: number,
   currentMinute: number,
 ) => {
@@ -75,6 +75,15 @@ const getShiftHours = (
 // 生成小时范围数组
 const generateHourRange = (start: number, end: number) => {
   return Array.from({ length: end - start + 1 }, (_, i) => String(start + i))
+}
+
+// 获取所有的可选时间（用于手动选择）
+export const getAllAvailableTimes = (shift: '白班' | '夜班') => {
+  if (shift === '白班') {
+    return generateHourRange(8, 19)
+  } else {
+    return [...generateHourRange(20, 23), ...generateHourRange(0, 7)]
+  }
 }
 
 // 将路径列表写入指定文件

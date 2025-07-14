@@ -4,7 +4,7 @@ import { devtools } from 'zustand/middleware'
 interface ScanRange {
   directories: string[]
   date: string
-  shift: string
+  shift: '白班' | '夜班'
   times: string[]
 }
 
@@ -17,6 +17,7 @@ interface ImageCopyState {
   // 配置参数
   plant: string
   types: string[]
+  isManual: boolean
 
   // 扫描范围
   currentScanRange: ScanRange
@@ -38,6 +39,7 @@ interface ImageCopyAction {
   // 配置参数
   setPlant: (plant: string) => void
   setTypes: (types: string[]) => void
+  setIsManual: (isManual: boolean) => void
 
   // 扫描范围
   setCurrentScanRange: (range: Partial<ScanRange>) => void
@@ -57,11 +59,12 @@ const useImageCopyStore = create<ImageCopyState & ImageCopyAction>()(
 
     plant: 'A',
     types: ['脏污', '划伤'],
+    isManual: false,
 
     currentScanRange: {
       directories: [],
       date: '',
-      shift: '',
+      shift: '' as '白班' | '夜班',
       times: [],
     },
 
@@ -76,6 +79,7 @@ const useImageCopyStore = create<ImageCopyState & ImageCopyAction>()(
 
     setPlant: (plant) => set({ plant: plant }),
     setTypes: (types) => set({ types: types }),
+    setIsManual: (isManual) => set({ isManual }),
 
     setCurrentScanRange: (range) =>
       set((state) => ({

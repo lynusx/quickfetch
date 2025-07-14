@@ -13,6 +13,7 @@ import {
   Spinner,
   Separator,
   Strong,
+  Switch,
 } from '@radix-ui/themes'
 import {
   CopyIcon,
@@ -24,6 +25,7 @@ import {
   FileIcon,
 } from '@radix-ui/react-icons'
 
+import TimeRangePicker from '../../components/TimeRangePicker'
 import { useImageCopy } from '../../hooks/useImageCopy'
 import { Toast } from '../../components/Toast/Toast'
 import { useToast } from '../../hooks/useToast'
@@ -36,6 +38,7 @@ const ImageCopyPage = () => {
     ngTypes,
     plant,
     types,
+    isManual,
     scannedFiles,
     isScanning,
     isCopying,
@@ -44,6 +47,8 @@ const ImageCopyPage = () => {
     copiedFileCount,
     setTypes,
     setPlant,
+    setIsManual,
+    setCurrentScanRange,
     handleSourceScan,
     handleCopyFiles,
     canStartScan,
@@ -88,7 +93,7 @@ const ImageCopyPage = () => {
                 扫描配置
               </Text>
             </Flex>
-            <Flex align="center" gap="4">
+            <Flex align="center" gap="4" wrap="wrap">
               <Flex align="center">
                 <Text
                   size="3"
@@ -96,9 +101,13 @@ const ImageCopyPage = () => {
                   color="blue"
                   style={{ minWidth: '80px' }}
                 >
-                  厂区选择
+                  厂区
                 </Text>
-                <RadioGroup.Root defaultValue={plant} onValueChange={setPlant}>
+                <RadioGroup.Root
+                  ml="-5"
+                  defaultValue={plant}
+                  onValueChange={setPlant}
+                >
                   <Flex gap="4">
                     <RadioGroup.Item value="A">
                       <Text size="2">东区</Text>
@@ -119,12 +128,13 @@ const ImageCopyPage = () => {
                   color="blue"
                   style={{ minWidth: '80px' }}
                 >
-                  类型选择
+                  类型
                 </Text>
                 <CheckboxGroup.Root
                   defaultValue={types}
                   name="types"
                   onValueChange={setTypes}
+                  ml="-5"
                 >
                   <Flex gap="4">
                     <CheckboxGroup.Item value="脏污">
@@ -136,7 +146,48 @@ const ImageCopyPage = () => {
                   </Flex>
                 </CheckboxGroup.Root>
               </Flex>
+
+              <Separator orientation="vertical" mx="4" />
+
+              <Flex align="center">
+                <Text
+                  size="3"
+                  weight="bold"
+                  color="blue"
+                  style={{ minWidth: '80px' }}
+                >
+                  日期、班次、时段
+                </Text>
+                <Flex align="center" gap="2" ml="5">
+                  <Switch
+                    checked={isManual}
+                    onCheckedChange={setIsManual}
+                    size="2"
+                  />
+                  <Text size="2">
+                    {isManual
+                      ? '手动选择日期、班次、时段'
+                      : '自动生成日期、班次、时段'}
+                  </Text>
+                </Flex>
+              </Flex>
             </Flex>
+
+            {isManual && (
+              <>
+                <Separator my="4" size="4" />
+
+                {/* 日期、时间、班次 */}
+                <TimeRangePicker
+                  date={currentScanRange.date}
+                  shift={currentScanRange.shift}
+                  times={currentScanRange.times}
+                  onDateChange={(date) => setCurrentScanRange({ date })}
+                  onShiftChange={(shift) => setCurrentScanRange({ shift })}
+                  onTimesChange={(times) => setCurrentScanRange({ times })}
+                />
+              </>
+            )}
           </Box>
 
           <Separator my="4" size="4" />
@@ -152,6 +203,9 @@ const ImageCopyPage = () => {
               <Text size="4" weight="medium">
                 扫描范围
               </Text>
+              <Badge color={isManual ? 'orange' : 'blue'} variant="soft">
+                {isManual ? '手动设置' : '自动生成'}
+              </Badge>
             </Flex>
             <DataList.Root>
               <DataList.Item>
@@ -257,7 +311,7 @@ const ImageCopyPage = () => {
                   variant="solid"
                   color="blue"
                   onClick={handleSourceScan}
-                  disabled={!canStartScan() || types.length === 0}
+                  disabled={!canStartScan()}
                   style={{ width: '100%' }}
                 >
                   {isScanning ? (

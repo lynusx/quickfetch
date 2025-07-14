@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 import useImageCopyStore from '../store/imageCopyStore'
 import {
@@ -22,6 +22,7 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
     scannedFiles,
     plant,
     types,
+    isManual,
     copiedFileCount,
     isScanning,
     isCopying,
@@ -30,6 +31,7 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
     setCurrentScanRange,
     setPlant,
     setTypes,
+    setIsManual,
     setScanningState,
     setScannedFiles,
     setScanError,
@@ -39,13 +41,26 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
 
   const { shift, date, times } = getShiftInfo(new Date())
 
+  const isFirstRender = useRef(true)
+
   useEffect(() => {
-    setCurrentScanRange({
-      date,
-      shift,
-      times,
-    })
-  }, [])
+    if (isFirstRender.current) {
+      // 组件挂载时总是设置初始值
+      isFirstRender.current = false
+      setCurrentScanRange({
+        date,
+        shift,
+        times,
+      })
+    } else if (!isManual) {
+      // 非首次渲染且isManual为false时，重置
+      setCurrentScanRange({
+        date,
+        shift,
+        times,
+      })
+    }
+  }, [isManual])
 
   const mapTypesToNG = useCallback(() => {
     const typeMap: Record<string, string[]> = {
@@ -226,13 +241,14 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
 
       // 5. 收集符合条件的子目录
       const validDirs = await collectValidSubDirectories(rootDirHandle, plant)
+      setCurrentScanRange({ directories: validDirs })
 
       // 6. 创建验证器
       const validators = createValidators(
         validDirs,
-        date,
-        shift,
-        times,
+        currentScanRange.date,
+        currentScanRange.shift,
+        currentScanRange.times,
         ngTypes,
       )
 
@@ -259,9 +275,7 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
       setScanningState(false)
     }
   }, [
-    date,
-    shift,
-    times,
+    currentScanRange,
     plant,
     ngTypes,
     showToast,
@@ -343,7 +357,12 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
 
   // 检测是否可以开始扫描
   const canStartScan = () => {
-    return !isScanning && !isCopying
+    return (
+      types.length > 0 &&
+      currentScanRange.times.length > 0 &&
+      !isScanning &&
+      !isCopying
+    )
   }
 
   // 检测是否可以开始复制
@@ -358,6 +377,7 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
     ngTypes,
     plant,
     types,
+    isManual,
     isScanning,
     isCopying,
     scanError,
@@ -367,6 +387,8 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
     // 操作
     setPlant,
     setTypes,
+    setIsManual,
+    setCurrentScanRange,
     handleSourceScan,
     handleCopyFiles,
 
