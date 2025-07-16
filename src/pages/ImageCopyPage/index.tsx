@@ -27,7 +27,7 @@ import {
 
 import TimeRangePicker from '../../components/TimeRangePicker'
 import { useImageCopy } from '../../hooks/useImageCopy'
-import { Toast } from '../../components/Toast/Toast'
+import { Toast } from '../../components/Toast'
 import { useToast } from '../../hooks/useToast'
 import './index.css'
 

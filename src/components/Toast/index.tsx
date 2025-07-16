@@ -1,9 +1,9 @@
-import * as RadixToast from '@radix-ui/react-toast'
-// eslint-disable-next-line no-unused-vars
-import { motion, AnimatePresence } from 'framer-motion'
-import { clsx } from 'clsx'
-import { Card, Text, Flex, IconButton } from '@radix-ui/themes'
 import React from 'react'
+import * as RadixToast from '@radix-ui/react-toast'
+import { Card, Text, Flex, IconButton } from '@radix-ui/themes'
+import { motion, AnimatePresence } from 'framer-motion'
+
+import './index.css'
 
 const textColor: Record<string, { color: 'blue' | 'jade' | 'red' }> = {
   info: { color: 'blue' },
@@ -33,7 +33,7 @@ export function Toast({
       <AnimatePresence>
         {open && (
           <RadixToast.Root
-            className={clsx('fixed bottom-4 right-4 z-50')}
+            className="toast-root"
             open={open}
             onOpenChange={setOpen}
             asChild
