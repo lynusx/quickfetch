@@ -4,6 +4,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
+// 图片扩展名列表
+const imgExts = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp']
+
 // 读取 package.json 获取版本信息
 const packageJson = JSON.parse(
   readFileSync(resolve(__dirname, 'package.json'), 'utf-8'),
@@ -19,9 +22,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: [
-        'favicon.ico',
-        'favicon.svg',
-        'apple-touch-icon-180x180.png',
+        'img/favicon.ico',
+        'img/favicon.svg',
+        'img/apple-touch-icon-180x180.png',
       ],
       manifest: {
         name: 'SHX Tools',
@@ -33,17 +36,17 @@ export default defineConfig({
         display: 'standalone',
         icons: [
           {
-            src: 'pwa-64x64.png',
+            src: 'img/pwa-64x64.png',
             sizes: '64x64',
             type: 'image/png',
           },
           {
-            src: 'pwa-192x192.png',
+            src: 'img/pwa-192x192.png',
             sizes: '192x192',
             type: 'image/png',
           },
           {
-            src: 'pwa-512x512.png',
+            src: 'img/pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any',
@@ -52,4 +55,23 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        entryFileNames: 'js/[name]-[hash].js',
+        chunkFileNames: 'js/[name]-[hash].js',
+        assetFileNames: (assetInfo) => {
+          const name = assetInfo.names[0] || ''
+          if (name.endsWith('.css')) {
+            return 'css/[name]-[hash][extname]'
+          }
+          if (imgExts.some((ext) => name.endsWith(ext))) {
+            return 'img/[name]-[hash][extname]'
+          }
+
+          return 'assets/[name]-[hash][extname]'
+        },
+      },
+    },
+  },
 })
