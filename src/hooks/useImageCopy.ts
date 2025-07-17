@@ -145,14 +145,17 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
           continue
         }
 
-        // 3. 如果是目录且通过当前层级验证，递归处理
-        if (
-          entry.kind === 'directory' &&
-          validators[currentDepth](entry.name)
-        ) {
+        // 3. 在非最大深度遇到文件直接跳过
+        if (entry.kind === 'file') {
+          continue
+        }
+
+        // 4. 处理目录：验证当前层级
+        if (validators[currentDepth](entry.name)) {
           const newPath =
             currentDepth === 0 ? entry.name : `${currentPath}/${entry.name}`
 
+          // 验证通过，递归处理子目录
           await traverseDirectory(entry, validators, {
             currentDepth: currentDepth + 1,
             currentPath: newPath,
@@ -162,8 +165,7 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
         }
       }
     } catch (error) {
-      console.error('扫描出错:', error)
-      throw error
+      console.error(`扫描目录${options.currentPath}出错:`, error)
     }
 
     return fileCollector
@@ -322,7 +324,7 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
           batchSize: 10,
           onProgress: (copiedCount) => setCopiedFileCount(copiedCount),
           onError: (error, file) => {
-            throw new Error(`${file.name}复制出错: ${error.message}`)
+            console.error(`${file.name}复制出错: ${error.message}`)
           },
         },
       )

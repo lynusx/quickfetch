@@ -119,7 +119,7 @@ export const writePathsToFile = async (
     // 5. 错误处理
     const errorMessage = error instanceof Error ? error.message : '未知错误'
 
-    throw new Error(`文件 ${filename} 写入失败: ${errorMessage}`)
+    console.error(`文件 ${filename} 写入失败: `, errorMessage)
   } finally {
     // 6. 确保资源清理
     if (writableStream) {
@@ -161,7 +161,7 @@ export const copyFileToDirectory = async (
     const fileName = sourceFile?.name || '未知文件'
     const errorMessage = error instanceof Error ? error.message : '复制失败'
 
-    throw new Error(`文件 ${fileName} 复制失败: ${errorMessage}`)
+    console.error(`文件 ${fileName} 复制失败: `, errorMessage)
   }
 }
 
