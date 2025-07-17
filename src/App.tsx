@@ -3,6 +3,8 @@ import { Navigate, Route, Routes } from 'react-router'
 
 import LayoutPage from './pages/LayoutPage'
 import Loading from './components/Loading'
+import PwaUpdateDialog from './components/PwaUpdateDialog'
+import usePwaUpdate from './hooks/usePwaUpdate'
 
 const ROUTES = {
   IMAGE_COPY: '/image-copy',
@@ -20,36 +22,48 @@ const NotFoundRedirect = ({ defaultPath }: { defaultPath: string }) => (
 )
 
 function App() {
+  const { pwaUpdate, setPwaUpdate } = usePwaUpdate()
+
   return (
-    <Suspense fallback={<Loading />}>
-      <Routes>
-        <Route path="/" element={<LayoutPage />}>
-          <Route index element={<Navigate to={ROUTES.IMAGE_COPY} replace />} />
+    <>
+      <Suspense fallback={<Loading />}>
+        <Routes>
+          <Route path="/" element={<LayoutPage />}>
+            <Route
+              index
+              element={<Navigate to={ROUTES.IMAGE_COPY} replace />}
+            />
 
-          <Route
-            path={ROUTES.IMAGE_COPY}
-            element={
-              <Suspense fallback={<Loading />}>
-                <ImageCopyPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path={ROUTES.EXCEL_PARSE}
-            element={
-              <Suspense fallback={<Loading />}>
-                <ExcelParsePage />
-              </Suspense>
-            }
-          />
+            <Route
+              path={ROUTES.IMAGE_COPY}
+              element={
+                <Suspense fallback={<Loading />}>
+                  <ImageCopyPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path={ROUTES.EXCEL_PARSE}
+              element={
+                <Suspense fallback={<Loading />}>
+                  <ExcelParsePage />
+                </Suspense>
+              }
+            />
 
-          <Route
-            path="*"
-            element={<NotFoundRedirect defaultPath={ROUTES.DEFAULT} />}
-          />
-        </Route>
-      </Routes>
-    </Suspense>
+            <Route
+              path="*"
+              element={<NotFoundRedirect defaultPath={ROUTES.DEFAULT} />}
+            />
+          </Route>
+        </Routes>
+      </Suspense>
+      <PwaUpdateDialog
+        open={pwaUpdate}
+        onClose={() => setPwaUpdate(false)}
+        onRefresh={() => window.location.reload()}
+      />
+    </>
   )
 }
 
