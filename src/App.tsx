@@ -3,8 +3,6 @@ import { Navigate, Route, Routes } from 'react-router'
 
 import LayoutPage from './pages/LayoutPage'
 import Loading from './components/Loading'
-import PwaUpdateDialog from './components/PwaUpdateDialog'
-import usePwaUpdate from './hooks/usePwaUpdate'
 
 const ROUTES = {
   IMAGE_COPY: '/image-copy',
@@ -22,8 +20,6 @@ const NotFoundRedirect = ({ defaultPath }: { defaultPath: string }) => (
 )
 
 function App() {
-  const { pwaUpdate, setPwaUpdate } = usePwaUpdate()
-
   return (
     <>
       <Suspense fallback={<Loading />}>
@@ -58,11 +54,6 @@ function App() {
           </Route>
         </Routes>
       </Suspense>
-      <PwaUpdateDialog
-        open={pwaUpdate}
-        onClose={() => setPwaUpdate(false)}
-        onRefresh={() => window.location.reload()}
-      />
     </>
   )
 }
