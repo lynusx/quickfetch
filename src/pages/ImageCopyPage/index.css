@@ -17,3 +17,15 @@
 .rt-CheckboxGroupItem[disabled] {
   cursor: not-allowed !important;
 }
+
+.ng-type-item {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+
+  &:hover {
+    background-color: var(--red-3);
+    color: var(--red-10);
+    transform: scale(1.05);
+  }
+}

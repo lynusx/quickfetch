@@ -17,6 +17,7 @@ interface ImageCopyState {
   // 配置参数
   plant: string
   types: string[]
+  ngTypes: string[]
   isManual: boolean
 
   // 扫描范围
@@ -39,6 +40,8 @@ interface ImageCopyAction {
   // 配置参数
   setPlant: (plant: string) => void
   setTypes: (types: string[]) => void
+  setNgTypes: (ngTypes: string[]) => void
+  removeNgType: (type: string) => void
   setIsManual: (isManual: boolean) => void
 
   // 扫描范围
@@ -59,6 +62,7 @@ const useImageCopyStore = create<ImageCopyState & ImageCopyAction>()(
 
     plant: 'A',
     types: ['脏污', '划伤'],
+    ngTypes: [],
     isManual: false,
 
     currentScanRange: {
@@ -79,6 +83,11 @@ const useImageCopyStore = create<ImageCopyState & ImageCopyAction>()(
 
     setPlant: (plant) => set({ plant: plant }),
     setTypes: (types) => set({ types: types }),
+    setNgTypes: (ngTypes) => set({ ngTypes: ngTypes }),
+    removeNgType: (type) =>
+      set((state) => ({
+        ngTypes: state.ngTypes.filter((t) => t !== type),
+      })),
     setIsManual: (isManual) => set({ isManual }),
 
     setCurrentScanRange: (range) =>

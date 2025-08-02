@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
 import useImageCopyStore from '../store/imageCopyStore'
 import {
@@ -16,12 +16,18 @@ interface UseImageCopyProps {
   ) => void
 }
 
+const NG_TYPE_MAP: Record<string, string[]> = {
+  脏污: ['NG_脏污_B', 'NG_脏污_C', 'NG_脏污_A-'],
+  划伤: ['NG_划伤_B', 'NG_划伤_C', 'NG_划伤_A-'],
+}
+
 export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
   const {
     currentScanRange,
     scannedFiles,
     plant,
     types,
+    ngTypes,
     isManual,
     copiedFileCount,
     isScanning,
@@ -31,6 +37,8 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
     setCurrentScanRange,
     setPlant,
     setTypes,
+    setNgTypes,
+    removeNgType,
     setIsManual,
     setScanningState,
     setScannedFiles,
@@ -62,18 +70,17 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
     }
   }, [isManual])
 
-  const mapTypesToNG = useCallback(() => {
-    const typeMap: Record<string, string[]> = {
-      脏污: ['NG_脏污_B', 'NG_脏污_C'],
-      划伤: ['NG_划伤_B', 'NG_划伤_C'],
-    }
+  const mapTypesToNG = () => {
+    return types.flatMap(
+      (type) => NG_TYPE_MAP[type as keyof typeof NG_TYPE_MAP],
+    )
+  }
 
-    return types.flatMap((type) => typeMap[type as keyof typeof typeMap])
+  // 当types变化时，自动更新ngTypes
+  useEffect(() => {
+    const newNgTypes = mapTypesToNG()
+    setNgTypes(newNgTypes)
   }, [types])
-
-  const ngTypes = useMemo(() => {
-    return mapTypesToNG()
-  }, [mapTypesToNG])
 
   // 创建验证器函数数组
   const createValidators = (
@@ -360,7 +367,7 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
   // 检测是否可以开始扫描
   const canStartScan = () => {
     return (
-      types.length > 0 &&
+      ngTypes.length > 0 &&
       currentScanRange.times.length > 0 &&
       !isScanning &&
       !isCopying
@@ -389,6 +396,7 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
     // 操作
     setPlant,
     setTypes,
+    removeNgType,
     setIsManual,
     setCurrentScanRange,
     handleSourceScan,

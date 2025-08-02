@@ -23,6 +23,7 @@ import {
   PlayIcon,
   DownloadIcon,
   FileIcon,
+  Cross1Icon,
 } from '@radix-ui/react-icons'
 
 import TimeRangePicker from '../../components/TimeRangePicker'
@@ -48,6 +49,7 @@ const ImageCopyPage = () => {
     setTypes,
     setPlant,
     setIsManual,
+    removeNgType,
     setCurrentScanRange,
     handleSourceScan,
     handleCopyFiles,
@@ -131,7 +133,7 @@ const ImageCopyPage = () => {
                   类型
                 </Text>
                 <CheckboxGroup.Root
-                  defaultValue={types}
+                  value={types}
                   name="types"
                   onValueChange={setTypes}
                   ml="-5"
@@ -249,8 +251,19 @@ const ImageCopyPage = () => {
                 <DataList.Value>
                   <Flex gap="1" wrap="wrap">
                     {ngTypes.map((type) => (
-                      <Badge color="blue" variant="soft" size="1" key={type}>
-                        {type}
+                      <Badge
+                        color="blue"
+                        variant="soft"
+                        size="1"
+                        key={type}
+                        className="ng-type-item"
+                      >
+                        {type}{' '}
+                        <Cross1Icon
+                          width="12"
+                          height="12"
+                          onClick={() => removeNgType(type)}
+                        />
                       </Badge>
                     ))}
                   </Flex>
