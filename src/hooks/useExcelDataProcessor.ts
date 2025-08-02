@@ -41,7 +41,7 @@ export const uesExcelDataProcessor = () => {
       const headerRow2 = sheet.data[1]
 
       const publicFields = new Set(['WaferID', '线别', '不良项'])
-      const excludeFields = new Set(['SE激光', '丝网印刷'])
+      const excludeFields = new Set(['SE激光', '丝网印刷', '硼扩'])
 
       const processMap = new Map<
         string,
@@ -219,21 +219,17 @@ export const uesExcelDataProcessor = () => {
    * 根据业务规则对工序数据进行分组
    *
    * @description
-   * 该函数按照特定的业务逻辑将工序数据分组。当输入包含10个工序时，将其分为4个预定义组：
-   * 1. 制绒、碱抛、RCA (索引 0, 3, 6)
-   * 2. 硼扩、氧化 (索引 1, 2)
-   * 3. Poly、退火 (索引 4, 5)
-   * 4. ALD、正膜、背膜 (索引 7, 8, 9)
+   * 该函数按照特定的业务逻辑将工序数据分组。当输入包含9个工序时，将其分为4个预定义组：
+   * 1. 制绒、硼扩 (索引 0, 1)
+   * 2. 碱抛、Poly (索引 2, 3)
+   * 3. 退火、RCA、ALD (索引 4, 5, 6)
+   * 4. 正膜、背膜 (索引 7, 8)
    *
-   * 每组之间使用空行分隔。若输入不是10个工序，则直接返回所有数据连续排列。
+   * 每组之间使用空行分隔。若输入不是9个工序，则直接返回所有数据连续排列。
    *
    * @param array - 三维数组结构的数据，格式为 [工序][设备键值对][键/值]
    * @returns 按业务规则分组后的三维数组，组间添加了空行分隔
    *
-   * @example
-   * // 10个工序的分组
-   * groupArray([制绒, 硼扩, 氧化, 碱抛, Poly, 退火, RCA, ALD, 正膜, 背膜]);
-   * // 返回: [[制绒, 空行, 空行, 碱抛, 空行, 空行, RCA], [硼扩, 空行, 空行, 氧化], ...]
    */
   const groupArray = (
     array: (string | number)[][][],
@@ -242,38 +238,25 @@ export const uesExcelDataProcessor = () => {
     if (array.length === 0) return []
 
     // 工序数量常量
-    const PROCESS_COUNT = 10
+    const PROCESS_COUNT = 9
 
     // 空行模板
-    const EMPTY_ROW: [string, string] = ['', '']
+    const EMPTY_ROW: [string, string][] = [
+      ['', ''],
+      ['', ''],
+    ]
 
-    // 特殊处理10个工序的情况
+    // 特殊处理9个工序的情况
     if (array.length === PROCESS_COUNT) {
       return [
-        // 第一组: 制绒(0)、碱抛(3)、RCA(6)
-        [
-          ...array[0],
-          EMPTY_ROW,
-          EMPTY_ROW,
-          ...array[3],
-          EMPTY_ROW,
-          EMPTY_ROW,
-          ...array[6],
-        ],
-        // 第二组: 硼扩(1)、氧化(2)
-        [...array[1], EMPTY_ROW, EMPTY_ROW, ...array[2]],
-        // 第三组: Poly(4)、退火(5)
-        [...array[4], EMPTY_ROW, EMPTY_ROW, ...array[5]],
-        // 第四组: ALD(7)、正膜(8)、背膜(9)
-        [
-          ...array[7],
-          EMPTY_ROW,
-          EMPTY_ROW,
-          ...array[8],
-          EMPTY_ROW,
-          EMPTY_ROW,
-          ...array[9],
-        ],
+        // 第一组: 制绒(0)、硼扩(1)
+        [...array[0], ...EMPTY_ROW, ...array[1]],
+        // 第二组: 碱抛(2)、Poly(3)
+        [...array[2], ...EMPTY_ROW, ...array[3]],
+        // 第三组: 退火(4)、RCA(5)、ALD(6)
+        [...array[4], ...EMPTY_ROW, ...array[5], ...EMPTY_ROW, ...array[6]],
+        // 第四组: 正膜(7)、背膜(8)
+        [...array[7], ...EMPTY_ROW, ...array[8]],
       ]
     }
 
