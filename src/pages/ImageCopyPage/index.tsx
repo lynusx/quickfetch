@@ -2,61 +2,45 @@ import {
   Box,
   Button,
   Text,
-  RadioGroup,
   Flex,
   Card,
   Progress,
-  CheckboxGroup,
-  DataList,
   Badge,
   Callout,
   Spinner,
   Separator,
   Strong,
-  Switch,
 } from '@radix-ui/themes'
 import {
   CopyIcon,
-  InfoCircledIcon,
   CheckIcon,
   GearIcon,
   PlayIcon,
   DownloadIcon,
   FileIcon,
-  Cross1Icon,
 } from '@radix-ui/react-icons'
 
-import TimeRangePicker from '../../components/TimeRangePicker'
 import { useImageCopy } from '../../hooks/useImageCopy'
 import { Toast } from '../../components/Toast'
 import { useToast } from '../../hooks/useToast'
+import ImageFilterPanel from '../../components/ImageFilterPanel'
+import { useImageStore } from '../../stores/imageStore'
+
 import './index.css'
 
 const ImageCopyPage = () => {
   const { toast, hideToast, showToast } = useToast()
+  const { images, copiedImageCount, isCopy, isScan, isError, error } =
+    useImageStore()
   const {
-    currentScanRange,
-    ngTypes,
-    plant,
-    types,
-    isManual,
-    scannedFiles,
-    isScanning,
-    isCopying,
-    scanError,
-    copyError,
-    copiedFileCount,
-    setTypes,
-    setPlant,
-    setIsManual,
-    removeNgType,
-    setCurrentScanRange,
-    handleSourceScan,
-    handleCopyFiles,
     canStartScan,
     canStartCopy,
     getCopyProgress,
-  } = useImageCopy({ showToast })
+    handleImageScan,
+    handleImageCopy,
+  } = useImageCopy({
+    showToast,
+  })
 
   return (
     <Box>
@@ -83,7 +67,7 @@ const ImageCopyPage = () => {
       {/* 功能卡片 */}
       <Card size="3" mb="4">
         <Flex direction="column">
-          {/* 扫描配置 */}
+          {/* 扫描范围 */}
           <Box mb="4">
             <Flex align="center" gap="2" mb="4">
               <GearIcon
@@ -95,181 +79,9 @@ const ImageCopyPage = () => {
                 扫描配置
               </Text>
             </Flex>
-            <Flex align="center" gap="4" wrap="wrap">
-              <Flex align="center">
-                <Text
-                  size="3"
-                  weight="bold"
-                  color="blue"
-                  style={{ minWidth: '80px' }}
-                >
-                  厂区
-                </Text>
-                <RadioGroup.Root
-                  ml="-5"
-                  defaultValue={plant}
-                  onValueChange={setPlant}
-                >
-                  <Flex gap="4">
-                    <RadioGroup.Item value="A">
-                      <Text size="2">东区</Text>
-                    </RadioGroup.Item>
-                    <RadioGroup.Item value="B">
-                      <Text size="2">西区</Text>
-                    </RadioGroup.Item>
-                  </Flex>
-                </RadioGroup.Root>
-              </Flex>
 
-              <Separator orientation="vertical" mx="4" />
-
-              <Flex align="center">
-                <Text
-                  size="3"
-                  weight="bold"
-                  color="blue"
-                  style={{ minWidth: '80px' }}
-                >
-                  类型
-                </Text>
-                <CheckboxGroup.Root
-                  value={types}
-                  name="types"
-                  onValueChange={setTypes}
-                  ml="-5"
-                >
-                  <Flex gap="4">
-                    <CheckboxGroup.Item value="脏污">
-                      <Text size="2">脏污</Text>
-                    </CheckboxGroup.Item>
-                    <CheckboxGroup.Item value="划伤">
-                      <Text size="2">划伤</Text>
-                    </CheckboxGroup.Item>
-                  </Flex>
-                </CheckboxGroup.Root>
-              </Flex>
-
-              <Separator orientation="vertical" mx="4" />
-
-              <Flex align="center">
-                <Text
-                  size="3"
-                  weight="bold"
-                  color="blue"
-                  style={{ minWidth: '80px' }}
-                >
-                  日期、班次、时段
-                </Text>
-                <Flex align="center" gap="2" ml="5">
-                  <Switch
-                    checked={isManual}
-                    onCheckedChange={setIsManual}
-                    size="2"
-                  />
-                  <Text size="2">
-                    {isManual
-                      ? '手动选择日期、班次、时段'
-                      : '自动生成日期、班次、时段'}
-                  </Text>
-                </Flex>
-              </Flex>
-            </Flex>
-
-            {isManual && (
-              <>
-                <Separator my="4" size="4" />
-
-                {/* 日期、时间、班次 */}
-                <TimeRangePicker
-                  date={currentScanRange.date}
-                  shift={currentScanRange.shift}
-                  times={currentScanRange.times}
-                  onDateChange={(date) => setCurrentScanRange({ date })}
-                  onShiftChange={(shift) => setCurrentScanRange({ shift })}
-                  onTimesChange={(times) => setCurrentScanRange({ times })}
-                />
-              </>
-            )}
-          </Box>
-
-          <Separator my="4" size="4" />
-
-          {/* 扫描范围 */}
-          <Box mb="4">
-            <Flex align="center" gap="2" mb="4">
-              <InfoCircledIcon
-                width="18"
-                height="18"
-                style={{ color: 'var(--blue-9)' }}
-              />
-              <Text size="4" weight="medium">
-                扫描范围
-              </Text>
-              <Badge color={isManual ? 'orange' : 'blue'} variant="soft">
-                {isManual ? '手动设置' : '自动生成'}
-              </Badge>
-            </Flex>
-            <DataList.Root>
-              <DataList.Item>
-                <DataList.Label minWidth="60px">厂区</DataList.Label>
-                <DataList.Value>
-                  <Badge color="blue" variant="soft">
-                    {plant === 'A' ? '东区' : '西区'}
-                  </Badge>
-                </DataList.Value>
-              </DataList.Item>
-              <DataList.Item>
-                <DataList.Label minWidth="60px">日期</DataList.Label>
-                <DataList.Value>
-                  <Badge color="blue" variant="soft">
-                    {currentScanRange.date}
-                  </Badge>
-                </DataList.Value>
-              </DataList.Item>
-              <DataList.Item>
-                <DataList.Label minWidth="60px">班次</DataList.Label>
-                <DataList.Value>
-                  <Badge color="blue" variant="soft">
-                    {currentScanRange.shift}
-                  </Badge>
-                </DataList.Value>
-              </DataList.Item>
-              <DataList.Item>
-                <DataList.Label minWidth="60px">时段</DataList.Label>
-                <DataList.Value>
-                  <Flex gap="1" wrap="wrap">
-                    {currentScanRange.times.map((time) => (
-                      <Badge key={time} color="blue" variant="soft" size="1">
-                        {time}点
-                      </Badge>
-                    ))}
-                  </Flex>
-                </DataList.Value>
-              </DataList.Item>
-              <DataList.Item>
-                <DataList.Label minWidth="60px">类型</DataList.Label>
-                <DataList.Value>
-                  <Flex gap="1" wrap="wrap">
-                    {ngTypes.map((type) => (
-                      <Badge
-                        color="blue"
-                        variant="soft"
-                        size="1"
-                        key={type}
-                        className="ng-type-item"
-                      >
-                        {type}{' '}
-                        <Cross1Icon
-                          width="12"
-                          height="12"
-                          onClick={() => removeNgType(type)}
-                        />
-                      </Badge>
-                    ))}
-                  </Flex>
-                </DataList.Value>
-              </DataList.Item>
-            </DataList.Root>
+            {/* 厂区、日期、时间、班次、类型 */}
+            <ImageFilterPanel />
           </Box>
 
           <Separator my="4" size="4" />
@@ -311,10 +123,10 @@ const ImageCopyPage = () => {
                       扫描源目录
                     </Text>
                   </Flex>
-                  {scannedFiles.length > 0 && (
+                  {images.length > 0 && (
                     <Badge color="green" variant="soft" size="1">
                       <CheckIcon width="12" height="12" />
-                      {scannedFiles.length} 张
+                      {images.length} 张
                     </Badge>
                   )}
                 </Flex>
@@ -323,11 +135,11 @@ const ImageCopyPage = () => {
                   size="3"
                   variant="solid"
                   color="blue"
-                  onClick={handleSourceScan}
+                  onClick={handleImageScan}
                   disabled={!canStartScan()}
                   style={{ width: '100%' }}
                 >
-                  {isScanning ? (
+                  {isScan ? (
                     <Flex gap="2" align="center" justify="center">
                       <Spinner size="2" />
                       扫描中...
@@ -340,9 +152,9 @@ const ImageCopyPage = () => {
                   )}
                 </Button>
 
-                {scanError && (
+                {isScan && isError && (
                   <Callout.Root color="red" mt="3" size="1">
-                    <Callout.Text size="2">{scanError}</Callout.Text>
+                    <Callout.Text size="2">{error?.message}</Callout.Text>
                   </Callout.Root>
                 )}
               </Box>
@@ -357,7 +169,7 @@ const ImageCopyPage = () => {
                         height: '32px',
                         borderRadius: '50%',
                         background:
-                          scannedFiles.length > 0
+                          images.length > 0
                             ? 'var(--green-9)'
                             : 'var(--gray-8)',
                         color: 'white',
@@ -374,13 +186,10 @@ const ImageCopyPage = () => {
                       复制到目标目录
                     </Text>
                   </Flex>
-                  {copiedFileCount > 0 && (
+                  {copiedImageCount > 0 && (
                     <Badge color="green" variant="soft" size="1">
                       <CheckIcon width="12" height="12" />
-                      {Math.round(
-                        (copiedFileCount / scannedFiles.length) * 100,
-                      )}
-                      %
+                      {getCopyProgress()}%
                     </Badge>
                   )}
                 </Flex>
@@ -389,11 +198,11 @@ const ImageCopyPage = () => {
                   size="3"
                   variant="solid"
                   color="green"
-                  onClick={handleCopyFiles}
+                  onClick={handleImageCopy}
                   disabled={!canStartCopy()}
                   style={{ width: '100%' }}
                 >
-                  {isCopying ? (
+                  {isCopy ? (
                     <Flex gap="2" align="center" justify="center">
                       <Spinner size="2" />
                       复制中...
@@ -406,16 +215,16 @@ const ImageCopyPage = () => {
                   )}
                 </Button>
 
-                {copyError && (
+                {isCopy && isError && (
                   <Callout.Root color="red" mt="3" size="1">
-                    <Callout.Text size="2">{copyError}</Callout.Text>
+                    <Callout.Text size="2">{error?.message}</Callout.Text>
                   </Callout.Root>
                 )}
               </Box>
             </Flex>
 
             {/* 复制进度 */}
-            {copiedFileCount > 0 && (
+            {copiedImageCount > 0 && (
               <Box
                 mt="4"
                 p="4"
@@ -456,7 +265,7 @@ const ImageCopyPage = () => {
                   }}
                   mt="2"
                 >
-                  已复制 {copiedFileCount} / {scannedFiles.length} 张图片
+                  已复制 {copiedImageCount} / {images.length} 张图片
                 </Text>
               </Box>
             )}
