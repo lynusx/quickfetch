@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 
-import useImageCopyStore from '../store/imageCopyStore'
+import useImageCopyStore from '../stores/imageCopyStore'
 import {
   copyFilesInBatches,
   getShiftInfo,
