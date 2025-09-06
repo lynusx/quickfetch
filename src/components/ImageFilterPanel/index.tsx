@@ -75,6 +75,11 @@ const ImageFilterPanel = () => {
     if (times.length === 0) setTimes(Ttimes)
   }, [])
 
+  const handleShiftChange = (value: '白班' | '夜班') => {
+    setShift(value)
+    value !== Tshift ? setTimes([]) : setTimes(Ttimes)
+  }
+
   return (
     <Box>
       <Flex direction="column" gap="4">
@@ -135,7 +140,7 @@ const ImageFilterPanel = () => {
               班次
             </Text>
           </Flex>
-          <RadioGroup.Root value={shift} onValueChange={setShift}>
+          <RadioGroup.Root value={shift} onValueChange={handleShiftChange}>
             <Flex gap="4">
               <RadioGroup.Item value="白班">
                 <Text size="2">白班 (8:30-20:30)</Text>
