@@ -1,4 +1,4 @@
-import type { ExcelSheet } from './useExcelUpload'
+import type { ExcelSheet } from '../types'
 
 interface ProcessRecord {
   WaferID: string

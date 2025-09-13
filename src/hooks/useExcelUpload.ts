@@ -1,36 +1,14 @@
 import { useCallback, useState } from 'react'
 import * as XLSX from 'xlsx'
 
-export interface ExcelFile {
-  id: string
-  file: File
-  name: string
-  size: string
-  uploadTime: string
-  status: 'processing' | 'completed' | 'error'
-  sheets: ExcelSheet[]
-  error?: string
-}
-
-export interface ExcelSheet {
-  name: string
-  data: (string | number | null)[][]
-  rowCount: number
-  colCount: number
-}
+import type { ExcelFile, ExcelSheet } from '../types'
+import { useExcelStore } from '../stores/excelStore'
+import { formatFileSize } from '../utils/common'
 
 export const useExcelUpload = () => {
-  const [currentFile, setCurrentFile] = useState<ExcelFile | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
-  const [isProcessing, setIsProcessing] = useState(false)
-
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes'
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-  }
+  const [isDrag, setIsDrag] = useState(false)
+  const [isProcess, setIsProcess] = useState(false)
+  const { setFile } = useExcelStore()
 
   const validateFile = (file: File): boolean => {
     const allowedTypes = [
@@ -109,12 +87,13 @@ export const useExcelUpload = () => {
               uploadTime: new Date().toLocaleString('zh-CN'),
               status: 'error',
               sheets: [],
-              error: error instanceof Error ? error.message : '文件解析失败',
+              error: error instanceof Error ? error : new Error('文件解析失败'),
             }
 
             resolve(excelFile)
           }
         }
+
         reader.onerror = () => {
           const excelFile: ExcelFile = {
             id: Date.now().toString() + Math.random().toString(36).slice(2, 11),
@@ -124,7 +103,7 @@ export const useExcelUpload = () => {
             uploadTime: new Date().toLocaleString('zh-CN'),
             status: 'error',
             sheets: [],
-            error: '文件读取失败',
+            error: new Error('文件读取失败'),
           }
 
           resolve(excelFile)
@@ -136,58 +115,43 @@ export const useExcelUpload = () => {
     [],
   )
 
-  const uploadFile = useCallback(
-    async (file: File) => {
-      if (!validateFile(file)) {
-        return
-      }
+  const uploadFile = async (file: File) => {
+    if (!validateFile(file)) {
+      return
+    }
 
-      setIsProcessing(true)
+    setIsProcess(true)
 
-      // 创建初始文件对象
-      const initialFile: ExcelFile = {
-        id: Date.now().toString() + Math.random().toString(36).slice(2, 11),
-        file,
-        name: file.name,
-        size: formatFileSize(file.size),
-        uploadTime: new Date().toLocaleString('zh-CN'),
-        status: 'processing',
-        sheets: [],
-      }
+    // 创建初始文件对象
+    const initialFile: ExcelFile = {
+      id: Date.now().toString() + Math.random().toString(36).slice(2, 11),
+      file,
+      name: file.name,
+      size: formatFileSize(file.size),
+      uploadTime: new Date().toLocaleString('zh-CN'),
+      status: 'processing',
+      sheets: [],
+    }
 
-      setCurrentFile(initialFile)
-
-      try {
-        const processedFile = await processExcelFile(file)
-
-        setCurrentFile(processedFile)
-      } catch (error) {
-        setCurrentFile((prev) =>
-          prev
-            ? {
-                ...prev,
-                status: 'error',
-                error: error instanceof Error ? error.message : '处理失败',
-              }
-            : null,
-        )
-      } finally {
-        setIsProcessing(false)
-      }
-    },
-    [processExcelFile],
-  )
-
-  const clearFile = useCallback(() => {
-    setCurrentFile(null)
-  }, [])
+    try {
+      const processedFile = await processExcelFile(file)
+      setFile(processedFile)
+    } catch (error) {
+      setFile({
+        ...initialFile,
+        status: 'error',
+        error: error instanceof Error ? error : new Error('处理失败'),
+      })
+    } finally {
+      setIsProcess(false)
+    }
+  }
 
   return {
-    currentFile,
-    isDragging,
-    isProcessing,
-    setIsDragging,
+    isDrag,
+    isProcess,
+    setIsDrag,
+    setIsProcess,
     uploadFile,
-    clearFile,
   }
 }

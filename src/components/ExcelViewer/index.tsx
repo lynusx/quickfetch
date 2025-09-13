@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FC } from 'react'
+import { useEffect } from 'react'
 import {
   Badge,
   Box,
@@ -14,49 +14,36 @@ import {
   Cross2Icon,
   DownloadIcon,
   FileTextIcon,
+  MixerHorizontalIcon,
 } from '@radix-ui/react-icons'
 
-import type { ExcelFile } from '../../hooks/useExcelUpload'
 import { useExcelViewer } from '../../hooks/useExcelViewer'
 import SheetTablePreview from '../SheetTablePreview'
-import FilterPanel from '../FilterPanel'
+import SheetFilterPanel from '../SheetFilterPanel'
+import { useExcelStore } from '../../stores/excelStore'
+import { useSheetFilterStore } from '../../stores/sheetFilterStore'
 
-interface ExcelViewerProps {
-  file: ExcelFile
-  onClearFile: () => void
-}
+const ExcelViewer = () => {
+  const { file, sheet, setFile } = useExcelStore()
+  const { selectedLines, selectedDefects } = useSheetFilterStore()
 
-const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
-  const [selectedLines, setSelectedLines] = useState<string[]>([])
-  const [selectedDefects, setSelectedDefects] = useState<string[]>([])
-
-  const filterOptions = useMemo(
-    () => ({
-      selectedLines,
-      selectedDefects,
-    }),
-    [selectedLines, selectedDefects],
-  )
+  if (!file || file.sheets.length === 0) return null
 
   const {
     getStatusColor,
     getStatusText,
-    generatePreviewData,
+    generateSheetDate,
     handleCopyToClipboard,
     handleExportToExcel,
-    isCopied,
-    isExported,
-  } = useExcelViewer(file, filterOptions)
-
-  const { lines, defects, previewData } = generatePreviewData
-
-  // 获取第一个工作表的数据
-  const displayData = previewData.rowCount > 0 ? previewData : null
+    isCopy,
+    isExport,
+  } = useExcelViewer()
 
   useEffect(() => {
-    setSelectedLines([...lines])
-    setSelectedDefects([...defects])
-  }, [file.id])
+    generateSheetDate()
+  }, [file, selectedDefects, selectedLines])
+
+  const handleClearFile = () => setFile(null)
 
   if (file.status === 'error') {
     return (
@@ -75,7 +62,7 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
               错误
             </Badge>
           </Flex>
-          <IconButton variant="soft" color="red" onClick={onClearFile}>
+          <IconButton variant="soft" color="red" onClick={handleClearFile}>
             <Cross2Icon width="16" height="16" />
           </IconButton>
         </Flex>
@@ -97,7 +84,7 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
             {file.name}
           </Text>
           <Text size="2" style={{ color: 'var(--red-10)' }}>
-            错误信息: {file.error || '未知错误'}
+            错误信息: {file.error?.message || '未知错误'}
           </Text>
           <Flex align="center" gap="3" mt="2">
             <Text size="2" style={{ color: 'var(--gray-10)' }}>
@@ -128,7 +115,7 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
             {getStatusText(file.status)}
           </Badge>
         </Flex>
-        <IconButton variant="soft" color="red" onClick={onClearFile}>
+        <IconButton variant="soft" color="red" onClick={handleClearFile}>
           <Cross2Icon width="16" height="16" />
         </IconButton>
       </Flex>
@@ -162,7 +149,7 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
       {file.status === 'completed' && (
         <>
           {/* 空值检查 */}
-          {!displayData && (
+          {!sheet && (
             <Box height="400px">
               <Flex align="center" justify="center" height="100%">
                 <Text size="3">暂无可显示的数据</Text>
@@ -170,26 +157,32 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
             </Box>
           )}
 
-          {/* 过滤面板 */}
-          <FilterPanel
-            lines={lines}
-            defects={defects}
-            selectedLines={selectedLines}
-            selectedDefects={selectedDefects}
-            onLinesChange={setSelectedLines}
-            onDefectsChange={setSelectedDefects}
-          />
+          <Box mb="4">
+            <Flex align="center" gap="2" mb="4">
+              <MixerHorizontalIcon
+                width="18"
+                height="18"
+                style={{ color: 'var(--blue-9)' }}
+              />
+              <Text size="4" weight="medium">
+                扫描配置
+              </Text>
+            </Flex>
+
+            {/* 过滤面板 */}
+            <SheetFilterPanel />
+          </Box>
 
           {/* 第一个工作表内容 */}
-          {displayData && (
+          {sheet && (
             <Card>
               <Flex align="center" justify="between" mb="3">
                 <Flex align="center" gap="3">
                   <Text size="2" weight="bold">
-                    {displayData.name}
+                    {sheet.name}
                   </Text>
                   <Badge variant="soft">
-                    {displayData.rowCount}行 x {displayData.colCount}列
+                    {sheet.rowCount}行 x {sheet.colCount}列
                   </Badge>
                 </Flex>
 
@@ -197,10 +190,10 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
                   <Button
                     variant="soft"
                     size="2"
-                    disabled={isCopied}
-                    onClick={() => handleCopyToClipboard(displayData)}
+                    disabled={isCopy}
+                    onClick={() => handleCopyToClipboard(sheet)}
                   >
-                    {isCopied ? (
+                    {isCopy ? (
                       <>
                         <CheckIcon width="14" height="14" />
                         已复制
@@ -215,8 +208,8 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
                   <Button
                     variant="soft"
                     size="2"
-                    disabled={isExported}
-                    onClick={() => handleExportToExcel(displayData)}
+                    disabled={isExport}
+                    onClick={() => handleExportToExcel(sheet)}
                   >
                     <DownloadIcon width="14" height="14" />
                     导出为 Excel
@@ -226,7 +219,7 @@ const ExcelViewer: FC<ExcelViewerProps> = ({ file, onClearFile }) => {
 
               {/* 渲染表格数据 */}
               <Box height="400px">
-                <SheetTablePreview sheet={displayData} mode="result" />
+                <SheetTablePreview sheet={sheet} mode="result" />
               </Box>
             </Card>
           )}

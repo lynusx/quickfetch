@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import * as XLSX from 'xlsx'
 
-import type { ExcelSheet } from './useExcelUpload'
+import type { ExcelSheet } from '../types'
 
 export const useExcelOperations = () => {
   const copyToClipboard = useCallback(async (sheet: ExcelSheet) => {
