@@ -133,15 +133,23 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
   ): Promise<string[]> => {
     const dirs: string[] = []
 
-    const regStr = new RegExp(`^${plant}\\d+`)
+    try {
+      const regStr = new RegExp(`^${plant}\\d+`)
+      console.log(`正在扫描 ${plant} 厂区的子目录，匹配模式: ${regStr}`)
 
-    for await (const entry of rootDirHandle.values()) {
-      if (entry.kind === 'directory' && regStr.test(entry.name)) {
-        dirs.push(entry.name)
+      for await (const entry of rootDirHandle.values()) {
+        if (entry.kind === 'directory' && regStr.test(entry.name)) {
+          dirs.push(entry.name)
+          console.log(`找到符合条件的目录: ${entry.name}`)
+        }
       }
-    }
 
-    return dirs
+      console.log(`共找到 ${dirs.length} 个符合条件的子目录:`, dirs)
+      return dirs
+    } catch (error) {
+      console.error('收集子目录时出错:', error)
+      throw new Error(`无法读取 DC 目录内容，请确保选择的是正确的 DC 目录`)
+    }
   }
 
   // 获取目录句柄
@@ -199,10 +207,17 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
 
       // 5. 收集符合条件的子目录
       const validDirs = await collectValidSubDirectories(rootDirHandle, plant)
+      
+      if (validDirs.length === 0) {
+        throw new Error(`DC 目录下未找到 ${plant} 厂区的目录，请检查目录结构`)
+      }
+      
       setDirs(validDirs)
+      console.log(`将使用以下目录进行扫描:`, validDirs)
 
-      // 6. 创建验证器
-      const validators = createValidators(dirs, date, shift, times, types)
+      // 6. 创建验证器（使用刚收集到的 validDirs，而非 store 中的 dirs）
+      const validators = createValidators(validDirs, date, shift, times, types)
+      console.log('验证器参数:', { validDirs, date, shift, times, types })
 
       // 7. 遍历目录并收集文件
       const scannedFiles = await traverseDirectory(rootDirHandle, validators)
@@ -228,7 +243,7 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
       // 11. 结束扫描状态
       setIsScan(false)
     }
-  }, [plant, dirs, date, shift, times, types])
+  }, [plant, date, shift, times, types])
 
   // 复制文件
   const handleImageCopy = useCallback(async () => {
