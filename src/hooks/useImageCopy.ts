@@ -207,11 +207,11 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
 
       // 5. 收集符合条件的子目录
       const validDirs = await collectValidSubDirectories(rootDirHandle, plant)
-      
+
       if (validDirs.length === 0) {
         throw new Error(`DC 目录下未找到 ${plant} 厂区的目录，请检查目录结构`)
       }
-      
+
       setDirs(validDirs)
       console.log(`将使用以下目录进行扫描:`, validDirs)
 
