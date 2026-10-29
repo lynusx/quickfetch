@@ -42,18 +42,29 @@ src/
 ├── shared/ipc.ts         # 主进程 ↔ preload ↔ 渲染层共用的 IPC 类型契约
 └── renderer/             # 渲染层（React）
     ├── index.html
-    ├── main.tsx          # HashRouter + Radix Theme 挂载
-    ├── App.tsx           # 路由表
+    ├── main.tsx          # HashRouter 挂载
+    ├── App.tsx           # 路由表 + Toaster / TooltipProvider
     ├── pages/            # 页面（图片拷贝、Excel 解析、布局）
-    ├── components/       # 可复用组件
+    ├── components/       # 业务组件
+    │   └── ui/           # shadcn/ui 组件（CLI 生成，勿手改样式约定）
     ├── hooks/            # 业务逻辑
     ├── stores/           # zustand 状态
+    ├── lib/utils.ts      # cn()
     ├── utils/            # 通用工具
     ├── types/            # 渲染层类型（Excel 等）
+    ├── index.css         # Tailwind 入口 + shadcn 主题变量
     └── public/img/       # 静态资源
 ```
 
 构建产物：`out/main`、`out/preload`、`out/renderer`；安装包输出到 `release/`。
+
+## UI 约定
+
+- 组件库：**shadcn/ui**（radix base，vega 预设），配置见 `components.json`
+- 样式：**Tailwind CSS v4**，通过 `@tailwindcss/vite` 接入；设计令牌集中在 `src/renderer/index.css`
+- 别名：`@/*` → `src/renderer/*`（`tsconfig*.json` 与 `electron.vite.config.ts` 同步配置）
+- 图标：`lucide-react`；提示：`sonner`；`cn()` 由 `cn` 包提供
+- 新增组件：`npx shadcn@latest add <component>`（`init` 需要根目录有 `vite.config.ts` 才能通过框架探测，`add` 不需要）
 
 ## 架构约定
 

@@ -1,8 +1,10 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router'
+import { Loader2 } from 'lucide-react'
 
 import LayoutPage from './pages/LayoutPage'
-import Loading from './components/Loading'
+import { Toaster } from '@/components/ui/sonner'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 const ROUTES = {
   IMAGE_COPY: '/image-copy',
@@ -19,10 +21,16 @@ const NotFoundRedirect = ({ defaultPath }: { defaultPath: string }) => (
   <Navigate to={defaultPath} replace state={{ from: location.pathname }} />
 )
 
+const PageLoader = () => (
+  <div className="flex min-h-80 items-center justify-center">
+    <Loader2 className="size-5 animate-spin text-muted-foreground" />
+  </div>
+)
+
 function App() {
   return (
-    <>
-      <Suspense fallback={<Loading />}>
+    <TooltipProvider delayDuration={300}>
+      <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<LayoutPage />}>
             <Route
@@ -30,22 +38,8 @@ function App() {
               element={<Navigate to={ROUTES.IMAGE_COPY} replace />}
             />
 
-            <Route
-              path={ROUTES.IMAGE_COPY}
-              element={
-                <Suspense fallback={<Loading />}>
-                  <ImageCopyPage />
-                </Suspense>
-              }
-            />
-            <Route
-              path={ROUTES.EXCEL_PARSE}
-              element={
-                <Suspense fallback={<Loading />}>
-                  <ExcelParsePage />
-                </Suspense>
-              }
-            />
+            <Route path={ROUTES.IMAGE_COPY} element={<ImageCopyPage />} />
+            <Route path={ROUTES.EXCEL_PARSE} element={<ExcelParsePage />} />
 
             <Route
               path="*"
@@ -54,7 +48,8 @@ function App() {
           </Route>
         </Routes>
       </Suspense>
-    </>
+      <Toaster position="bottom-right" richColors closeButton />
+    </TooltipProvider>
   )
 }
 

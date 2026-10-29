@@ -1,102 +1,90 @@
-import { Badge, Box, Card, Flex, Strong, Text } from '@radix-ui/themes'
-import { FileTextIcon } from '@radix-ui/react-icons'
-
-import ExcelUploadZone from '../../components/ExcelUploadZone'
-import ExcelViewer from '../../components/ExcelViewer'
-import { useExcelStore } from '../../stores/excelStore'
+import { Badge } from '@/components/ui/badge'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import ExcelUploadZone from '@/components/ExcelUploadZone'
+import ExcelViewer from '@/components/ExcelViewer'
+import { useExcelStore } from '@/stores/excelStore'
 
 const ExcelParsePage = () => {
-  const { file: originFile } = useExcelStore()
+  const { file } = useExcelStore()
 
   return (
-    <Box>
-      {/* 页面标题 */}
-      <Box mb="6">
-        <Flex align="center" gap="3" mb="2">
-          <FileTextIcon
-            width="24"
-            height="24"
-            style={{ color: 'var(--accent-9)' }}
-          />
-          <Text size="6" weight="bold" style={{ color: 'var(--gray-12)' }}>
-            Excel 解析工具
-          </Text>
-          <Badge color="blue" variant="soft">
-            Beta
-          </Badge>
-        </Flex>
-        <Text size="3" style={{ color: 'var(--gray-11)' }}>
-          解析和处理 Excel 文件，支持单文件数据解析、数据筛选、数据导出
-        </Text>
-      </Box>
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">Excel 解析</h1>
+          <Badge variant="outline">Beta</Badge>
+        </div>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          解析单个 Excel 文件，按设备 ID
+          分组后，支持按线别与不良项筛选，并导出为 xlsx。
+        </p>
+      </header>
 
-      {/* 功能卡片 */}
-      <Flex direction="column" gap="4">
-        {/* 上传区域 */}
-        <Card size="3">
-          <ExcelUploadZone />
-        </Card>
+      <ExcelUploadZone />
 
-        {/* Excel文件查看器 */}
-        {originFile && <ExcelViewer />}
+      {file && <ExcelViewer />}
 
-        {/* 使用说明 */}
-        <Card size="3">
-          <Text size="4" weight="medium" mb="4">
-            使用说明
-          </Text>
-          <Flex direction="column" gap="3">
-            <Box>
-              <Text size="3" weight="medium" mb="1" mr="1">
-                1. 上传文件
-              </Text>
-              <Text size="2" style={{ color: 'var(--gray-11)' }}>
-                支持拖拽或点击上传<Strong>单个Excel</Strong>文件（.xlsx 或 .xls
-                格式）
-              </Text>
-            </Box>
-            <Box>
-              <Text size="3" weight="medium" mb="1" mr="1">
-                2. 解析数据
-              </Text>
-              <Text size="2" style={{ color: 'var(--gray-11)' }}>
-                自动解析<Strong>第1个</Strong>工作表，解析完成后根据{' '}
-                <Badge color="blue" variant="soft">
-                  设备ID
-                </Badge>{' '}
-                进行分组统计
-              </Text>
-            </Box>
-            <Box>
-              <Text size="3" weight="medium" mb="1" mr="1">
-                3. 筛选数据
-              </Text>
-              <Text size="2" style={{ color: 'var(--gray-11)' }}>
-                支持根据{' '}
-                <Badge color="blue" variant="soft">
-                  线别
-                </Badge>{' '}
-                和{' '}
-                <Badge color="blue" variant="soft">
-                  不良项
-                </Badge>{' '}
-                筛选数据
-              </Text>
-            </Box>
-            <Box>
-              <Text size="3" weight="medium" mb="1" mr="1">
-                4. 导出数据
-              </Text>
-              <Text size="2" style={{ color: 'var(--gray-11)' }}>
-                可将筛选结果<Strong>复制到剪切板</Strong>或
-                <Strong>导出为 xlsx</Strong>
-                格式文件
-              </Text>
-            </Box>
-          </Flex>
-        </Card>
-      </Flex>
-    </Box>
+      <Card>
+        <CardHeader>
+          <CardTitle>使用说明</CardTitle>
+          <CardDescription>上传、解析、筛选、导出</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ol className="grid gap-4 text-sm sm:grid-cols-2">
+            <li className="flex gap-3">
+              <span className="font-mono text-xs text-muted-foreground">
+                01
+              </span>
+              <span>
+                <span className="font-medium">上传文件。</span>
+                <span className="text-muted-foreground">
+                  拖拽或点击选择单个 .xlsx / .xls 文件，最大 50MB。
+                </span>
+              </span>
+            </li>
+            <li className="flex gap-3">
+              <span className="font-mono text-xs text-muted-foreground">
+                02
+              </span>
+              <span>
+                <span className="font-medium">解析数据。</span>
+                <span className="text-muted-foreground">
+                  自动解析第 1 个工作表，按设备 ID 分组统计。
+                </span>
+              </span>
+            </li>
+            <li className="flex gap-3">
+              <span className="font-mono text-xs text-muted-foreground">
+                03
+              </span>
+              <span>
+                <span className="font-medium">筛选数据。</span>
+                <span className="text-muted-foreground">
+                  按线别与不良项组合筛选，结果实时刷新。
+                </span>
+              </span>
+            </li>
+            <li className="flex gap-3">
+              <span className="font-mono text-xs text-muted-foreground">
+                04
+              </span>
+              <span>
+                <span className="font-medium">导出数据。</span>
+                <span className="text-muted-foreground">
+                  复制到剪切板，或另存为 xlsx 文件。
+                </span>
+              </span>
+            </li>
+          </ol>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 

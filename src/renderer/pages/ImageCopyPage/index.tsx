@@ -1,35 +1,50 @@
 import {
-  Box,
-  Button,
-  Text,
-  Flex,
-  Card,
-  Progress,
-  Badge,
-  Callout,
-  Spinner,
-  Separator,
-  Strong,
-} from '@radix-ui/themes'
+  CircleAlert,
+  CircleCheck,
+  Download,
+  FolderOpen,
+  Loader2,
+} from 'lucide-react'
+
+import ImageFilterPanel from '@/components/ImageFilterPanel'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
-  CopyIcon,
-  CheckIcon,
-  GearIcon,
-  PlayIcon,
-  DownloadIcon,
-  FileIcon,
-} from '@radix-ui/react-icons'
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Progress } from '@/components/ui/progress'
+import { Separator } from '@/components/ui/separator'
+import { useImageCopy } from '@/hooks/useImageCopy'
+import { useToast } from '@/hooks/useToast'
+import { useImageStore } from '@/stores/imageStore'
 
-import { useImageCopy } from '../../hooks/useImageCopy'
-import { Toast } from '../../components/Toast'
-import { useToast } from '../../hooks/useToast'
-import ImageFilterPanel from '../../components/ImageFilterPanel'
-import { useImageStore } from '../../stores/imageStore'
+const Metric = ({
+  value,
+  label,
+}: {
+  value: string | number
+  label: string
+}) => (
+  <div className="flex flex-col items-center justify-center gap-1 px-3 py-3">
+    <span className="text-2xl font-semibold tabular-nums">{value}</span>
+    <span className="text-xs text-muted-foreground">{label}</span>
+  </div>
+)
 
-import './index.css'
+const StepBadge = ({ index }: { index: number }) => (
+  <span className="flex size-7 shrink-0 items-center justify-center rounded-full border bg-muted text-xs font-semibold tabular-nums">
+    {index}
+  </span>
+)
 
 const ImageCopyPage = () => {
-  const { toast, hideToast, showToast } = useToast()
+  const { showToast } = useToast()
   const { images, copiedImageCount, isCopy, isScan, isError, error } =
     useImageStore()
   const {
@@ -38,310 +53,212 @@ const ImageCopyPage = () => {
     getCopyProgress,
     handleImageScan,
     handleImageCopy,
-  } = useImageCopy({
-    showToast,
-  })
+  } = useImageCopy({ showToast })
+
+  const progress = getCopyProgress()
+
+  const status = isScan
+    ? { label: '扫描中', variant: 'secondary' as const }
+    : isCopy
+      ? { label: '复制中', variant: 'secondary' as const }
+      : isError
+        ? { label: '异常', variant: 'destructive' as const }
+        : images.length > 0
+          ? { label: '待复制', variant: 'default' as const }
+          : { label: '就绪', variant: 'outline' as const }
 
   return (
-    <Box>
-      {/* 页面标题 */}
-      <Box mb="6">
-        <Flex align="center" gap="3" mb="2">
-          <CopyIcon
-            width="24"
-            height="24"
-            style={{ color: 'var(--accent-9)' }}
-          />
-          <Text size="6" weight="bold" style={{ color: 'var(--gray-12)' }}>
-            图片批量拷贝工具
-          </Text>
-          <Badge color="green" variant="soft">
-            活跃
-          </Badge>
-        </Flex>
-        <Text size="3" style={{ color: 'var(--gray-11)' }}>
-          快速扫描 DC 目录，爬取指定图片到目标目录，支持按厂区、脏污类型筛选
-        </Text>
-      </Box>
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            图片批量拷贝
+          </h1>
+          <Badge variant="secondary">活跃</Badge>
+        </div>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          按 DC
+          目录层级扫描指定厂区、日期与班次的图片，再批量拷贝到目标目录，并生成
+          source.txt 路径清单。
+        </p>
+      </header>
 
-      {/* 功能卡片 */}
-      <Card size="3" mb="4">
-        <Flex direction="column">
-          {/* 扫描范围 */}
-          <Box mb="4">
-            <Flex align="center" gap="2" mb="4">
-              <GearIcon
-                width="18"
-                height="18"
-                style={{ color: 'var(--blue-9)' }}
-              />
-              <Text size="4" weight="medium">
-                扫描配置
-              </Text>
-            </Flex>
-
-            {/* 厂区、日期、时间、班次、类型 */}
+      <div className="grid items-start gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
+        {/* 参数面板 */}
+        <Card className="xl:sticky xl:top-6">
+          <CardHeader>
+            <CardTitle>扫描配置</CardTitle>
+            <CardDescription>
+              目录结构：DC / 厂区 / EL / 日期 / 班次 / 时段 / 类型
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <ImageFilterPanel />
-          </Box>
+          </CardContent>
+        </Card>
 
-          <Separator my="4" size="4" />
+        <div className="flex flex-col gap-6">
+          {/* 执行区 */}
+          <Card>
+            <CardHeader>
+              <CardTitle>执行</CardTitle>
+              <CardDescription>
+                先扫描源目录确认数量，再选择目标目录完成拷贝
+              </CardDescription>
+              <CardAction>
+                <Badge variant={status.variant}>{status.label}</Badge>
+              </CardAction>
+            </CardHeader>
 
-          {/* 操作步骤 */}
-          <Box>
-            <Flex align="center" gap="2" mb="4">
-              <PlayIcon
-                width="18"
-                height="18"
-                style={{ color: 'var(--green-9)' }}
-              />
-              <Text size="4" weight="medium">
-                操作步骤
-              </Text>
-            </Flex>
-            <Flex justify="between" gap="4">
-              {/* 步骤1：扫描 */}
-              <Box flexGrow="1">
-                <Flex align="center" justify="between" mb="3">
-                  <Flex align="center" gap="2">
-                    <Box
-                      style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '50%',
-                        background: 'var(--blue-9)',
-                        color: 'white',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '14px',
-                        fontWeight: 'bold',
-                      }}
+            <CardContent className="flex flex-col gap-5">
+              <div className="grid grid-cols-3 divide-x rounded-lg border">
+                <Metric value={images.length} label="匹配图片" />
+                <Metric value={copiedImageCount} label="已复制" />
+                <Metric value={`${progress}%`} label="进度" />
+              </div>
+
+              <div className="flex items-start gap-3">
+                <StepBadge index={1} />
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-sm font-medium">扫描源目录</p>
+                    <p className="text-xs text-muted-foreground">
+                      选择名为 DC 的根目录，按当前配置匹配图片
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      onClick={handleImageScan}
+                      disabled={!canStartScan()}
                     >
-                      1
-                    </Box>
-                    <Text size="4" weight="medium">
-                      扫描源目录
-                    </Text>
-                  </Flex>
-                  {images.length > 0 && (
-                    <Badge color="green" variant="soft" size="1">
-                      <CheckIcon width="12" height="12" />
-                      {images.length} 张
-                    </Badge>
-                  )}
-                </Flex>
+                      {isScan ? (
+                        <Loader2
+                          className="animate-spin"
+                          data-icon="inline-start"
+                        />
+                      ) : (
+                        <FolderOpen data-icon="inline-start" />
+                      )}
+                      {isScan ? '扫描中…' : '选择 DC 目录'}
+                    </Button>
+                    {images.length > 0 && (
+                      <Badge variant="secondary">
+                        <CircleCheck data-icon="inline-start" />
+                        {images.length} 张
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
 
-                <Button
-                  size="3"
-                  variant="solid"
-                  color="blue"
-                  onClick={handleImageScan}
-                  disabled={!canStartScan()}
-                  style={{ width: '100%' }}
-                >
-                  {isScan ? (
-                    <Flex gap="2" align="center" justify="center">
-                      <Spinner size="2" />
-                      扫描中...
-                    </Flex>
-                  ) : (
-                    <Flex gap="2" align="center" justify="center">
-                      <FileIcon width="16" height="16" />
-                      选择 DC 目录
-                    </Flex>
-                  )}
-                </Button>
+              <Separator />
 
-                {isScan && isError && (
-                  <Callout.Root color="red" mt="3" size="1">
-                    <Callout.Text size="2">{error?.message}</Callout.Text>
-                  </Callout.Root>
-                )}
-              </Box>
-
-              {/* 步骤2：复制 */}
-              <Box flexGrow="1">
-                <Flex align="center" justify="between" mb="3">
-                  <Flex align="center" gap="2">
-                    <Box
-                      style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '50%',
-                        background:
-                          images.length > 0
-                            ? 'var(--green-9)'
-                            : 'var(--gray-8)',
-                        color: 'white',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '14px',
-                        fontWeight: 'bold',
-                      }}
+              <div className="flex items-start gap-3">
+                <StepBadge index={2} />
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-sm font-medium">复制到目标目录</p>
+                    <p className="text-xs text-muted-foreground">
+                      图片按文件名平铺拷贝，并在目标目录写入 source.txt
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      onClick={handleImageCopy}
+                      disabled={!canStartCopy()}
                     >
-                      2
-                    </Box>
-                    <Text size="4" weight="medium">
-                      复制到目标目录
-                    </Text>
-                  </Flex>
-                  {copiedImageCount > 0 && (
-                    <Badge color="green" variant="soft" size="1">
-                      <CheckIcon width="12" height="12" />
-                      {getCopyProgress()}%
-                    </Badge>
+                      {isCopy ? (
+                        <Loader2
+                          className="animate-spin"
+                          data-icon="inline-start"
+                        />
+                      ) : (
+                        <Download data-icon="inline-start" />
+                      )}
+                      {isCopy ? '复制中…' : '选择目标目录'}
+                    </Button>
+                    {copiedImageCount > 0 && (
+                      <Badge variant="secondary">
+                        <CircleCheck data-icon="inline-start" />
+                        {progress}%
+                      </Badge>
+                    )}
+                  </div>
+
+                  {(isCopy || copiedImageCount > 0) && (
+                    <div className="mt-1 flex flex-col gap-2 rounded-lg border bg-muted/40 p-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-medium">复制进度</span>
+                        <span className="tabular-nums text-muted-foreground">
+                          {copiedImageCount} / {images.length} 张
+                        </span>
+                      </div>
+                      <Progress value={progress} />
+                    </div>
                   )}
-                </Flex>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-                <Button
-                  size="3"
-                  variant="solid"
-                  color="green"
-                  onClick={handleImageCopy}
-                  disabled={!canStartCopy()}
-                  style={{ width: '100%' }}
-                >
-                  {isCopy ? (
-                    <Flex gap="2" align="center" justify="center">
-                      <Spinner size="2" />
-                      复制中...
-                    </Flex>
-                  ) : (
-                    <Flex gap="2" align="center" justify="center">
-                      <DownloadIcon width="16" height="16" />
-                      选择目标目录
-                    </Flex>
-                  )}
-                </Button>
+          {isError && error && (
+            <Alert variant="destructive">
+              <CircleAlert />
+              <AlertTitle>操作失败</AlertTitle>
+              <AlertDescription>{error.message}</AlertDescription>
+            </Alert>
+          )}
 
-                {isCopy && isError && (
-                  <Callout.Root color="red" mt="3" size="1">
-                    <Callout.Text size="2">{error?.message}</Callout.Text>
-                  </Callout.Root>
-                )}
-              </Box>
-            </Flex>
-
-            {/* 复制进度 */}
-            {copiedImageCount > 0 && (
-              <Box
-                mt="4"
-                p="4"
-                style={{
-                  background: 'var(--green-2)',
-                  borderRadius: '8px',
-                  border: '1px solid var(--green-6)',
-                }}
-              >
-                <Flex justify="between" mb="3">
-                  <Text
-                    size="3"
-                    weight="medium"
-                    style={{ color: 'var(--green-11)' }}
-                  >
-                    复制进度
-                  </Text>
-                  <Text
-                    size="3"
-                    weight="medium"
-                    style={{ color: 'var(--green-11)' }}
-                  >
-                    {getCopyProgress()}%
-                  </Text>
-                </Flex>
-                <Progress
-                  value={getCopyProgress()}
-                  color="green"
-                  size="3"
-                  radius="full"
-                />
-                <Text
-                  size="2"
-                  style={{
-                    color: 'var(--green-10)',
-                    textAlign: 'center',
-                    display: 'block',
-                  }}
-                  mt="2"
-                >
-                  已复制 {copiedImageCount} / {images.length} 张图片
-                </Text>
-              </Box>
-            )}
-          </Box>
-        </Flex>
-      </Card>
-
-      {/* 使用说明 */}
-      <Card size="3">
-        <Text size="4" weight="medium" mb="4">
-          使用说明
-        </Text>
-        <Flex direction="column" gap="3">
-          <Box>
-            <Text
-              size="3"
-              weight="medium"
-              mb="1"
-              mr="1"
-              style={{ color: 'var(--gray-12)' }}
-            >
-              1. 参数配置
-            </Text>
-            <Text size="2" style={{ color: 'var(--gray-11)' }}>
-              选择<Strong>厂区</Strong>和<Strong>图片类型</Strong>
-              ，系统会自动根据当前时间确定扫描范围
-            </Text>
-          </Box>
-          <Box>
-            <Text
-              size="3"
-              weight="medium"
-              mb="1"
-              mr="1"
-              style={{ color: 'var(--gray-12)' }}
-            >
-              2. 扫描文件
-            </Text>
-            <Text size="2" style={{ color: 'var(--gray-11)' }}>
-              选择包含图片的
-              <Badge color="blue" variant="soft">
-                DC
-              </Badge>
-              目录，系统会自动扫描符合条件的所有子目录
-            </Text>
-          </Box>
-          <Box>
-            <Text
-              size="3"
-              weight="medium"
-              mb="1"
-              mr="1"
-              style={{ color: 'var(--gray-12)' }}
-            >
-              3. 批量拷贝
-            </Text>
-            <Text size="2" style={{ color: 'var(--gray-11)' }}>
-              选择<Strong>目标路径</Strong>
-              ，系统会自动将扫描到的图片文件拷贝到该路径下，并生成一个
-              <Badge color="blue" variant="soft">
-                source.txt
-              </Badge>
-              文件，用于记录拷贝的文件路径
-            </Text>
-          </Box>
-        </Flex>
-      </Card>
-
-      <Toast
-        open={toast.open}
-        setOpen={hideToast}
-        title={toast.title}
-        description={toast.description}
-        type={toast.type}
-      />
-    </Box>
+          {/* 使用说明 */}
+          <Card>
+            <CardHeader>
+              <CardTitle>使用说明</CardTitle>
+              <CardDescription>
+                三步完成一次拷贝：配置参数、扫描、复制
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ol className="flex flex-col gap-4 text-sm">
+                <li className="flex gap-3">
+                  <span className="font-mono text-xs text-muted-foreground">
+                    01
+                  </span>
+                  <span>
+                    <span className="font-medium">参数配置。</span>
+                    <span className="text-muted-foreground">
+                      选择厂区、图片类型，系统会根据当前时间自动带出日期、班次与时段。
+                    </span>
+                  </span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="font-mono text-xs text-muted-foreground">
+                    02
+                  </span>
+                  <span>
+                    <span className="font-medium">扫描文件。</span>
+                    <span className="text-muted-foreground">
+                      选择 DC 目录，系统会递归匹配符合条件的所有子目录。
+                    </span>
+                  </span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="font-mono text-xs text-muted-foreground">
+                    03
+                  </span>
+                  <span>
+                    <span className="font-medium">批量拷贝。</span>
+                    <span className="text-muted-foreground">
+                      选择目标路径，图片将拷贝到该目录，并生成记录来源路径的
+                      source.txt。
+                    </span>
+                  </span>
+                </li>
+              </ol>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
   )
 }
 

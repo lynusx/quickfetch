@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 const rootDir = process.cwd()
 
@@ -47,7 +48,10 @@ export default defineConfig({
     define: {
       'import.meta.env.VITE_APP_VERSION': JSON.stringify(packageJson.version),
     },
-    plugins: [react()],
+    plugins: [react(), tailwindcss()],
+    resolve: {
+      alias: { '@': resolve(rootDir, 'src/renderer') },
+    },
     server: {
       port: 5173,
     },

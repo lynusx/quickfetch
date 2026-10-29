@@ -1,31 +1,50 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  CalendarIcon,
-  CheckIcon,
-  ClockIcon,
-  Cross2Icon,
-  UpdateIcon,
-  CodeIcon,
-  Pencil2Icon,
-  PlusIcon,
-  Cross1Icon,
-} from '@radix-ui/react-icons'
-import {
-  Box,
-  Button,
-  Badge,
-  CheckboxGroup,
-  Flex,
-  RadioGroup,
-  Text,
-  TextField,
-  Dialog,
-  IconButton,
-} from '@radix-ui/themes'
+  CalendarDays,
+  CheckCheck,
+  Clock3,
+  Layers,
+  Pencil,
+  Plus,
+  X,
+} from 'lucide-react'
 
-import { getAllAvailableTimes, getShiftInfo } from '../../utils/common'
-import { useImageFilterStore } from '../../stores/imageFilterStore'
-import { useUserPreferencesStore } from '../../stores/userPreferencesStore'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@/components/ui/input-group'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { useImageFilterStore } from '@/stores/imageFilterStore'
+import { useUserPreferencesStore } from '@/stores/userPreferencesStore'
+import { getAllAvailableTimes, getShiftInfo } from '@/utils/common'
+
+// YYYYMMDD → YYYY-MM-DD
+const toDateInputValue = (date: string) => {
+  if (!date || date.length !== 8) return ''
+  return `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`
+}
 
 const ImageFilterPanel = () => {
   const {
@@ -43,296 +62,274 @@ const ImageFilterPanel = () => {
   const { ngTypes, addNgType, removeNgType } = useUserPreferencesStore()
 
   const [newType, setNewType] = useState('')
-  const handleAddType = () => {
-    const val = newType.trim()
-    if (val && !ngTypes.includes(val)) {
-      addNgType(val)
-      setNewType('')
-    }
-  }
 
   // 缓存所有可选时间
   const availableTimes = useMemo(() => getAllAvailableTimes(shift), [shift])
 
-  // 格式化日期显示 (YYYYMMDD → YYYY-MM-DD)
-  const formatDate = (date: string) => {
-    if (!date || date.length !== 8) return ''
-    return `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`
-  }
-
-  // 格式化输入日期 (YYYY-MM-DD → YYYYMMDD)
-  const handleDateChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
-    const formatted = e.target.value.replace(/-/g, '')
-    setDate(formatted)
-  }
-
-  const { shift: Tshift, date: Tdate, times: Ttimes } = getShiftInfo(new Date())
+  // 当天班次信息，用于「切回当前班次时恢复默认时段」
+  const {
+    shift: currentShift,
+    date: currentDate,
+    times: currentTimes,
+  } = getShiftInfo(new Date())
 
   useEffect(() => {
-    // 初始化日期、班次、时间段
-    if (!date) setDate(Tdate)
-    if (!shift) setShift(Tshift)
-    if (times.length === 0) setTimes(Ttimes)
+    if (!date) setDate(currentDate)
+    if (!shift) setShift(currentShift)
+    if (times.length === 0) setTimes(currentTimes)
+    // 仅在挂载时初始化
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleShiftChange = (value: '白班' | '夜班') => {
-    setShift(value)
-    value !== Tshift ? setTimes([]) : setTimes(Ttimes)
+  const handleShiftChange = (value: string) => {
+    if (!value) return
+    const next = value as '白班' | '夜班'
+    setShift(next)
+    // 切换班次后清空时段；切回当前班次则恢复默认时段
+    setTimes(next === currentShift ? currentTimes : [])
+  }
+
+  const handleAddType = () => {
+    const value = newType.trim()
+    if (!value || ngTypes.includes(value)) return
+    addNgType(value)
+    setNewType('')
   }
 
   return (
-    <Flex direction="column" gap="4">
-      {/* 厂区选择 */}
-      <Box>
-        <Flex align="center" gap="2" mb="2">
-          <CodeIcon
-            width="16"
-            height="16"
-            style={{ color: 'var(--gray-11)' }}
-          />
-          <Text size="3" weight="medium" style={{ color: 'var(--gray-11)' }}>
-            厂区
-          </Text>
-        </Flex>
-        <RadioGroup.Root defaultValue={plant} onValueChange={setPlant}>
-          <Flex gap="4">
-            <RadioGroup.Item value="A">
-              <Text size="2">东区</Text>
-            </RadioGroup.Item>
-            <RadioGroup.Item value="B">
-              <Text size="2">西区</Text>
-            </RadioGroup.Item>
-          </Flex>
-        </RadioGroup.Root>
-      </Box>
+    <FieldGroup>
+      {/* 厂区 */}
+      <Field>
+        <FieldLabel>厂区</FieldLabel>
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          value={plant}
+          onValueChange={(value) => value && setPlant(value as 'A' | 'B')}
+          className="w-full"
+        >
+          <ToggleGroupItem value="A" className="flex-1">
+            东区
+          </ToggleGroupItem>
+          <ToggleGroupItem value="B" className="flex-1">
+            西区
+          </ToggleGroupItem>
+        </ToggleGroup>
+      </Field>
 
-      {/* 日期选择 */}
-      <Box>
-        <Flex align="center" gap="2" mb="2">
-          <CalendarIcon
-            width="16"
-            height="16"
-            style={{ color: 'var(--gray-11)' }}
-          />
-          <Text size="3" weight="medium" style={{ color: 'var(--gray-11)' }}>
-            日期
-          </Text>
-        </Flex>
-        <TextField.Root
-          size="2"
+      {/* 日期 */}
+      <Field>
+        <FieldLabel htmlFor="scan-date">
+          <CalendarDays data-icon="inline-start" />
+          日期
+        </FieldLabel>
+        <Input
+          id="scan-date"
           type="date"
-          value={formatDate(date)} // 2025-07-17
-          onChange={handleDateChange}
-          style={{ maxWidth: '180px' }}
+          value={toDateInputValue(date)}
+          onChange={(event) => setDate(event.target.value.replace(/-/g, ''))}
+          className="tabular-nums"
         />
-      </Box>
+      </Field>
 
-      {/* 班次选择 */}
-      <Box>
-        <Flex align="center" gap="2" mb="2">
-          <UpdateIcon
-            width="16"
-            height="16"
-            style={{ color: 'var(--gray-11)' }}
-          />
-          <Text size="3" weight="medium" style={{ color: 'var(--gray-11)' }}>
-            班次
-          </Text>
-        </Flex>
-        <RadioGroup.Root value={shift} onValueChange={handleShiftChange}>
-          <Flex gap="4">
-            <RadioGroup.Item value="白班">
-              <Text size="2">白班 (8:30-20:30)</Text>
-            </RadioGroup.Item>
-            <RadioGroup.Item value="夜班">
-              <Text size="2">夜班 (20:30-8:30)</Text>
-            </RadioGroup.Item>
-          </Flex>
-        </RadioGroup.Root>
-      </Box>
+      {/* 班次 */}
+      <Field>
+        <FieldLabel>班次</FieldLabel>
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          value={shift}
+          onValueChange={handleShiftChange}
+          className="w-full"
+        >
+          <ToggleGroupItem value="白班" className="flex-1">
+            白班 08:30–20:30
+          </ToggleGroupItem>
+          <ToggleGroupItem value="夜班" className="flex-1">
+            夜班 20:30–08:30
+          </ToggleGroupItem>
+        </ToggleGroup>
+      </Field>
 
-      {/* 时间段选择 */}
-      <Box>
-        <Flex align="center" justify="between" mb="2">
-          <Flex align="center" gap="2">
-            <ClockIcon
-              width="16"
-              height="16"
-              style={{ color: 'var(--gray-11)' }}
-            />
-            <Text size="3" weight="medium" style={{ color: 'var(--gray-11)' }}>
-              时段
-            </Text>
-            <Text size="2" style={{ color: 'var(--gray-10)' }}>
-              ({times.length}/{availableTimes.length})
-            </Text>
-          </Flex>
-          <Flex gap="2">
-            {times.length > 0 && (
-              <Button
-                variant="soft"
-                size="1"
-                color="red"
-                onClick={() => setTimes([])}
-              >
-                <Cross2Icon width="12" height="12" />
-                清空
-              </Button>
-            )}
+      {/* 时段 */}
+      <Field>
+        <div className="flex items-center justify-between gap-2">
+          <FieldLabel className="mb-0">
+            <Clock3 data-icon="inline-start" />
+            时段
+            <span className="font-normal text-muted-foreground tabular-nums">
+              {times.length}/{availableTimes.length}
+            </span>
+          </FieldLabel>
+          <div className="flex items-center gap-1">
             <Button
-              variant="soft"
-              size="1"
-              onClick={() => setTimes(availableTimes)}
-              color="blue"
+              type="button"
+              variant="ghost"
+              size="xs"
+              disabled={times.length === 0}
+              onClick={() => setTimes([])}
             >
-              <CheckIcon width="12" height="12" />
+              清空
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              onClick={() => setTimes(availableTimes)}
+            >
+              <CheckCheck data-icon="inline-start" />
               全选
             </Button>
-          </Flex>
-        </Flex>
-
-        <CheckboxGroup.Root value={times} onValueChange={setTimes} size="2">
-          <Flex gap="2" wrap="wrap">
+          </div>
+        </div>
+        <FieldContent>
+          <ToggleGroup
+            type="multiple"
+            variant="outline"
+            size="sm"
+            value={times}
+            onValueChange={setTimes}
+            className="grid grid-cols-4 gap-1.5"
+          >
             {availableTimes.map((time) => (
-              <CheckboxGroup.Item key={time} value={time}>
-                <Text size="2">{time}点</Text>
-              </CheckboxGroup.Item>
+              <ToggleGroupItem
+                key={time}
+                value={time}
+                className="h-8 w-full tabular-nums"
+              >
+                {time} 时
+              </ToggleGroupItem>
             ))}
-          </Flex>
-        </CheckboxGroup.Root>
-      </Box>
+          </ToggleGroup>
+        </FieldContent>
+      </Field>
 
-      {/* 类型选择 */}
-      <Box>
-        <Flex align="center" justify="between" mb="2">
-          <Flex align="center" gap="2">
-            <ClockIcon
-              width="16"
-              height="16"
-              style={{ color: 'var(--gray-11)' }}
-            />
-            <Text size="3" weight="medium" style={{ color: 'var(--gray-11)' }}>
-              类型
-            </Text>
-            <Text size="2" style={{ color: 'var(--gray-10)' }}>
-              ({types.length}/{ngTypes.length})
-            </Text>
-          </Flex>
-          <Flex gap="2">
-            <Dialog.Root>
-              <Dialog.Trigger>
-                <Button variant="soft" size="1">
-                  <Pencil2Icon width="12" height="12" />
+      {/* 类型 */}
+      <Field>
+        <div className="flex items-center justify-between gap-2">
+          <FieldLabel className="mb-0">
+            <Layers data-icon="inline-start" />
+            类型
+            <span className="font-normal text-muted-foreground tabular-nums">
+              {types.length}/{ngTypes.length}
+            </span>
+          </FieldLabel>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              disabled={types.length === 0}
+              onClick={() => setTypes([])}
+            >
+              清空
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              onClick={() => setTypes(ngTypes)}
+            >
+              <CheckCheck data-icon="inline-start" />
+              全选
+            </Button>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button type="button" variant="ghost" size="xs">
+                  <Pencil data-icon="inline-start" />
                   编辑
                 </Button>
-              </Dialog.Trigger>
-              <Dialog.Content maxWidth="450px">
-                <Dialog.Title>编辑类型</Dialog.Title>
-                <Dialog.Description size="2" mb="4">
-                  自定义图片类型，支持添加/删除
-                </Dialog.Description>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>编辑类型</DialogTitle>
+                  <DialogDescription>
+                    自定义图片类型，支持添加与删除，修改后立即生效。
+                  </DialogDescription>
+                </DialogHeader>
 
-                <Flex gap="2" wrap="wrap" mb="3">
+                <div className="flex flex-wrap gap-1.5">
                   {ngTypes.length === 0 ? (
-                    <Text size="2" color="gray">
-                      暂无类型，请添加
-                    </Text>
+                    <p className="text-sm text-muted-foreground">
+                      暂无类型，请先添加
+                    </p>
                   ) : (
                     ngTypes.map((type) => (
                       <Badge
-                        variant="soft"
                         key={type}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4,
-                        }}
+                        variant="secondary"
+                        className="gap-1 pr-1"
                       >
                         {type}
-                        <IconButton
-                          size="1"
-                          variant="ghost"
-                          color="red"
-                          style={{ marginLeft: 4 }}
+                        <button
+                          type="button"
                           onClick={() => removeNgType(type)}
-                          aria-label={`删除${type}`}
+                          aria-label={`删除 ${type}`}
+                          className="rounded-sm text-muted-foreground transition-colors hover:text-destructive"
                         >
-                          <Cross1Icon height="12" width="12" />
-                        </IconButton>
+                          <X className="size-3" />
+                        </button>
                       </Badge>
                     ))
                   )}
-                </Flex>
+                </div>
 
-                <Flex gap="2" align="center" mb="2">
-                  <TextField.Root
-                    placeholder="新增类型"
-                    size="2"
+                <InputGroup>
+                  <InputGroupInput
+                    placeholder="新增类型，如 NG_脏污_D"
                     value={newType}
-                    onChange={(e) => setNewType(e.target.value)}
-                    style={{ flex: 1 }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleAddType()
+                    onChange={(event) => setNewType(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        handleAddType()
+                      }
                     }}
-                  >
-                    <TextField.Slot side="right" px="2">
-                      <IconButton
-                        size="1"
-                        variant="soft"
-                        color="blue"
-                        onClick={handleAddType}
-                        disabled={
-                          !newType.trim() || ngTypes.includes(newType.trim())
-                        }
-                        aria-label="添加类型"
-                      >
-                        <PlusIcon height="14" width="14" />
-                      </IconButton>
-                    </TextField.Slot>
-                  </TextField.Root>
-                </Flex>
+                  />
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupButton
+                      size="icon-xs"
+                      aria-label="添加类型"
+                      disabled={
+                        !newType.trim() || ngTypes.includes(newType.trim())
+                      }
+                      onClick={handleAddType}
+                    >
+                      <Plus />
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                </InputGroup>
 
-                <Flex gap="3" mt="4" justify="end">
-                  <Dialog.Close>
-                    <Button variant="soft" color="gray">
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button type="button" variant="outline">
                       关闭
                     </Button>
-                  </Dialog.Close>
-                </Flex>
-              </Dialog.Content>
-            </Dialog.Root>
-
-            {types.length > 0 && (
-              <Button
-                variant="soft"
-                size="1"
-                color="red"
-                onClick={() => setTypes([])}
-              >
-                <Cross2Icon width="12" height="12" />
-                清空
-              </Button>
-            )}
-            <Button variant="soft" size="1" onClick={() => setTypes(ngTypes)}>
-              <CheckIcon width="12" height="12" />
-              全选
-            </Button>
-          </Flex>
-        </Flex>
-
-        <CheckboxGroup.Root value={types} onValueChange={setTypes} size="2">
-          <Flex gap="2" wrap="wrap" align="center">
+                  </DialogClose>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+        <FieldContent>
+          <ToggleGroup
+            type="multiple"
+            variant="outline"
+            size="sm"
+            value={types}
+            onValueChange={setTypes}
+            className="flex flex-wrap gap-1.5"
+          >
             {ngTypes.map((type) => (
-              <CheckboxGroup.Item key={type} value={type}>
-                <Flex gap="2" align="center">
-                  <Text size="2">{type}</Text>
-                </Flex>
-              </CheckboxGroup.Item>
+              <ToggleGroupItem key={type} value={type} className="h-8">
+                {type}
+              </ToggleGroupItem>
             ))}
-          </Flex>
-        </CheckboxGroup.Root>
-      </Box>
-    </Flex>
+          </ToggleGroup>
+          <FieldDescription>未选中任何类型时不会执行扫描</FieldDescription>
+        </FieldContent>
+      </Field>
+    </FieldGroup>
   )
 }
 

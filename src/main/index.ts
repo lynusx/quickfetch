@@ -42,6 +42,10 @@ const createWindow = (): BrowserWindow => {
   return window
 }
 
+// 固定中文语言环境：日期控件与原生对话框按 zh-CN 显示
+// 必须在 app ready 之前设置
+app.commandLine.appendSwitch('lang', 'zh-CN')
+
 app.whenReady().then(() => {
   // Windows 任务栏分组与通知标识
   app.setAppUserModelId('com.lynusx.shx-tools')

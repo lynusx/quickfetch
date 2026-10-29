@@ -1,13 +1,17 @@
-import { Box, Button, CheckboxGroup, Flex, Text } from '@radix-ui/themes'
-import {
-  CheckIcon,
-  CommitIcon,
-  Cross2Icon,
-  CrumpledPaperIcon,
-} from '@radix-ui/react-icons'
+import { CheckCheck, CircleSlash } from 'lucide-react'
 
-import { useSheetFilterStore } from '../../stores/sheetFilterStore'
-import { useExcelStore } from '../../stores/excelStore'
+import { Button } from '@/components/ui/button'
+import {
+  Field,
+  FieldContent,
+  FieldGroup,
+  FieldLabel,
+} from '@/components/ui/field'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { useExcelStore } from '@/stores/excelStore'
+import { useSheetFilterStore } from '@/stores/sheetFilterStore'
+
+const EMPTY_SHEET = { name: '', data: [], rowCount: 0, colCount: 0 }
 
 const SheetFilterPanel = () => {
   const {
@@ -20,138 +24,118 @@ const SheetFilterPanel = () => {
   } = useSheetFilterStore()
   const { setSheet } = useExcelStore()
 
-  const emptySheet = { name: '', data: [], rowCount: 0, colCount: 0 }
+  const clearLines = () => {
+    setSelectedLines([])
+    setSheet(EMPTY_SHEET)
+  }
+
+  const clearDefects = () => {
+    setSelectedDefects([])
+    setSheet(EMPTY_SHEET)
+  }
 
   return (
-    <Flex direction="column" gap="4">
-      {/* 线别选择 */}
+    <FieldGroup>
       {lines.size > 0 && (
-        <Box>
-          <Flex align="center" justify="between" mb="2">
-            <Flex align="center" gap="2">
-              <CommitIcon
-                width="16"
-                height="16"
-                style={{ color: 'var(--gray-11)' }}
-              />
-              <Text
-                size="3"
-                weight="medium"
-                style={{ color: 'var(--gray-11)' }}
-              >
-                线别
-              </Text>
-              <Text size="2" style={{ color: 'var(--gray-10)' }}>
-                ({selectedLines.length}/{lines.size})
-              </Text>
-            </Flex>
-            <Flex gap="2">
-              {selectedLines.length > 0 && (
-                <Button
-                  variant="soft"
-                  size="1"
-                  color="red"
-                  onClick={() => {
-                    setSelectedLines([])
-                    setSheet(emptySheet)
-                  }}
-                >
-                  <Cross2Icon width="12" height="12" />
-                  清空
-                </Button>
-              )}
+        <Field>
+          <div className="flex items-center justify-between gap-2">
+            <FieldLabel className="mb-0">
+              线别
+              <span className="font-normal text-muted-foreground tabular-nums">
+                {selectedLines.length}/{lines.size}
+              </span>
+            </FieldLabel>
+            <div className="flex items-center gap-1">
               <Button
-                variant="soft"
-                size="1"
+                type="button"
+                variant="ghost"
+                size="xs"
+                disabled={selectedLines.length === 0}
+                onClick={clearLines}
+              >
+                <CircleSlash data-icon="inline-start" />
+                清空
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
                 onClick={() => setSelectedLines([...lines])}
-                color="blue"
               >
-                <CheckIcon width="12" height="12" />
+                <CheckCheck data-icon="inline-start" />
                 全选
               </Button>
-            </Flex>
-          </Flex>
-
-          <CheckboxGroup.Root
-            value={selectedLines}
-            onValueChange={setSelectedLines}
-            size="2"
-          >
-            <Flex gap="2" wrap="wrap">
+            </div>
+          </div>
+          <FieldContent>
+            <ToggleGroup
+              type="multiple"
+              variant="outline"
+              size="sm"
+              value={selectedLines}
+              onValueChange={setSelectedLines}
+              className="flex flex-wrap gap-1.5"
+            >
               {[...lines].map((line) => (
-                <CheckboxGroup.Item key={line} value={line}>
-                  <Text size="2">{line}</Text>
-                </CheckboxGroup.Item>
+                <ToggleGroupItem key={line} value={line} className="h-8">
+                  {line}
+                </ToggleGroupItem>
               ))}
-            </Flex>
-          </CheckboxGroup.Root>
-        </Box>
+            </ToggleGroup>
+          </FieldContent>
+        </Field>
       )}
 
-      {/* 不良项选择 */}
       {defects.size > 0 && (
-        <Box>
-          <Flex align="center" justify="between" mb="2">
-            <Flex align="center" gap="2">
-              <CrumpledPaperIcon
-                width="16"
-                height="16"
-                style={{ color: 'var(--gray-11)' }}
-              />
-              <Text
-                size="3"
-                weight="medium"
-                style={{ color: 'var(--gray-11)' }}
-              >
-                不良项
-              </Text>
-              <Text size="2" style={{ color: 'var(--gray-10)' }}>
-                ({selectedDefects.length}/{defects.size})
-              </Text>
-            </Flex>
-            <Flex gap="2">
-              {selectedDefects.length > 0 && (
-                <Button
-                  variant="soft"
-                  size="1"
-                  color="red"
-                  onClick={() => {
-                    setSelectedDefects([])
-                    setSheet(emptySheet)
-                  }}
-                >
-                  <Cross2Icon width="12" height="12" />
-                  清空
-                </Button>
-              )}
+        <Field>
+          <div className="flex items-center justify-between gap-2">
+            <FieldLabel className="mb-0">
+              不良项
+              <span className="font-normal text-muted-foreground tabular-nums">
+                {selectedDefects.length}/{defects.size}
+              </span>
+            </FieldLabel>
+            <div className="flex items-center gap-1">
               <Button
-                variant="soft"
-                size="1"
-                onClick={() => setSelectedDefects([...defects])}
-                color="blue"
+                type="button"
+                variant="ghost"
+                size="xs"
+                disabled={selectedDefects.length === 0}
+                onClick={clearDefects}
               >
-                <CheckIcon width="12" height="12" />
+                <CircleSlash data-icon="inline-start" />
+                清空
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                onClick={() => setSelectedDefects([...defects])}
+              >
+                <CheckCheck data-icon="inline-start" />
                 全选
               </Button>
-            </Flex>
-          </Flex>
-
-          <CheckboxGroup.Root
-            value={selectedDefects}
-            onValueChange={setSelectedDefects}
-            size="2"
-          >
-            <Flex gap="2" wrap="wrap">
+            </div>
+          </div>
+          <FieldContent>
+            <ToggleGroup
+              type="multiple"
+              variant="outline"
+              size="sm"
+              value={selectedDefects}
+              onValueChange={setSelectedDefects}
+              className="flex flex-wrap gap-1.5"
+            >
               {[...defects].map((defect) => (
-                <CheckboxGroup.Item key={defect} value={defect}>
-                  <Text size="2">{defect}</Text>
-                </CheckboxGroup.Item>
+                <ToggleGroupItem key={defect} value={defect} className="h-8">
+                  {defect}
+                </ToggleGroupItem>
               ))}
-            </Flex>
-          </CheckboxGroup.Root>
-        </Box>
+            </ToggleGroup>
+          </FieldContent>
+        </Field>
       )}
-    </Flex>
+    </FieldGroup>
   )
 }
 

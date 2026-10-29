@@ -1,31 +1,60 @@
-import { Outlet } from 'react-router'
-import { Container, Flex } from '@radix-ui/themes'
+import { Outlet, useLocation } from 'react-router'
 
-import Sidebar from '../../components/Sidebar'
+import { AppSidebar } from '@/components/AppSidebar'
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
+import { Separator } from '@/components/ui/separator'
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from '@/components/ui/sidebar'
 
-import './index.css'
+const PAGE_TITLES: Record<string, string> = {
+  '/image-copy': '图片拷贝',
+  '/excel-parse': 'Excel 解析',
+}
 
 const LayoutPage = () => {
-  return (
-    <Flex
-      minHeight="100vh"
-      justify="center"
-      align="start"
-      className="layout-page-container"
-    >
-      <Flex className="app-main-container">
-        {/* 左侧导航 */}
-        <Sidebar />
+  const { pathname } = useLocation()
+  const currentTitle = PAGE_TITLES[pathname] ?? '工作台'
 
-        {/* 右侧内容区域 */}
-        <Flex direction="column" flexGrow="1" className="content-area">
-          <Container size="4" p="4" className="content-container">
-            {/* 内容视图 */}
+  return (
+    <SidebarProvider>
+      <AppSidebar />
+
+      <SidebarInset>
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <SidebarTrigger className="-ml-1" />
+          <Separator
+            orientation="vertical"
+            className="mr-1 data-[orientation=vertical]:h-4"
+          />
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem className="hidden sm:block">
+                <span className="text-muted-foreground">工具</span>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator className="hidden sm:block" />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{currentTitle}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+        </header>
+
+        <div className="flex-1">
+          <div className="mx-auto w-full max-w-[1400px] px-6 py-6">
             <Outlet />
-          </Container>
-        </Flex>
-      </Flex>
-    </Flex>
+          </div>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
 

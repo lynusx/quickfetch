@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { toast } from 'sonner'
 
 import { uesExcelDataProcessor } from './useExcelDataProcessor'
 import { useExcelOperations } from './useExcelOpertions'
@@ -26,17 +27,17 @@ export const useExcelViewer = () => {
     setSelectedDefects,
   } = useSheetFilterStore()
 
-  // 获取状态颜色
-  const getStatusColor = (status: string) => {
+  // 获取状态徽标样式
+  const getStatusVariant = (status: string) => {
     switch (status) {
       case 'completed':
-        return 'green'
+        return 'secondary' as const
       case 'processing':
-        return 'orange'
+        return 'outline' as const
       case 'error':
-        return 'red'
+        return 'destructive' as const
       default:
-        return 'gray'
+        return 'outline' as const
     }
   }
 
@@ -60,7 +61,7 @@ export const useExcelViewer = () => {
       setIsCopy(true)
       await copyToClipboard(sheet)
     } catch (error) {
-      alert(error instanceof Error ? error.message : '复制失败，请重试')
+      toast.error(error instanceof Error ? error.message : '复制失败，请重试')
     } finally {
       setIsCopy(false)
     }
@@ -72,7 +73,7 @@ export const useExcelViewer = () => {
       setIsExport(true)
       await exportToExcel(sheet)
     } catch (error) {
-      alert(error instanceof Error ? error.message : '导出失败，请重试')
+      toast.error(error instanceof Error ? error.message : '导出失败，请重试')
     } finally {
       setIsExport(false)
     }
@@ -150,7 +151,7 @@ export const useExcelViewer = () => {
   }
 
   return {
-    getStatusColor,
+    getStatusVariant,
     getStatusText,
     generateSheetDate,
     handleCopyToClipboard,

@@ -1,37 +1,64 @@
-import type { FC } from 'react'
-import { Flex, ScrollArea, Table, Text } from '@radix-ui/themes'
+import { Table2 } from 'lucide-react'
+
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 import type { ExcelSheet } from '../../types'
 
 interface SheetTablePreviewProps {
   sheet: ExcelSheet
   mode: 'result' | 'original'
+  maxHeight?: string
 }
 
-const SheetTablePreview: FC<SheetTablePreviewProps> = ({ sheet, mode }) => {
-  const maxRows = 20
-  const maxCols = 10
+const MAX_ROWS = 20
+const MAX_COLS = 10
+
+const SheetTablePreview = ({
+  sheet,
+  mode,
+  maxHeight = '420px',
+}: SheetTablePreviewProps) => {
+  if (sheet.data.length === 0) {
+    return (
+      <Empty className="min-h-60">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <Table2 />
+          </EmptyMedia>
+          <EmptyTitle>暂无可显示的数据</EmptyTitle>
+          <EmptyDescription>调整筛选条件后再试</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    )
+  }
 
   let displayData = sheet.data
   let showRowTruncation = false
   let showColTruncation = false
 
-  if (sheet.data.length === 0) {
-    return (
-      <Flex align="center" justify="center" height="100%">
-        <Text size="3">暂无可显示的数据</Text>
-      </Flex>
-    )
-  }
-
   if (mode === 'original') {
-    if (sheet.rowCount > maxRows) {
-      displayData = displayData.slice(0, maxRows)
+    if (sheet.rowCount > MAX_ROWS) {
+      displayData = displayData.slice(0, MAX_ROWS)
       showRowTruncation = true
     }
 
-    if (sheet.colCount > maxCols) {
-      displayData = displayData.map((row) => row.slice(0, maxCols))
+    if (sheet.colCount > MAX_COLS) {
+      displayData = displayData.map((row) => row.slice(0, MAX_COLS))
       showColTruncation = true
     }
   }
@@ -40,49 +67,45 @@ const SheetTablePreview: FC<SheetTablePreviewProps> = ({ sheet, mode }) => {
   const dataRows = displayData.slice(1)
 
   return (
-    <ScrollArea>
-      <Table.Root>
-        <Table.Header>
-          <Table.Row>
+    <ScrollArea style={{ maxHeight }} className="w-full">
+      <Table>
+        <TableHeader className="sticky top-0 z-10 bg-background">
+          <TableRow>
             {headerRow.map((cell, index) => (
-              <Table.ColumnHeaderCell key={index}>
-                <Text size="2" weight="medium">
-                  {cell}
-                </Text>
-              </Table.ColumnHeaderCell>
+              <TableHead key={index} className="whitespace-nowrap">
+                {cell}
+              </TableHead>
             ))}
             {showColTruncation && (
-              <Table.ColumnHeaderCell>
-                <Text size="2" weight="medium">
-                  ...还有{sheet.colCount - maxCols}列
-                </Text>
-              </Table.ColumnHeaderCell>
+              <TableHead className="whitespace-nowrap text-muted-foreground">
+                还有 {sheet.colCount - MAX_COLS} 列
+              </TableHead>
             )}
-          </Table.Row>
-        </Table.Header>
-        <Table.Body>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {dataRows.map((row, rowIndex) => (
-            <Table.Row key={rowIndex}>
+            <TableRow key={rowIndex}>
               {row.map((cell, cellIndex) => (
-                <Table.Cell key={cellIndex}>
-                  <Text size="2">{cell}</Text>
-                </Table.Cell>
+                <TableCell
+                  key={cellIndex}
+                  className="whitespace-nowrap tabular-nums"
+                >
+                  {cell}
+                </TableCell>
               ))}
               {showColTruncation && (
-                <Table.Cell>
-                  <Text size="2">...</Text>
-                </Table.Cell>
+                <TableCell className="text-muted-foreground">…</TableCell>
               )}
-            </Table.Row>
+            </TableRow>
           ))}
-        </Table.Body>
-      </Table.Root>
+        </TableBody>
+      </Table>
+
       {showRowTruncation && (
-        <Flex justify="center" align="center" py="2">
-          <Text size="2" weight="medium">
-            ...还有{sheet.rowCount - maxRows}行数据
-          </Text>
-        </Flex>
+        <p className="border-t px-3 py-2 text-center text-xs text-muted-foreground tabular-nums">
+          还有 {sheet.rowCount - MAX_ROWS} 行数据未显示
+        </p>
       )}
     </ScrollArea>
   )
