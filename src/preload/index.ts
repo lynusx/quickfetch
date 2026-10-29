@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-import type { CopyProgress, ElectronAPI } from '../../src/types/electron'
+import type { CopyProgress, ElectronAPI } from '../shared/ipc'
 
 const api: ElectronAPI = {
   getVersion: () => ipcRenderer.invoke('app:version'),

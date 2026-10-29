@@ -5,7 +5,7 @@ import type {
   ScanImagesParams,
   ScanImagesResult,
   ScannedImage,
-} from '../../src/types/electron'
+} from '../shared/ipc'
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif']
 

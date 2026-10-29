@@ -33,18 +33,27 @@ pnpm dist:win                 # 在 out/ 基础上打 Windows x64 NSIS 安装包
 ## 目录结构
 
 ```
-electron/
-├── main/
-│   ├── index.ts      # 窗口创建、应用生命周期
-│   ├── ipc.ts        # 文件系统相关 IPC（选目录/扫描/拷贝/写文本/另存 Excel）
-│   └── scan.ts       # 6 层目录规则扫描
-├── preload/index.ts  # contextBridge 暴露 window.electronAPI
 src/
-├── types/electron.ts # IPC 类型契约（主进程、preload、渲染层共用）
-├── hooks/            # 业务逻辑（图片拷贝、Excel 解析与导出）
-├── stores/           # zustand 状态
-└── pages/            # 路由页面（HashRouter）
+├── main/                 # 主进程
+│   ├── index.ts          # 窗口创建、应用生命周期
+│   ├── ipc.ts            # 文件系统 IPC（选目录/扫描/拷贝/写文本/另存 Excel）
+│   └── scan.ts           # 6 层目录规则扫描
+├── preload/index.ts      # contextBridge 暴露 window.electronAPI
+├── shared/ipc.ts         # 主进程 ↔ preload ↔ 渲染层共用的 IPC 类型契约
+└── renderer/             # 渲染层（React）
+    ├── index.html
+    ├── main.tsx          # HashRouter + Radix Theme 挂载
+    ├── App.tsx           # 路由表
+    ├── pages/            # 页面（图片拷贝、Excel 解析、布局）
+    ├── components/       # 可复用组件
+    ├── hooks/            # 业务逻辑
+    ├── stores/           # zustand 状态
+    ├── utils/            # 通用工具
+    ├── types/            # 渲染层类型（Excel 等）
+    └── public/img/       # 静态资源
 ```
+
+构建产物：`out/main`、`out/preload`、`out/renderer`；安装包输出到 `release/`。
 
 ## 架构约定
 

@@ -26,7 +26,7 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
-        input: resolve(rootDir, 'electron/main/index.ts'),
+        input: resolve(rootDir, 'src/main/index.ts'),
         output: nodeOutput,
       },
     },
@@ -35,15 +35,15 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
-        input: resolve(rootDir, 'electron/preload/index.ts'),
+        input: resolve(rootDir, 'src/preload/index.ts'),
         output: nodeOutput,
       },
     },
   },
   renderer: {
-    root: rootDir,
+    root: resolve(rootDir, 'src/renderer'),
     base: './',
-    publicDir: resolve(rootDir, 'public'),
+    publicDir: resolve(rootDir, 'src/renderer/public'),
     define: {
       'import.meta.env.VITE_APP_VERSION': JSON.stringify(packageJson.version),
     },
@@ -55,7 +55,7 @@ export default defineConfig({
       outDir: resolve(rootDir, 'out/renderer'),
       emptyOutDir: true,
       rollupOptions: {
-        input: resolve(rootDir, 'index.html'),
+        input: resolve(rootDir, 'src/renderer/index.html'),
         output: {
           entryFileNames: 'js/[name]-[hash].js',
           chunkFileNames: 'js/[name]-[hash].js',

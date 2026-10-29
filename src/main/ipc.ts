@@ -10,7 +10,7 @@ import type {
   DirectoryInfo,
   ScanImagesParams,
   ScanImagesResult,
-} from '../../src/types/electron'
+} from '../shared/ipc'
 
 /** 单批并发拷贝数，避免大量文件同时打开句柄 */
 const COPY_CONCURRENCY = 10

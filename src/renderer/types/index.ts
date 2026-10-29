@@ -1,4 +1,4 @@
-import type { ScannedImage } from './electron'
+import type { ScannedImage } from '../../shared/ipc'
 
 export type Image = ScannedImage
 
