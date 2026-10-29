@@ -1,0 +1,6 @@
+out
+release
+dist
+.pnpm-store
+src/renderer/components/ui
+pnpm-lock.yaml
