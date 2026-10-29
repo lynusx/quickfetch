@@ -2,12 +2,19 @@
   "name": "shx-tools",
   "private": true,
   "version": "1.7.2",
+  "description": "RCA EL 图片拷贝与 Excel 解析桌面工具",
+  "author": "lynusx",
   "type": "module",
+  "main": "out/main/index.cjs",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "predev": "node scripts/ensure-electron.cjs",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc -b",
+    "dist:win": "electron-vite build && electron-builder --win --x64",
     "lint": "eslint .",
-    "preview": "vite preview",
+    "prestart": "node scripts/ensure-electron.cjs",
+    "start": "electron-vite preview",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
     "prepare": "husky",
@@ -33,8 +40,10 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "@types/wicg-file-system-access": "^2023.10.7",
     "@vitejs/plugin-react": "^5.1.1",
+    "electron": "^45.1.0",
+    "electron-builder": "^26.18.0",
+    "electron-vite": "^6.0.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
@@ -46,5 +55,11 @@
     "typescript-eslint": "^8.48.1",
     "vite": "^7.2.6"
   },
-  "packageManager": "pnpm@10.12.3+sha512.467df2c586056165580ad6dfb54ceaad94c5a30f80893ebdec5a44c5aa73c205ae4a5bb9d5ed6bb84ea7c249ece786642bbb49d06a307df218d03da41c317417"
+  "packageManager": "pnpm@10.12.3+sha512.467df2c586056165580ad6dfb54ceaad94c5a30f80893ebdec5a44c5aa73c205ae4a5bb9d5ed6bb84ea7c249ece786642bbb49d06a307df218d03da41c317417",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  }
 }

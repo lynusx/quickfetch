@@ -72,8 +72,19 @@ export const useExcelOperations = () => {
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
       const fullFilename = `${sheet.name}分析报告_${timestamp}.xlsx`
 
-      // 导出文件
-      XLSX.writeFile(workbook, fullFilename)
+      // 生成二进制内容，交给主进程弹窗另存为
+      const workbookData = XLSX.write(workbook, {
+        bookType: 'xlsx',
+        type: 'array',
+      }) as ArrayBuffer
+
+      const savedPath = await window.electronAPI.saveExcel({
+        defaultName: fullFilename,
+        data: new Uint8Array(workbookData),
+      })
+
+      // 用户取消保存
+      if (!savedPath) return false
 
       return true
     } catch (error) {

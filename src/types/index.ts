@@ -1,7 +1,6 @@
-export interface Image {
-  path: string
-  fileHandle: FileSystemFileHandle
-}
+import type { ScannedImage } from './electron'
+
+export type Image = ScannedImage
 
 export interface ExcelFile {
   id: string

@@ -1,10 +1,7 @@
 import { useCallback } from 'react'
 
-import { copyFilesInBatches, isImage, writePathsToFile } from '../utils/common'
 import { useImageFilterStore } from '../stores/imageFilterStore'
 import { useImageStore } from '../stores/imageStore'
-
-import type { Image } from '../types'
 
 interface UseImageCopyProps {
   showToast: (
@@ -14,9 +11,16 @@ interface UseImageCopyProps {
   ) => void
 }
 
+// 主进程抛出的错误会被 Electron 加上 "Error invoking remote method ..." 前缀
+const toErrorMessage = (error: unknown, fallback: string): string => {
+  const raw = error instanceof Error ? error.message : fallback
+  const index = raw.lastIndexOf('Error: ')
+
+  return index >= 0 ? raw.slice(index + 7) : raw
+}
+
 export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
-  const { plant, dirs, date, shift, times, types, setDirs } =
-    useImageFilterStore()
+  const { plant, date, shift, times, types, setDirs } = useImageFilterStore()
   const {
     images,
     isScan,
@@ -30,161 +34,7 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
     setCopiedImageCount,
   } = useImageStore()
 
-  // 创建验证器函数数组
-  const createValidators = (
-    dirs: string[],
-    date: string,
-    shift: string,
-    times: string[],
-    types: string[],
-  ) => {
-    // 使用Set提高查找性能
-    const dirSet = new Set(dirs)
-    const timeSet = new Set(times)
-    const typeSet = new Set(types)
-
-    return [
-      // 第0层级：目录名验证
-      (name: string) => dirSet.has(name),
-
-      // 第1层级：固定值'EL'
-      (name: string) => name === 'EL',
-
-      // 第2层级：日期验证
-      (name: string) => name === date,
-
-      // 第3层级：班次验证
-      (name: string) => name === shift,
-
-      // 第4层级：时间段验证
-      (name: string) => timeSet.has(name),
-
-      // 第5层级：类型验证
-      (name: string) => typeSet.has(name),
-    ]
-  }
-
-  // 递归处理目录层级
-  const traverseDirectory = async (
-    dirHandle: FileSystemDirectoryHandle,
-    validators: ((name: string) => boolean)[],
-    options: {
-      currentDepth?: number
-      currentPath?: string
-      maxDepth?: number
-      fileCollector?: Image[]
-    } = {},
-  ): Promise<Image[]> => {
-    const {
-      currentDepth = 0,
-      currentPath = '',
-      maxDepth = validators.length,
-      fileCollector = [],
-    } = options
-
-    try {
-      // 1. 获取当前目录下的所有项
-      for await (const entry of dirHandle.values()) {
-        // 2. 如果是文件且达到最大深度，处理文件
-        if (currentDepth === maxDepth) {
-          if (entry.kind === 'file') {
-            // 检查是否为图片文件
-            if (isImage(entry)) {
-              const fullPath = `${currentPath}/${entry.name}`
-              fileCollector.push({
-                path: fullPath,
-                fileHandle: entry,
-              })
-            }
-          }
-          continue
-        }
-
-        // 3. 在非最大深度遇到文件直接跳过
-        if (entry.kind === 'file') {
-          continue
-        }
-
-        // 4. 处理目录：验证当前层级
-        if (validators[currentDepth](entry.name)) {
-          const newPath =
-            currentDepth === 0 ? entry.name : `${currentPath}/${entry.name}`
-
-          // 验证通过，递归处理子目录
-          await traverseDirectory(entry, validators, {
-            currentDepth: currentDepth + 1,
-            currentPath: newPath,
-            maxDepth,
-            fileCollector,
-          })
-        }
-      }
-    } catch (error) {
-      console.error(`扫描目录${options.currentPath}出错:`, error)
-    }
-
-    return fileCollector
-  }
-
-  // 收集符合条件的子目录
-  const collectValidSubDirectories = async (
-    rootDirHandle: FileSystemDirectoryHandle,
-    plant: string,
-  ): Promise<string[]> => {
-    const dirs: string[] = []
-
-    try {
-      const regStr = new RegExp(`^${plant}\\d+`)
-      console.log(`正在扫描 ${plant} 厂区的子目录，匹配模式: ${regStr}`)
-
-      for await (const entry of rootDirHandle.values()) {
-        if (entry.kind === 'directory' && regStr.test(entry.name)) {
-          dirs.push(entry.name)
-          console.log(`找到符合条件的目录: ${entry.name}`)
-        }
-      }
-
-      console.log(`共找到 ${dirs.length} 个符合条件的子目录:`, dirs)
-      return dirs
-    } catch (error) {
-      console.error('收集子目录时出错:', error)
-      throw new Error(`无法读取 DC 目录内容，请确保选择的是正确的 DC 目录`)
-    }
-  }
-
-  // 获取目录句柄
-  const getDirectoryHandle = async (errorMessage: string) => {
-    try {
-      return await window.showDirectoryPicker({
-        startIn: 'desktop',
-      })
-    } catch (error) {
-      throw new Error(errorMessage)
-    }
-  }
-
-  // 验证写入权限
-  const verifyWritePermission = async (
-    dirHandle: FileSystemDirectoryHandle,
-  ): Promise<void> => {
-    const permissionStatus = await dirHandle.queryPermission({
-      mode: 'readwrite',
-    })
-
-    if (permissionStatus === 'granted') {
-      return
-    }
-
-    const newPermissionStatus = await dirHandle.requestPermission({
-      mode: 'readwrite',
-    })
-
-    if (newPermissionStatus !== 'granted') {
-      throw new Error(`写入${dirHandle.name}目录权限被拒绝`)
-    }
-  }
-
-  // 扫描源目录
+  // 扫描源目录：目录校验与 6 层规则遍历全部在主进程完成
   const handleImageScan = useCallback(async () => {
     try {
       // 1. 重置状态
@@ -193,64 +43,53 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
       setError(null)
       setCopiedImageCount(0)
 
-      // 2. 获取根目录句柄
-      const rootDirHandle = await getDirectoryHandle('请选择有效目录')
+      // 2. 选择 DC 根目录
+      const root = await window.electronAPI.pickDirectory({
+        title: '请选择 DC 目录',
+      })
+
+      // 用户取消选择，直接结束
+      if (!root) return
 
       // 3. 设置扫描状态
       setIsScan(true)
       showToast('扫描开始', '正在扫描文件...', 'info')
 
-      // 4. 验证目录名称
-      if (rootDirHandle.name !== 'DC') {
-        throw new Error('请选择名为 DC 的目录')
-      }
+      // 4. 主进程扫描（含目录名校验）
+      const { dirs, images: scannedImages } =
+        await window.electronAPI.scanImages({
+          rootPath: root.path,
+          plant,
+          date,
+          shift,
+          times,
+          types,
+        })
 
-      // 5. 收集符合条件的子目录
-      const validDirs = await collectValidSubDirectories(rootDirHandle, plant)
-
-      if (validDirs.length === 0) {
-        throw new Error(`DC 目录下未找到 ${plant} 厂区的目录，请检查目录结构`)
-      }
-
-      setDirs(validDirs)
-      console.log(`将使用以下目录进行扫描:`, validDirs)
-
-      // 6. 创建验证器（使用刚收集到的 validDirs，而非 store 中的 dirs）
-      const validators = createValidators(validDirs, date, shift, times, types)
-      console.log('验证器参数:', { validDirs, date, shift, times, types })
-
-      // 7. 遍历目录并收集文件
-      const scannedFiles = await traverseDirectory(rootDirHandle, validators)
-
-      // 8. 验证是否找到文件
-      if (!scannedFiles.length) {
-        throw new Error('未找到符合条件的文件')
-      }
-
-      // 9. 更新状态并显示结果
-      setImages(scannedFiles)
-      showToast('扫描完成', `共找到 ${scannedFiles.length} 张图片`, 'success')
+      // 5. 更新状态并显示结果
+      setDirs(dirs)
+      setImages(scannedImages)
+      showToast('扫描完成', `共找到 ${scannedImages.length} 张图片`, 'success')
     } catch (error) {
-      // 10. 错误处理
-      const err =
-        error instanceof Error ? error : new Error('扫描过程中发生未知错误')
+      const message = toErrorMessage(error, '扫描过程中发生未知错误')
 
       setIsError(true)
-      setError(err)
-      showToast('扫描失败', err.message, 'error')
-      console.error('扫描出错:', err.message)
+      setError(new Error(message))
+      showToast('扫描失败', message, 'error')
+      console.error('扫描出错:', message)
     } finally {
-      // 11. 结束扫描状态
       setIsScan(false)
     }
-  }, [plant, date, shift, times, types])
+  }, [plant, date, shift, times, types, setDirs, setImages, setError])
 
-  // 复制文件
+  // 复制文件到目标目录
   const handleImageCopy = useCallback(async () => {
     if (!images.length) {
       showToast('操作提示', '请先扫描文件', 'info')
       return
     }
+
+    let unsubscribe: (() => void) | undefined
 
     try {
       // 1. 重置状态
@@ -258,51 +97,55 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
       setError(null)
       setIsError(false)
 
-      // 2. 获取目标目录句柄
-      const targetDirHandle = await getDirectoryHandle('请选择有效目录')
+      // 2. 选择目标目录
+      const target = await window.electronAPI.pickDirectory({
+        title: '请选择目标目录',
+      })
 
-      // 3. 验证写入权限
-      await verifyWritePermission(targetDirHandle)
+      if (!target) return
 
-      // 4. 显示开始提示
+      // 3. 订阅主进程拷贝进度
+      unsubscribe = window.electronAPI.onCopyProgress(({ copied }) => {
+        setCopiedImageCount(copied)
+      })
+
       setIsCopy(true)
       showToast('复制开始', '正在复制文件...', 'info')
 
-      // 5. 写入路径到文件
-      await writePathsToFile(
-        targetDirHandle,
-        images.map((img) => img.path),
-        'source.txt',
-      )
+      // 4. 写入路径清单
+      await window.electronAPI.writeTextFile({
+        dir: target.path,
+        filename: 'source.txt',
+        lines: images.map((img) => img.path),
+      })
 
-      // 6. 批量复制文件
-      await copyFilesInBatches(
-        images.map((img) => img.fileHandle),
-        targetDirHandle,
-        {
-          batchSize: 10,
-          onProgress: (copiedCount) => setCopiedImageCount(copiedCount),
-          onError: (error, file) => {
-            console.error(`${file.name}复制出错: ${error.message}`)
-          },
-        },
-      )
+      // 5. 批量复制
+      const result = await window.electronAPI.copyImages({
+        files: images.map((img) => img.absolutePath),
+        targetDir: target.path,
+      })
 
-      // 7. 显示成功提示
-      showToast('复制完成', `已成功复制 ${copiedImageCount} 张图片`, 'success')
+      // 6. 结果提示
+      if (result.failed.length) {
+        showToast(
+          '复制完成',
+          `成功 ${result.copied} 张，失败 ${result.failed.length} 张`,
+          'error',
+        )
+      } else {
+        showToast('复制完成', `已成功复制 ${result.copied} 张图片`, 'success')
+      }
     } catch (error) {
-      // 8. 错误处理
-      const err =
-        error instanceof Error ? error : new Error('复制过程中发生未知错误')
+      const message = toErrorMessage(error, '复制过程中发生未知错误')
 
       setIsError(true)
-      setError(err)
-      showToast('复制失败', err.message, 'error')
+      setError(new Error(message))
+      showToast('复制失败', message, 'error')
     } finally {
-      // 9. 结束复制状态
+      unsubscribe?.()
       setIsCopy(false)
     }
-  }, [images, copiedImageCount])
+  }, [images, setCopiedImageCount, setError])
 
   // 计算复制进度百分比
   const getCopyProgress = () => {
