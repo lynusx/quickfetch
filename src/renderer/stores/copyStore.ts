@@ -1,7 +1,12 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 
-import type { CopyLayout, CopyPlanPreview, CopyTask } from '../../shared/ipc'
+import type {
+  CopyConflictPolicy,
+  CopyLayout,
+  CopyPlanPreview,
+  CopyTask,
+} from '../../shared/ipc'
 
 /**
  * 复制任务的界面状态。
@@ -17,6 +22,8 @@ interface CopyState {
   /** 勾选要复制的机台；空数组表示全选 */
   machines: string[]
   layout: CopyLayout
+  /** 目标目录已有同名文件时的处理方式 */
+  conflict: CopyConflictPolicy
 
   /** 已选目标目录，未选时为空 */
   targetDir: string
@@ -41,6 +48,7 @@ interface CopyAction {
   setMachines: (machines: string[]) => void
   toggleMachine: (machine: string) => void
   setLayout: (layout: CopyLayout) => void
+  setConflict: (conflict: CopyConflictPolicy) => void
   setTarget: (dir: string, name: string) => void
   clearTarget: () => void
   setPreview: (preview: CopyPlanPreview | null) => void
@@ -56,6 +64,7 @@ const initial = {
   task: null,
   machines: [],
   layout: 'machine' as CopyLayout,
+  conflict: 'rename' as CopyConflictPolicy,
   targetDir: '',
   targetName: '',
   preview: null,
@@ -80,6 +89,7 @@ export const useCopyStore = create<CopyState & CopyAction>()(
           : [...state.machines, machine],
       })),
     setLayout: (layout) => set({ layout }),
+    setConflict: (conflict) => set({ conflict }),
     setTarget: (dir, name) => set({ targetDir: dir, targetName: name }),
     clearTarget: () => set({ targetDir: '', targetName: '' }),
     setPreview: (preview) => set({ preview }),
@@ -88,14 +98,20 @@ export const useCopyStore = create<CopyState & CopyAction>()(
     setError: (error) => set({ error }),
     setShowFailures: (show) => set({ showFailures: show }),
 
-    // 勾选的机台与目标目录保留：换一个扫描任务后用户往往还是要复制到同一个盘
+    /**
+     * 换任务时重置。
+     *
+     * 目标目录保留：用户连续复制几个任务到同一个盘是常态，每次都重选很烦。
+     * 机台勾选必须清空：上一个任务勾的机台在新任务里可能一张图都没有，
+     * 留着会让「已选 3/6 台 · 0 张」这种看不懂的状态出现。
+     */
     reset: () =>
       set((state) => ({
         ...initial,
-        machines: state.machines.filter(Boolean),
         targetDir: state.targetDir,
         targetName: state.targetName,
         layout: state.layout,
+        conflict: state.conflict,
       })),
   })),
 )

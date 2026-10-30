@@ -100,8 +100,3 @@ export const getTask = (id: string): ScanTask | null =>
 
 export const getRunner = (id: string): ScanTaskRunner | null =>
   tasks.get(id) ?? null
-
-export const listTasks = (): ScanTask[] =>
-  [...tasks.values()]
-    .map((runner) => runner.snapshot())
-    .sort((a, b) => b.createdAt - a.createdAt)

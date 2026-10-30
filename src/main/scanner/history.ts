@@ -5,7 +5,6 @@ import {
   readdir,
   rename,
   rm,
-  stat,
   writeFile,
 } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -66,7 +65,8 @@ const isRecord = (value: unknown): value is HistoryRecord => {
  * 落盘一次扫描结果。
  *
  * 只保存已结束的任务，且必须扫到过图片或已有明确诊断结论 ——
- * 中途取消且一张没扫到、也没有诊断信息的任务存下来只是噪音。
+ * 中途取消且一张没扫到、也没有诊断信息的任务存下来只是噪音，
+ * 用户点进去看到空列表，反而以为历史坏了。
  */
 export const saveRecord = async (
   task: ScanTask,
@@ -74,6 +74,13 @@ export const saveRecord = async (
 ): Promise<void> => {
   if (task.status === 'pending' || task.status === 'running') return
   if (task.status === 'paused') return
+
+  // 「有诊断」只认真正读过目录的分支：断链会给 missing/unreachable，
+  // 读到了内容会给 empty/hit。仍是 skipped 说明这个机台根本没轮到，
+  // 不能算作有效结论，否则取消瞬间的空任务也会被当成有信息存下来。
+  const diagnosed = task.branches.some((branch) => branch.status !== 'skipped')
+
+  if (!images.length && !diagnosed) return
 
   const record: HistoryRecord = {
     version: RECORD_VERSION,
@@ -222,29 +229,6 @@ export const trimRecords = async (limit: number): Promise<void> => {
   const overflow = records.slice(normalizeHistoryLimit(limit))
 
   await Promise.all(overflow.map((record) => deleteRecord(record.id)))
-}
-
-/** 历史记录占用空间，用于在界面提示；不算时返回 0 */
-export const historySize = async (): Promise<number> => {
-  let names: string[]
-
-  try {
-    names = await readdir(toFsPath(historyDir()))
-  } catch {
-    return 0
-  }
-
-  let total = 0
-
-  for (const name of names) {
-    try {
-      total += (await stat(toFsPath(join(historyDir(), name)))).size
-    } catch {
-      // 文件在统计过程中被删，忽略
-    }
-  }
-
-  return total
 }
 
 export type { HistoryRecord }

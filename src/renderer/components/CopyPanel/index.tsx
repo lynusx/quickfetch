@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   CheckCircle2,
   CircleAlert,
@@ -15,12 +15,24 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { useImageCopy } from '@/hooks/useImageCopy'
 import { useCopyStore } from '@/stores/copyStore'
-import type { CopyLayout, CopyStatus } from '../../../shared/ipc'
-import { COPY_LAYOUT_LABEL } from '../../../shared/ipc'
+import type {
+  CopyConflictPolicy,
+  CopyLayout,
+  CopyStatus,
+} from '../../../shared/ipc'
+import { COPY_CONFLICT_LABEL, COPY_LAYOUT_LABEL } from '../../../shared/ipc'
 import { formatDuration, formatEta } from '@/utils/common'
 import { cn } from '@/lib/utils'
 
@@ -48,6 +60,14 @@ const LAYOUT_HINT: Record<CopyLayout, string> = {
   type: '目标目录/NG_脏污_B/图片',
   'machine-type': '目标目录/A01-A/NG_脏污_B/图片',
 }
+
+const CONFLICT_HINT: Record<CopyConflictPolicy, string> = {
+  rename: '重名加数字：img1.jpg',
+  skip: '已有同名就不复制',
+  overwrite: '覆盖目标，不可撤销',
+}
+
+const CONFLICTS: CopyConflictPolicy[] = ['rename', 'skip', 'overwrite']
 
 interface CopyPanelProps {
   showToast: (
@@ -88,13 +108,18 @@ const CopyPanel = ({ showToast }: CopyPanelProps) => {
 
   const machines = useCopyStore((state) => state.machines)
   const layout = useCopyStore((state) => state.layout)
+  const conflict = useCopyStore((state) => state.conflict)
   const showFailures = useCopyStore((state) => state.showFailures)
   const toggleMachine = useCopyStore((state) => state.toggleMachine)
   const setMachines = useCopyStore((state) => state.setMachines)
   const setLayout = useCopyStore((state) => state.setLayout)
+  const setConflict = useCopyStore((state) => state.setConflict)
   const setShowFailures = useCopyStore((state) => state.setShowFailures)
 
   const task = useCopyStore((state) => state.task)
+
+  /** 覆盖策略下的确认弹窗；确认后才真正开始 */
+  const [confirmOverwrite, setConfirmOverwrite] = useState(false)
 
   const allPicked = machines.length === 0
   const meta = task ? STATUS_META[task.status] : null
@@ -310,14 +335,70 @@ const CopyPanel = ({ showToast }: CopyPanelProps) => {
                 {preview.folders.length > 3 ? '…' : ''}）
               </span>
             )}
+            {preview.conflicts > 0 && (
+              <span
+                className={cn(
+                  'ml-1 font-medium',
+                  conflict === 'overwrite'
+                    ? 'text-destructive'
+                    : 'text-amber-600 dark:text-amber-500',
+                )}
+              >
+                · 其中 {preview.conflicts} 张目标已存在，将
+                {COPY_CONFLICT_LABEL[conflict]}
+              </span>
+            )}
           </p>
         )}
+      </div>
+
+      <Separator />
+
+      {/* ---------------------------------------------------------- 重名策略 */}
+      <div className="flex flex-col gap-2">
+        <span className="text-sm font-medium">重名文件</span>
+
+        <div className="grid grid-cols-3 gap-2">
+          {CONFLICTS.map((value) => (
+            <button
+              key={value}
+              type="button"
+              disabled={running || paused}
+              onClick={() => setConflict(value)}
+              className={cn(
+                'flex flex-col gap-0.5 rounded-lg border px-2 py-2 text-left text-xs transition-colors',
+                conflict === value
+                  ? value === 'overwrite'
+                    ? 'border-destructive bg-destructive/5'
+                    : 'border-primary bg-primary/5'
+                  : 'hover:bg-muted/60',
+                (running || paused) && 'cursor-not-allowed opacity-60',
+              )}
+            >
+              <span className="font-medium">{COPY_CONFLICT_LABEL[value]}</span>
+              <span className="whitespace-nowrap text-[10px] leading-tight text-muted-foreground">
+                {CONFLICT_HINT[value]}
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ---------------------------------------------------------- 控制按钮 */}
       <div className="flex flex-wrap items-center gap-2">
         {!running && !paused ? (
-          <Button onClick={() => void handleStart()} disabled={!canCopy}>
+          <Button
+            onClick={() => {
+              // 覆盖会不可逆地改掉已有文件，先让用户看清会覆盖多少张
+              if (conflict === 'overwrite' && (preview?.conflicts ?? 0) > 0) {
+                setConfirmOverwrite(true)
+                return
+              }
+
+              void handleStart()
+            }}
+            disabled={!canCopy}
+          >
             {busy ? (
               <Loader2 className="animate-spin" data-icon="inline-start" />
             ) : (
@@ -387,6 +468,7 @@ const CopyPanel = ({ showToast }: CopyPanelProps) => {
             </span>
             <span className="tabular-nums text-muted-foreground">
               {task.progress.copied} / {task.progress.total} 张
+              {task.progress.skipped > 0 && ` · 跳过 ${task.progress.skipped}`}
               {task.progress.failed > 0 && ` · 失败 ${task.progress.failed}`}
               {task.progress.renamed > 0 && ` · 改名 ${task.progress.renamed}`}
             </span>
@@ -461,6 +543,39 @@ const CopyPanel = ({ showToast }: CopyPanelProps) => {
           )}
         </div>
       )}
+
+      <Dialog open={confirmOverwrite} onOpenChange={setConfirmOverwrite}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认覆盖已有文件？</DialogTitle>
+            <DialogDescription>
+              目标目录里已经存在 {preview?.conflicts ?? 0} 个同名文件，
+              继续会用源文件覆盖它们，覆盖后无法撤销。
+            </DialogDescription>
+          </DialogHeader>
+          <p className="truncate rounded-md bg-muted px-3 py-2 font-mono text-xs text-muted-foreground">
+            {activeDir}
+          </p>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmOverwrite(false)}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={busy}
+              onClick={() => {
+                setConfirmOverwrite(false)
+                void handleStart()
+              }}
+            >
+              确认覆盖
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

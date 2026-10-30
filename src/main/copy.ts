@@ -11,6 +11,8 @@ import type {
   ScannedImage,
 } from '../shared/ipc'
 
+import { createAdaptiveGate } from './adaptive'
+import type { AdaptiveGate } from './adaptive'
 import { toFsPath } from './pathx'
 
 /**
@@ -42,21 +44,55 @@ const isAbortError = (error: unknown): boolean =>
   error instanceof Error && error.name === 'AbortError'
 
 /**
- * 生成不冲突的目标文件名。
- * Windows 文件名大小写不敏感，比较统一转小写，避免 a.jpg 与 A.jpg 互相覆盖。
+ * 把文件名拆成「主名 + 末尾数字 + 扩展名」，用于数字自增。
+ *
+ * img.jpg      → { base: 'img',   index: null }
+ * img1.jpg     → { base: 'img',   index: 1 }
+ * shot_007.jpg → { base: 'shot_', index: 7 }  → 007 补零宽度保留
  */
-const uniqueName = (name: string, taken: Set<string>): string => {
+const splitIndex = (
+  name: string,
+): { base: string; index: number | null; width: number; ext: string } => {
+  const ext = extname(name)
+  const stem = basename(name, ext)
+  const match = stem.match(/^(.*?)(\d+)$/)
+
+  if (!match) return { base: stem, index: null, width: 0, ext }
+
+  const digits = match[2]
+
+  return {
+    base: match[1],
+    index: Number.parseInt(digits, 10),
+    width: digits.length,
+    ext,
+  }
+}
+
+/**
+ * 生成不冲突的目标文件名：纯数字自增，直接拼在主名后面。
+ *
+ * img.jpg → img1.jpg → img2.jpg
+ * img1.jpg 重名 → img2.jpg（拆开已有数字递增，不会得到 img11.jpg）
+ *
+ * Windows 文件名大小写不敏感，比较统一转小写，避免 a.jpg 与 A.jpg 互相覆盖。
+ * 刻意不识别旧版本生成的「img (2).jpg」——跨版本重跑时它会当成另一个文件。
+ */
+const indexedName = (name: string, taken: Set<string>): string => {
   if (!taken.has(name.toLowerCase())) return name
 
-  const ext = extname(name)
-  const base = basename(name, ext)
+  const { base, index, width, ext } = splitIndex(name)
+  const start = (index ?? 0) + 1
 
-  for (let index = 2; index < 10_000; index += 1) {
-    const candidate = `${base} (${index})${ext}`
+  for (let next = start; next < start + 100_000; next += 1) {
+    const digits = width > 1 ? String(next).padStart(width, '0') : String(next)
+    const candidate = `${base}${digits}${ext}`
+
     if (!taken.has(candidate.toLowerCase())) return candidate
   }
 
-  return `${base}-${Date.now()}${ext}`
+  // 极端情况（同名上万份）：退回时间戳，绝不覆盖已有文件
+  return `${base}${Date.now()}${ext}`
 }
 
 const segmentsOf = (image: ScannedImage): string[] =>
@@ -110,10 +146,11 @@ const compareName = (a: string, b: string): number =>
   a.localeCompare(b, 'zh-CN', { numeric: true })
 
 /** 预检查：让界面在选目录前就能告诉用户会复制多少、建几个文件夹 */
-export const planPreview = (
+export const planPreview = async (
   images: ScannedImage[],
   params: CopyTaskParams,
-): CopyPlanPreview => {
+  targetDir?: string,
+): Promise<CopyPlanPreview> => {
   const picked = filterByMachines(images, params.machines)
   const perMachine = new Map<string, number>()
   const folders = new Set<string>()
@@ -126,6 +163,11 @@ export const planPreview = (
     if (segments.length) folders.add(segments.join('/'))
   }
 
+  // 只有已经选好目录才可能算冲突数；没选目录时分组子目录还不存在
+  const conflicts = targetDir
+    ? await countConflicts(picked, params, targetDir)
+    : 0
+
   return {
     machines: [...perMachine.keys()].sort(compareName),
     total: picked.length,
@@ -133,8 +175,69 @@ export const planPreview = (
       .map(([machine, images]) => ({ machine, images }))
       .sort((a, b) => compareName(a.machine, b.machine)),
     folders: [...folders].sort(compareName),
+    conflicts,
   }
 }
+
+/**
+ * 预演一遍重名冲突：按目标目录统计会被改名 / 跳过 / 覆盖的张数。
+ *
+ * 与 buildPlan 用同一套占用名单逻辑，保证预览数字和实际执行一致 ——
+ * 两处各写一套的话，界面说「1 张会改名」而实际改了 3 张，比不提示更糟。
+ */
+/**
+ * 预演一遍重名冲突：统计目标目录里**已经真实存在**同名文件的张数。
+ *
+ * 刻意不把「同一批里两张图同名」算进来 —— 那是源目录里的重名，
+ * 用户在扫描结果里就能看到，提示「目标已存在」会让人误以为盘上已有文件。
+ */
+const countConflicts = async (
+  images: ScannedImage[],
+  params: CopyTaskParams,
+  targetDir: string,
+): Promise<number> => {
+  const takenByDir = new Map<string, Set<string>>()
+  let conflicts = 0
+
+  for (const image of images) {
+    const folder = folderOf(image, params.layout)
+    const dir = folder.length ? join(targetDir, ...folder) : targetDir
+    const taken = await namesIn(dir, takenByDir)
+
+    if (taken.has(image.name.toLowerCase())) conflicts += 1
+  }
+
+  return conflicts
+}
+
+/** 取某目录的已占用名单，同一目录只读一次 */
+const namesIn = async (
+  dir: string,
+  cache: Map<string, Set<string>>,
+): Promise<Set<string>> => {
+  const cached = cache.get(dir)
+
+  if (cached) return cached
+
+  const names = await existingNames(dir)
+  cache.set(dir, names)
+
+  return names
+}
+
+/** 读目标目录已有文件名；分组子目录还不存在时视为空 */
+const existingNames = async (dir: string): Promise<Set<string>> => {
+  try {
+    const entries = await readdir(toFsPath(dir))
+
+    return new Set(entries.map((name) => name.toLowerCase()))
+  } catch {
+    return new Set()
+  }
+}
+
+/** 单个待复制项的执行意图 */
+type PlanAction = 'copy' | 'skip'
 
 interface PlanItem {
   image: ScannedImage
@@ -143,6 +246,7 @@ interface PlanItem {
   from: string
   to: string
   renamed: boolean
+  action: PlanAction
 }
 
 export interface CopyRunnerOptions {
@@ -170,8 +274,10 @@ export class CopyTaskRunner {
 
   private readonly source: ScannedImage[]
   private readonly emit: (task: CopyTask) => void
-  private readonly concurrency: number
+  private concurrency: number
   private readonly batchSize: number
+  /** 失败率采样器，与扫描共用同一套降档逻辑 */
+  private readonly gate: AdaptiveGate
 
   private status: CopyTask['status'] = 'pending'
   private error: string | null = null
@@ -181,6 +287,7 @@ export class CopyTaskRunner {
   private cursor = 0
   private copied = 0
   private renamed = 0
+  private skipped = 0
   private failures: CopyFailure[] = []
   private currentPath = ''
   private startedAt: number | null = null
@@ -211,6 +318,20 @@ export class CopyTaskRunner {
       1,
       Math.floor(options.load?.batchSize ?? DEFAULT_COPY_BATCH_SIZE),
     )
+
+    this.gate = createAdaptiveGate({
+      initial: this.concurrency,
+      min: 1,
+      onChange: (concurrency, ratio) => {
+        this.concurrency = concurrency
+
+        console.warn(
+          `复制失败率 ${(ratio * 100).toFixed(0)}%，并发降至 ${concurrency}`,
+        )
+
+        this.touch('', true)
+      },
+    })
 
     this.settled = new Promise<void>((resolve) => {
       this.markSettled = resolve
@@ -283,10 +404,12 @@ export class CopyTaskRunner {
       from: failure.from,
       to: failure.to,
       renamed: false,
+      action: 'copy',
     }))
     this.cursor = 0
     this.copied = 0
     this.renamed = 0
+    this.skipped = 0
     this.failures = []
     this.finishedAt = null
     this.error = null
@@ -315,6 +438,7 @@ export class CopyTaskRunner {
     this.cursor = 0
     this.copied = 0
     this.renamed = 0
+    this.skipped = 0
     this.failures = []
     this.error = null
     this.manifestPath = null
@@ -340,10 +464,6 @@ export class CopyTaskRunner {
       failures: this.failures.slice(0, 200),
       manifestPath: this.manifestPath,
     }
-  }
-
-  getFailures(): CopyFailure[] {
-    return this.failures
   }
 
   isFinal(): boolean {
@@ -383,6 +503,8 @@ export class CopyTaskRunner {
       targetDir: this.targetDir,
       layout: this.params.layout,
       renamed: this.renamed,
+      skipped: this.skipped,
+      conflict: this.params.conflict ?? 'rename',
       currentPath: this.currentPath,
       startedAt: this.startedAt,
       finishedAt: this.finishedAt,
@@ -434,9 +556,10 @@ export class CopyTaskRunner {
     this.markSettled()
   }
 
-  /** 规划目标路径：按布局建子目录，逐个解决同名冲突 */
+  /** 规划目标路径：按布局建子目录，按重名策略决定改名 / 跳过 / 覆盖 */
   private async buildPlan(): Promise<void> {
     const picked = filterByMachines(this.source, this.params.machines)
+    const conflict = this.params.conflict ?? 'rename'
 
     // 每个目标目录一份已占用名单，跨批累积，保证同次任务内不重名
     const taken = new Map<string, Set<string>>()
@@ -447,14 +570,23 @@ export class CopyTaskRunner {
         ? join(this.targetDir, ...folder)
         : this.targetDir
 
-      let names = taken.get(dir)
+      const names = await namesIn(dir, taken)
+      const exists = names.has(image.name.toLowerCase())
 
-      if (!names) {
-        names = await this.existingNames(dir)
-        taken.set(dir, names)
+      // 三种策略只在「目标已存在」时才有区别，否则一律原样复制
+      let target = image.name
+      let action: PlanAction = 'copy'
+
+      if (exists) {
+        if (conflict === 'skip') {
+          action = 'skip'
+        } else if (conflict === 'overwrite') {
+          target = image.name
+        } else {
+          target = indexedName(image.name, names)
+        }
       }
 
-      const target = uniqueName(image.name, names)
       names.add(target.toLowerCase())
 
       this.plan.push({
@@ -463,18 +595,8 @@ export class CopyTaskRunner {
         from: image.absolutePath,
         to: join(dir, target),
         renamed: target !== image.name,
+        action,
       })
-    }
-  }
-
-  /** 读目标目录已有文件名；分组子目录还不存在时视为空 */
-  private async existingNames(dir: string): Promise<Set<string>> {
-    try {
-      const entries = await readdir(toFsPath(dir))
-
-      return new Set(entries.map((name) => name.toLowerCase()))
-    } catch {
-      return new Set()
     }
   }
 
@@ -535,6 +657,15 @@ export class CopyTaskRunner {
   private async copyOne(item: PlanItem): Promise<void> {
     await this.checkpoint()
 
+    // 跳过项不碰磁盘，直接计数
+    if (item.action === 'skip') {
+      this.skipped += 1
+      this.gate.sample(false)
+      this.touch(item.to)
+
+      return
+    }
+
     this.currentPath = item.to
 
     try {
@@ -542,6 +673,7 @@ export class CopyTaskRunner {
 
       this.copied += 1
       if (item.renamed) this.renamed += 1
+      this.gate.sample(false)
     } catch (error) {
       // 源文件被占用、权限不足、磁盘满等：记录后继续，不中断整批；
       // 但取消要立刻传播，不能被当成普通失败吞掉
@@ -553,6 +685,9 @@ export class CopyTaskRunner {
         to: item.to,
         reason: (error as Error)?.message ?? '未知错误',
       })
+
+      // 失败率过高时降档：共享盘抖动下越并发越糟
+      this.gate.sample(true)
     } finally {
       this.touch(item.to)
     }

@@ -94,6 +94,16 @@ const HistoryPanel = ({
     clear,
     setLoadingTask,
   } = useHistoryStore()
+
+  /**
+   * 隐藏「一张图都没有」的记录。
+   *
+   * 老版本会把取消时什么都没扫到的任务也存下来，点进去是个空列表，
+   * 用户会以为功能坏了。新版本不再写这类记录，这里再兜一层，
+   * 让已经存在磁盘上的旧条目也不出现在列表里。
+   */
+  const visible = items.filter((item) => item.totalImages > 0)
+
   const [open, setOpen] = useState(false)
   const [draftLimit, setDraftLimit] = useState(String(limit))
 
@@ -163,7 +173,7 @@ const HistoryPanel = ({
           </CardTitle>
           <CardAction className="flex items-center gap-2">
             <span className="text-xs tabular-nums text-muted-foreground">
-              {items.length} / {limit}
+              {visible.length} / {limit}
             </span>
             <CollapsibleTrigger asChild>
               <Button variant="ghost" size="sm">
@@ -197,7 +207,7 @@ const HistoryPanel = ({
                 每次扫描结束后自动保存结果，含全部图片路径，可恢复查看或再次复制。
                 超出条数的旧记录会被自动删除。
               </p>
-              {items.length > 0 && (
+              {visible.length > 0 && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -218,15 +228,15 @@ const HistoryPanel = ({
               </p>
             )}
 
-            {!loading && items.length === 0 && (
+            {!loading && visible.length === 0 && (
               <p className="py-4 text-center text-xs text-muted-foreground">
                 还没有历史记录，完成一次扫描后会自动出现在这里
               </p>
             )}
 
-            {!loading && items.length > 0 && (
+            {!loading && visible.length > 0 && (
               <div className="flex max-h-72 flex-col overflow-y-auto rounded-lg border">
-                {items.map((item) => {
+                {visible.map((item) => {
                   const meta = STATUS_META[item.status]
                   const busy = loadingTaskId === item.id
 

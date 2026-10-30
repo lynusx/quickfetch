@@ -9,6 +9,8 @@ import type {
   ScannedImage,
 } from '../../shared/ipc'
 
+import { timeoutForConcurrency, createAdaptiveGate } from '../adaptive'
+import type { AdaptiveGate } from '../adaptive'
 import { isNetworkError, probePath, readDirSafe } from './fsx'
 import type { DirReadResult } from './fsx'
 import { createLimiter } from './limiter'
@@ -57,12 +59,6 @@ const relativeSegments = (root: string, full: string): string[] =>
     .split(/[\\/]+/)
     .filter(Boolean)
 
-/** 自适应降档的采样窗口：每读够这么多个目录就看一眼失败率 */
-const ADAPT_WINDOW = 20
-
-/** 窗口内不可达占比超过该值就降档 */
-const ADAPT_FAIL_RATIO = 0.25
-
 /** 并发档位上下限 */
 const MIN_CONCURRENCY = 1
 const MAX_CONCURRENCY = 8
@@ -75,17 +71,13 @@ export const MAX_TIMEOUT_MS = 20_000
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, Math.round(value)))
 
-/**
- * 并发越低，单次读取的容忍时间越短。
- * 并发 4 时给满 20 秒；降到 1 时只给 8 秒 —— 网络真断了就该尽快失败，
- * 而不是每读一个目录都空等 20 秒。
- */
+/** 并发 4 时给满 20 秒；降到 1 时只给 8 秒，网络真断了就该尽快失败 */
 const timeoutFor = (concurrency: number): number =>
-  Math.round(
-    MIN_TIMEOUT_MS +
-      ((concurrency - MIN_CONCURRENCY) /
-        (DEFAULT_READ_CONCURRENCY - MIN_CONCURRENCY || 1)) *
-        (MAX_TIMEOUT_MS - MIN_TIMEOUT_MS),
+  timeoutForConcurrency(
+    concurrency,
+    DEFAULT_READ_CONCURRENCY,
+    MIN_TIMEOUT_MS,
+    MAX_TIMEOUT_MS,
   )
 
 const isImageFile = (name: string): boolean => {
@@ -200,9 +192,8 @@ export class ScanTaskRunner {
   private limiter: Limiter | null = null
   /** 每批并行处理的机台数，构造后固定 */
   private batchSize = DEFAULT_MACHINE_BATCH_SIZE
-  /** 本窗口内的读取失败计数，用于自适应降档 */
-  private windowReads = 0
-  private windowFailures = 0
+  /** 失败率采样器，与复制任务共用同一套降档逻辑 */
+  private readonly gate: AdaptiveGate
   /** 已探测完但文件明细还没读的目录，分批清尾用 */
   private readonly pendingDetails: { dir: string; machine: string }[] = []
   /** 逐目录明细阶段计入的总数与已完成数，用于收尾阶段进度 */
@@ -246,6 +237,22 @@ export class ScanTaskRunner {
       MAX_BATCH_SIZE,
     )
     this.timeoutMs = timeoutFor(this.readConcurrency)
+    this.gate = createAdaptiveGate({
+      initial: this.readConcurrency,
+      min: MIN_CONCURRENCY,
+      onChange: (concurrency, ratio) => {
+        this.readConcurrency = concurrency
+        this.timeoutMs = timeoutFor(concurrency)
+        this.progress.concurrency = concurrency
+        this.limiter?.setConcurrency(concurrency)
+
+        console.warn(
+          `读取失败率 ${(ratio * 100).toFixed(0)}%，并发降至 ${concurrency}，超时 ${this.timeoutMs} 毫秒`,
+        )
+
+        this.touch('', true)
+      },
+    })
 
     this.progress.concurrency = this.readConcurrency
     this.progress.batchTotal = Math.max(
@@ -547,18 +554,17 @@ export class ScanTaskRunner {
     //
     // 注意不要在已占用闸门名额的任务里再嵌套 limiter() 调用：
     // 并发为 1 时外层任务拿着唯一名额等内层，内层在等名额，直接死锁。
-    // 所以先用 limiter 把所有时段的读取各占一个名额并发跑完，
-    // 再在主流程里串行处理结果 —— 结果处理是纯内存操作，不需要并发。
-    const slotReads = await Promise.all(
-      hitSlots.map((slot) =>
-        limiter(async () => {
-          await this.checkpoint()
-          return { slot, result: await this.read(join(shiftDir, slot)) }
-        }),
-      ),
-    )
+    //
+    // 也不用 Promise.all(hitSlots.map(limiter))：那会把整个时段列表一次性
+    // 全塞进 limiter 队列，取消后已排队的请求仍会被逐个放行，
+    // 用户看到「已取消」但目录数还在涨。改成逐项申请、逐项处理，
+    // 每次申请前先过 checkpoint，取消后就地停下。
+    for (const slot of hitSlots) {
+      const slotRead = await limiter(async () => {
+        await this.checkpoint()
+        return this.read(join(shiftDir, slot))
+      })
 
-    for (const { slot, result: slotRead } of slotReads) {
       const slotDir = join(shiftDir, slot)
 
       if (slotRead.status !== 'ok') {
@@ -616,55 +622,27 @@ export class ScanTaskRunner {
 
     const queue = this.pendingDetails.splice(0)
 
-    await Promise.all(
-      queue.map((item) =>
-        limiter(async () => {
-          await this.checkpoint()
+    // 不用 Promise.all(queue.map(...))：那样会把整个队列一次性派发下去，
+    // 取消后已排队的读取仍会全部跑完，用户看到的「取消」要等几十秒才生效。
+    // 改成 N 条泳道各自领活，每条泳道在领活前过 checkpoint，
+    // 取消时立刻停下，只有正在读的那几个目录会自然收尾。
+    let next = 0
+    const lanes = Math.max(1, Math.min(this.readConcurrency, queue.length))
 
-          const machine = item.machine
-          const branch = this.branches.find(
-            (entry) => entry.machine === machine,
-          )
-          const typeRead = await this.read(item.dir)
+    const worker = async (): Promise<void> => {
+      while (next < queue.length) {
+        await this.checkpoint()
 
-          this.detailDone += 1
-          this.progress.detailDone = this.detailDone
-          this.progress.detailsPending = queue.length - this.detailDone
+        if (this.abortController.signal.aborted) return
 
-          if (!branch) return
+        const index = next
+        next += 1
 
-          if (typeRead.status !== 'ok') {
-            this.progress.dirsSkipped += 1
-            return
-          }
+        await limiter(() => this.readDetail(queue[index]))
+      }
+    }
 
-          const images = typeRead.files.filter(isImageFile)
-
-          if (!images.length) {
-            branch.status = branch.status === 'hit' ? 'hit' : 'empty'
-            return
-          }
-
-          branch.matchedDirs += 1
-          branch.images += images.length
-          branch.status = 'hit'
-          this.progress.dirsHit += 1
-
-          const segments = relativeSegments(this.context.rootPath, item.dir)
-
-          for (const name of images) {
-            this.images.push({
-              path: [...segments, name].join('/'),
-              absolutePath: join(item.dir, name),
-              name,
-            })
-          }
-
-          this.progress.images = this.images.length
-          this.touch(item.dir)
-        }),
-      ),
-    )
+    await Promise.all(Array.from({ length: lanes }, worker))
 
     for (const branch of this.branches) {
       // 断链（missing / unreachable）与已命中的分支不动：
@@ -679,6 +657,58 @@ export class ScanTaskRunner {
         branch.message ??
         `所选时段存在，但没有读到图片，实际存在：${summarize(branch.availableTypes ?? [])}`
     }
+  }
+
+  /** 读一个类型目录的文件明细，并把图片挂到结果集上 */
+  private async readDetail(item: {
+    dir: string
+    machine: string
+  }): Promise<void> {
+    // this.read() 里还会检查一次，但那是在拿到并发名额之后；
+    // 这里先挡一道，取消后连名额都不必去抢
+    if (this.abortController.signal.aborted) throw abortError()
+
+    const branch = this.branches.find((entry) => entry.machine === item.machine)
+    const typeRead = await this.read(item.dir)
+
+    this.detailDone += 1
+    this.progress.detailDone = this.detailDone
+    this.progress.detailsPending = Math.max(
+      0,
+      this.detailTotal - this.detailDone,
+    )
+
+    if (!branch) return
+
+    if (typeRead.status !== 'ok') {
+      this.progress.dirsSkipped += 1
+      return
+    }
+
+    const images = typeRead.files.filter(isImageFile)
+
+    if (!images.length) {
+      branch.status = branch.status === 'hit' ? 'hit' : 'empty'
+      return
+    }
+
+    branch.matchedDirs += 1
+    branch.images += images.length
+    branch.status = 'hit'
+    this.progress.dirsHit += 1
+
+    const segments = relativeSegments(this.context.rootPath, item.dir)
+
+    for (const name of images) {
+      this.images.push({
+        path: [...segments, name].join('/'),
+        absolutePath: join(item.dir, name),
+        name,
+      })
+    }
+
+    this.progress.images = this.images.length
+    this.touch(item.dir)
   }
 
   /** 统一读取入口：超时、网络故障计数、自适应降档与自动暂停都在这里 */
@@ -715,33 +745,9 @@ export class ScanTaskRunner {
     return result
   }
 
-  /**
-   * 采样一次读取结果，窗口内失败率过高就降一档并发。
-   * 只降不升：现场是「跑完就行」的场景，反复升档试探只会让已经吃紧的机器更抖。
-   */
+  /** 采样一次读取结果；降档的具体动作由 gate 的 onChange 回调完成 */
   private recordSample(failed: boolean): void {
-    this.windowReads += 1
-    if (failed) this.windowFailures += 1
-
-    if (this.windowReads < ADAPT_WINDOW) return
-
-    const ratio = this.windowFailures / this.windowReads
-    this.windowReads = 0
-    this.windowFailures = 0
-
-    if (ratio <= ADAPT_FAIL_RATIO || this.readConcurrency <= MIN_CONCURRENCY)
-      return
-
-    this.readConcurrency -= 1
-    this.timeoutMs = timeoutFor(this.readConcurrency)
-    this.progress.concurrency = this.readConcurrency
-    this.limiter?.setConcurrency(this.readConcurrency)
-
-    console.warn(
-      `读取失败率 ${(ratio * 100).toFixed(0)}%，并发降至 ${this.readConcurrency}，超时 ${this.timeoutMs} 毫秒`,
-    )
-
-    this.touch('', true)
+    this.gate.sample(failed)
   }
 
   /** 标记分支断链，并把该分支下所有待扫描叶子计为跳过 */

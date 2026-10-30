@@ -149,10 +149,24 @@ export type CopyStatus =
   | 'canceled'
   | 'failed'
 
+/**
+ * 目标目录已有同名文件时的策略。
+ * rename 是默认：纯数字自增，img.jpg → img1.jpg → img2.jpg
+ */
+export type CopyConflictPolicy = 'rename' | 'skip' | 'overwrite'
+
+export const COPY_CONFLICT_LABEL: Record<CopyConflictPolicy, string> = {
+  rename: '自动改名',
+  skip: '跳过已存在',
+  overwrite: '覆盖已存在',
+}
+
 export interface CopyTaskParams {
   /** 要复制的机台目录名；为空表示全部 */
   machines: string[]
   layout: CopyLayout
+  /** 重名策略，缺省为 rename */
+  conflict: CopyConflictPolicy
 }
 
 /** 单张图片的复制失败信息，用于重试与结果展示 */
@@ -179,6 +193,10 @@ export interface CopyProgress {
   layout: CopyLayout
   /** 自动改名的数量（目标目录已有同名文件） */
   renamed: number
+  /** 因目标已存在而被跳过的数量（仅 skip 策略会产生） */
+  skipped: number
+  /** 重名策略 */
+  conflict: CopyConflictPolicy
   /** 正在复制的文件，展示用 */
   currentPath: string
   startedAt: number | null
@@ -210,6 +228,11 @@ export interface CopyPlanPreview {
   perMachine: { machine: string; images: number }[]
   /** 将要创建的子目录（相对目标目录），完全平铺时为空 */
   folders: string[]
+  /**
+   * 会被改名 / 跳过 / 覆盖的张数，按当前重名策略预演。
+   * 让用户在选目录前就知道「这次会不会动到已有文件」。
+   */
+  conflicts: number
 }
 
 /**
@@ -284,6 +307,8 @@ export interface ElectronAPI {
   previewCopyPlan: (
     taskId: string,
     params: CopyTaskParams,
+    /** 已选的目标目录；传入后才会统计会被改名 / 跳过 / 覆盖的张数 */
+    targetDir?: string,
   ) => Promise<CopyPlanPreview>
 
   /**

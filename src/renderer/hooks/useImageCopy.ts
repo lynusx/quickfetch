@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 import type { CopyTask } from '../../shared/ipc'
 import { useCopyStore } from '../stores/copyStore'
@@ -27,6 +27,7 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
   const copying = useCopyStore((state) => state.task)
   const machines = useCopyStore((state) => state.machines)
   const layout = useCopyStore((state) => state.layout)
+  const conflict = useCopyStore((state) => state.conflict)
   const targetDir = useCopyStore((state) => state.targetDir)
   const targetName = useCopyStore((state) => state.targetName)
   const preview = useCopyStore((state) => state.preview)
@@ -42,6 +43,14 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
   const setError = useCopyStore((state) => state.setError)
   const setTarget = useCopyStore((state) => state.setTarget)
 
+  /**
+   * 已经弹过终态提示的「任务 id + 终态 + 完成时间」。
+   *
+   * 只判 isFinal 不够：重试和换目录重跑会再发一次终态快照，
+   * 同一批次会弹两遍「复制完成」。带上 finishedAt 就能区分是不是新一轮结束。
+   */
+  const toasted = useRef(new Set<string>())
+
   // 订阅主进程推送：复制进度、状态变化全靠它，暂停/取消后的收尾也走这里
   useEffect(() => {
     return window.electronAPI.onCopyTaskUpdate((next) => {
@@ -50,6 +59,11 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
       // 只在「刚结束」这一帧提示一次，后续重复推送不再打扰
       if (!isFinal(next.status)) return
       if (next.status === 'canceled') return
+
+      const key = `${next.id}:${next.status}:${next.progress.finishedAt ?? 0}`
+      if (toasted.current.has(key)) return
+
+      toasted.current.add(key)
 
       if (next.status === 'failed') {
         setError(next.error ?? '复制过程中发生未知错误')
@@ -105,10 +119,11 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
     setPreviewing(true)
 
     try {
-      const result = await window.electronAPI.previewCopyPlan(task.id, {
-        machines,
-        layout,
-      })
+      const result = await window.electronAPI.previewCopyPlan(
+        task.id,
+        { machines, layout, conflict },
+        targetDir || undefined,
+      )
 
       setPreview(result)
     } catch (cause) {
@@ -172,6 +187,7 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
       const created = await window.electronAPI.startCopyTask(task.id, dir, {
         machines,
         layout,
+        conflict,
       })
 
       setTask(created)
@@ -187,6 +203,7 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
     targetDir,
     machines,
     layout,
+    conflict,
     handlePickTarget,
     setBusy,
     setError,

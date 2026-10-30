@@ -252,6 +252,7 @@ export const registerIpcHandlers = (): void => {
       _event,
       taskId: string,
       params: CopyTaskParams,
+      targetDir?: string,
     ): Promise<CopyPlanPreview> => {
       const images = await resolveImages(taskId)
 
@@ -259,7 +260,12 @@ export const registerIpcHandlers = (): void => {
         throw new Error('该任务没有可复制的图片，请重新扫描')
       }
 
-      return planPreview(images, params)
+      // 选了目录才能算冲突数，没选时只报规模
+      const target = targetDir?.trim()
+        ? resolve(normalize(targetDir))
+        : undefined
+
+      return planPreview(images, params, target)
     },
   )
 

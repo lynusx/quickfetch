@@ -57,25 +57,3 @@ export const createLimiter = (initial: number): Limiter => {
 
   return wrapped
 }
-
-/**
- * 给单个操作套超时。网络盘抖动时 readdir 可能挂几十秒，
- * 不设上限会让整个任务看起来假死，也让并发名额被长期占住。
- */
-export const withTimeout = <T>(
-  run: Promise<T> | (() => Promise<T>),
-  ms: number,
-  onTimeout: () => Error,
-): Promise<T> => {
-  let timer: ReturnType<typeof setTimeout> | undefined
-
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(onTimeout()), ms)
-  })
-
-  const promise = typeof run === 'function' ? run() : run
-
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timer) clearTimeout(timer)
-  })
-}

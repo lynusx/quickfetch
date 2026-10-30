@@ -51,8 +51,8 @@ const api: ElectronAPI = {
 
   setHistoryLimit: (limit) => ipcRenderer.invoke('history:set-limit', limit),
 
-  previewCopyPlan: (taskId, params) =>
-    ipcRenderer.invoke('copy:preview', taskId, params),
+  previewCopyPlan: (taskId, params, targetDir) =>
+    ipcRenderer.invoke('copy:preview', taskId, params, targetDir),
 
   startCopyTask: (taskId, targetDir, params) =>
     ipcRenderer.invoke('copy:start', taskId, targetDir, params),

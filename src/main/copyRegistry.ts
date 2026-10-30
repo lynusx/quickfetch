@@ -54,8 +54,3 @@ export const getCopyRunner = (id: string): CopyTaskRunner | null =>
 
 export const getCopyTask = (id: string): CopyTask | null =>
   runners.get(id)?.snapshot() ?? null
-
-export const listCopyTasks = (): CopyTask[] =>
-  [...runners.values()]
-    .map((runner) => runner.snapshot())
-    .sort((a, b) => (b.progress.startedAt ?? 0) - (a.progress.startedAt ?? 0))
