@@ -1,9 +1,11 @@
-import { BrowserWindow, app, dialog, ipcMain } from 'electron'
+import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
 import { writeFile } from 'node:fs/promises'
-import { basename } from 'node:path'
+import { basename, normalize, resolve } from 'node:path'
 
-import { copyImagesTo } from './copy'
+import { filterByMachines, planPreview } from './copy'
+import { getCopyRunner, startCopy } from './copyRegistry'
 import { load } from './load'
+import { toFsPath } from './pathx'
 import {
   clearRecords,
   createTask,
@@ -24,11 +26,14 @@ import {
 } from './settings'
 
 import type {
-  CopyImagesResult,
+  CopyPlanPreview,
+  CopyTask,
+  CopyTaskParams,
   DirectoryInfo,
   ScanHistoryItem,
   ScanTask,
   ScanTaskParams,
+  ScannedImage,
 } from '../shared/ipc'
 
 const getParentWindow = (
@@ -219,38 +224,122 @@ export const registerIpcHandlers = (): void => {
 
   // ------------------------------------------------------------------ 复制
 
-  ipcMain.handle(
-    'copy:task',
-    async (
-      event,
-      taskId: string,
-      targetDir: string,
-    ): Promise<CopyImagesResult> => {
-      const sender = event.sender
+  /**
+   * 取任务的全量图片。内存里的任务优先，重启后恢复的历史任务从结果文件读。
+   * 复制与预检查都从这里取，避免两处逻辑走叉。
+   */
+  const resolveImages = async (taskId: string): Promise<ScannedImage[]> => {
+    const runner = getRunner(taskId)
 
-      // 历史任务（重启后恢复的）没有内存 runner，改从结果文件取全量图片
-      const runner = getRunner(taskId)
-      const images = runner
-        ? runner.getImages()
-        : ((await readRecord(taskId))?.images ?? [])
+    if (runner) return runner.getImages()
+
+    return (await readRecord(taskId))?.images ?? []
+  }
+
+  const requireCopyRunner = (copyId: string) => {
+    const runner = getCopyRunner(copyId)
+
+    if (!runner) {
+      throw new Error('复制任务不存在或已被清理，请重新开始复制')
+    }
+
+    return runner
+  }
+
+  ipcMain.handle(
+    'copy:preview',
+    async (
+      _event,
+      taskId: string,
+      params: CopyTaskParams,
+    ): Promise<CopyPlanPreview> => {
+      const images = await resolveImages(taskId)
 
       if (!images.length) {
         throw new Error('该任务没有可复制的图片，请重新扫描')
       }
 
-      const result = await copyImagesTo(images, targetDir, {
+      return planPreview(images, params)
+    },
+  )
+
+  ipcMain.handle(
+    'copy:start',
+    async (
+      _event,
+      taskId: string,
+      targetDir: string,
+      params: CopyTaskParams,
+    ): Promise<CopyTask> => {
+      // 空字符串交给 resolve 会变成当前工作目录，等于把几百张图悄悄倒进安装目录，
+      // 所以这一条必须显式拦住
+      if (!targetDir || !targetDir.trim()) {
+        throw new Error('请先选择复制目标目录')
+      }
+
+      const images = await resolveImages(taskId)
+
+      if (!images.length) {
+        throw new Error('该任务没有可复制的图片，请重新扫描')
+      }
+
+      // 目标目录由渲染层通过 pickDirectory 选好再传进来，
+      // 主进程只做一次规范化，避免「结尾斜杠不同」被当成两个目录
+      const target = resolve(normalize(targetDir))
+      const picked = filterByMachines(images, params.machines)
+
+      if (!picked.length) {
+        throw new Error('所选机台在当前任务里没有图片，请重新勾选')
+      }
+
+      return startCopy({
+        scanTaskId: taskId,
+        targetDir: target,
+        params,
+        images,
         load: {
           concurrency: load.copyConcurrency,
           batchSize: load.copyBatchSize,
         },
-        onProgress: (progress) => {
-          if (!sender.isDestroyed()) {
-            sender.send('fs:copy-progress', progress)
-          }
-        },
       })
+    },
+  )
 
-      return result
+  ipcMain.handle('copy:pause', (_event, copyId: string) =>
+    requireCopyRunner(copyId).pause(),
+  )
+
+  ipcMain.handle('copy:resume', (_event, copyId: string) =>
+    requireCopyRunner(copyId).resume(),
+  )
+
+  ipcMain.handle('copy:cancel', (_event, copyId: string) =>
+    requireCopyRunner(copyId).cancel(),
+  )
+
+  ipcMain.handle('copy:retry', (_event, copyId: string) =>
+    requireCopyRunner(copyId).retry(),
+  )
+
+  ipcMain.handle(
+    'copy:get',
+    (_event, copyId: string) => getCopyRunner(copyId)?.snapshot() ?? null,
+  )
+
+  ipcMain.handle(
+    'copy:to-new-dir',
+    (_event, copyId: string, targetDir: string) =>
+      requireCopyRunner(copyId).retargetTo(resolve(normalize(targetDir))),
+  )
+
+  /** 在系统文件管理器里打开目标目录，复制完成后用户要立刻看到结果 */
+  ipcMain.handle(
+    'copy:reveal',
+    async (_event, targetDir: string): Promise<string | null> => {
+      const result = await shell.openPath(toFsPath(targetDir))
+
+      // openPath 失败时返回错误字符串，成功返回空串
+      return result ? result : null
     },
   )
 

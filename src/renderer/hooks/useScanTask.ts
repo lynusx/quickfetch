@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 
 import type { ScanTaskStatus } from '../../shared/ipc'
+import { useCopyStore } from '../stores/copyStore'
 import { useImageFilterStore } from '../stores/imageFilterStore'
 import { useScanStore } from '../stores/scanStore'
 import { formatDuration } from '../utils/common'
@@ -84,8 +85,8 @@ export const useScanTask = ({ showToast }: UseScanTaskProps) => {
   const start = useCallback(async () => {
     setError(null)
     setCreating(true)
-    // 新一轮扫描开始前清掉上一轮的复制结果
-    useScanStore.getState().setCopy(null)
+    // 新一轮扫描开始前清掉上一轮的复制任务，否则进度条还挂着旧目录的数据
+    useCopyStore.getState().reset()
 
     try {
       const created = await window.electronAPI.createScanTask({

@@ -9,6 +9,7 @@ import {
   Wand2,
 } from 'lucide-react'
 
+import CopyPanel from '@/components/CopyPanel'
 import HistoryPanel from '@/components/HistoryPanel'
 import ImageFilterPanel from '@/components/ImageFilterPanel'
 import ScanSetupPanel from '@/components/ScanSetupPanel'
@@ -18,9 +19,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
-import { useImageCopy } from '@/hooks/useImageCopy'
 import { useScanTask } from '@/hooks/useScanTask'
 import { useToast } from '@/hooks/useToast'
+import { useCopyStore } from '@/stores/copyStore'
 import { useImageFilterStore } from '@/stores/imageFilterStore'
 import { useScanStore } from '@/stores/scanStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -67,7 +68,6 @@ const ImageCopyPage = () => {
   const { showToast } = useToast()
   const { task, creating, busy, canStart, start, pause, resume, cancel } =
     useScanTask({ showToast })
-  const { handleCopy, canCopy, percent, copy } = useImageCopy({ showToast })
 
   const settingsError = useSettingsStore((state) => state.error)
   const settings = useSettingsStore((state) => state.settings)
@@ -118,7 +118,7 @@ const ImageCopyPage = () => {
         filters.setSlots(item.params.slots)
         filters.setTypes(item.params.types)
 
-        useScanStore.getState().setCopy(null)
+        useCopyStore.getState().reset()
         useScanStore.getState().setTask(loaded)
         showToast(
           '已载入历史记录',
@@ -263,11 +263,11 @@ const ImageCopyPage = () => {
                 )}
                 <Button
                   variant="outline"
-                  onClick={() => void handleCopy()}
-                  disabled={!canCopy}
+                  onClick={() => void start()}
+                  disabled={!canStart || !configured || busy}
                 >
-                  <Download data-icon="inline-start" />
-                  复制到目标目录
+                  <Wand2 data-icon="inline-start" />
+                  重扫一遍
                 </Button>
               </div>
 
@@ -299,26 +299,6 @@ const ImageCopyPage = () => {
                     在左侧填写或选择根目录，应用会自动识别机台并记住这条路径
                   </AlertDescription>
                 </Alert>
-              )}
-
-              {copy && (
-                <div className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-3">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium">
-                      {copy.running ? '复制中' : '复制完成'}
-                      {copy.batchTotal > 1 && (
-                        <span className="ml-2 font-normal text-muted-foreground">
-                          第 {copy.batchIndex}/{copy.batchTotal} 批
-                        </span>
-                      )}
-                    </span>
-                    <span className="tabular-nums text-muted-foreground">
-                      {copy.copied} / {copy.total} 张
-                      {copy.failed > 0 && ` · 失败 ${copy.failed}`}
-                    </span>
-                  </div>
-                  <Progress value={percent} />
-                </div>
               )}
 
               {task && task.status !== 'pending' && (
@@ -369,6 +349,18 @@ const ImageCopyPage = () => {
                   </div>
                 </>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Download className="size-4" />
+                复制到本地
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CopyPanel showToast={showToast} />
             </CardContent>
           </Card>
 

@@ -131,22 +131,85 @@ export interface ScanTask {
   elapsedMs: number
 }
 
+/** 复制结果的分组方式：决定目标目录下的子文件夹层级 */
+export type CopyLayout = 'flat' | 'machine' | 'type' | 'machine-type'
+
+export const COPY_LAYOUT_LABEL: Record<CopyLayout, string> = {
+  flat: '完全平铺',
+  machine: '按机台分组',
+  type: '按类型分组',
+  'machine-type': '按机台+类型分组',
+}
+
+export type CopyStatus =
+  | 'pending'
+  | 'running'
+  | 'paused'
+  | 'completed'
+  | 'canceled'
+  | 'failed'
+
+export interface CopyTaskParams {
+  /** 要复制的机台目录名；为空表示全部 */
+  machines: string[]
+  layout: CopyLayout
+}
+
+/** 单张图片的复制失败信息，用于重试与结果展示 */
+export interface CopyFailure {
+  /** 相对路径，展示用 */
+  path: string
+  /** 源文件绝对路径 */
+  from: string
+  /** 目标绝对路径 */
+  to: string
+  reason: string
+}
+
 export interface CopyProgress {
+  status: CopyStatus
   copied: number
   total: number
   failed: number
   /** 当前批次，从 1 开始 */
   batchIndex: number
   batchTotal: number
+  /** 目标目录 */
+  targetDir: string
+  layout: CopyLayout
+  /** 自动改名的数量（目标目录已有同名文件） */
+  renamed: number
+  /** 正在复制的文件，展示用 */
+  currentPath: string
+  startedAt: number | null
+  finishedAt: number | null
+  elapsedMs: number
+  /** 预计剩余毫秒，样本不足时为 null */
+  etaMs: number | null
 }
 
-export interface CopyImagesResult {
-  copied: number
-  failed: string[]
-  /** 生成的 source.txt 绝对路径 */
-  manifestPath: string
-  /** 同名被自动改名的数量 */
-  renamed: number
+export interface CopyTask {
+  id: string
+  /** 关联的扫描任务 id，历史任务也有 */
+  scanTaskId: string
+  status: CopyStatus
+  progress: CopyProgress
+  error: string | null
+  /** 失败明细，重试时按 from/to 原样再来一次 */
+  failures: CopyFailure[]
+  /** 生成的 source.txt 路径，完成后才有 */
+  manifestPath: string | null
+}
+
+/** 复制前的预检查结果，用于在界面提示「会复制多少张、建几个子目录」 */
+export interface CopyPlanPreview {
+  /** 参与复制的机台 */
+  machines: string[]
+  total: number
+  /** 按机台统计的图片数 */
+  perMachine: { machine: string; images: number }[]
+  /** 将要创建的子目录（相对目标目录），完全平铺时为空 */
+  folders: string[]
 }
 
 /**
@@ -214,13 +277,41 @@ export interface ElectronAPI {
   /** 历史保留条数，写入配置持久化 */
   setHistoryLimit: (limit: number) => Promise<AppSettings>
 
-  /** 把一个任务的图片平铺复制到目标目录，并写入 source.txt */
-  copyTaskImages: (
+  /**
+   * 复制前的预检查：按勾选的机台与分组方式算出会复制多少张、建哪些子目录。
+   * 界面在弹目录选择框之前调它，让用户先确认规模。
+   */
+  previewCopyPlan: (
+    taskId: string,
+    params: CopyTaskParams,
+  ) => Promise<CopyPlanPreview>
+
+  /**
+   * 创建并启动复制任务。
+   *
+   * 必须先选好目标目录 —— 参数里的 targetDir 由调用方通过 pickDirectory 取得，
+   * 主进程不再自己弹框，避免「对话框关掉了任务却已经开始」的时序问题。
+   */
+  startCopyTask: (
     taskId: string,
     targetDir: string,
-  ) => Promise<CopyImagesResult>
-  /** 订阅复制进度，返回取消订阅函数 */
-  onCopyProgress: (listener: (progress: CopyProgress) => void) => () => void
+    params: CopyTaskParams,
+  ) => Promise<CopyTask>
+  pauseCopyTask: (taskId: string) => Promise<CopyTask | null>
+  resumeCopyTask: (taskId: string) => Promise<CopyTask | null>
+  cancelCopyTask: (taskId: string) => Promise<CopyTask | null>
+  /** 只重试失败的图片，已成功的不会重来 */
+  retryCopyFailures: (taskId: string) => Promise<CopyTask | null>
+  getCopyTask: (taskId: string) => Promise<CopyTask | null>
+  /** 订阅复制任务快照变更 */
+  onCopyTaskUpdate: (listener: (task: CopyTask) => void) => () => void
+  /** 重新选择目标目录后，把已完成的复制任务改指向新目录并用原计划重跑 */
+  copyTaskToNewDir: (
+    taskId: string,
+    targetDir: string,
+  ) => Promise<CopyTask | null>
+  /** 在系统文件管理器里打开目标目录；失败时返回可读错误，成功返回 null */
+  revealCopyTarget: (targetDir: string) => Promise<string | null>
 
   /** 弹出另存为对话框并写入 xlsx；用户取消时返回 null */
   saveExcel: (params: {

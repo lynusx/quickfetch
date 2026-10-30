@@ -1,9 +1,13 @@
-import { copyFile, readdir, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 
 import type {
-  CopyImagesResult,
+  CopyFailure,
+  CopyLayout,
+  CopyPlanPreview,
   CopyProgress,
+  CopyTask,
+  CopyTaskParams,
   ScannedImage,
 } from '../shared/ipc'
 
@@ -19,15 +23,23 @@ export const DEFAULT_COPY_CONCURRENCY = 6
 /** 每批复制的文件数：批与批之间让出事件循环，进度也能按批反馈 */
 export const DEFAULT_COPY_BATCH_SIZE = 50
 
-const PROGRESS_INTERVAL_MS = 100
+const PROGRESS_INTERVAL_MS = 120
 
 const MANIFEST_NAME = 'source.txt'
 
-/** 批量复制的可调参数 */
 export interface CopyLoadOptions {
   concurrency?: number
   batchSize?: number
 }
+
+const abortError = (): Error => {
+  const error = new Error('复制已取消')
+  error.name = 'AbortError'
+  return error
+}
+
+const isAbortError = (error: unknown): boolean =>
+  error instanceof Error && error.name === 'AbortError'
 
 /**
  * 生成不冲突的目标文件名。
@@ -47,118 +59,559 @@ const uniqueName = (name: string, taken: Set<string>): string => {
   return `${base}-${Date.now()}${ext}`
 }
 
-export interface CopyOptions {
-  onProgress?: (progress: CopyProgress) => void
+const segmentsOf = (image: ScannedImage): string[] =>
+  image.path.split('/').filter(Boolean)
+
+/**
+ * 从图片的相对路径里取出机台与类型。
+ *
+ * 结构是「机台/EL/日期/班次/时段/类型/文件名」，所以机台取第 0 段、
+ * 类型取倒数第 2 段。路径分隔符统一为 /（扫描时就写入的），
+ * 历史记录里的旧数据也是这个格式。
+ */
+export const machineOf = (image: ScannedImage): string =>
+  segmentsOf(image)[0] ?? ''
+
+export const typeOf = (image: ScannedImage): string => {
+  const segments = segmentsOf(image)
+  return segments.length >= 2 ? segments[segments.length - 2] : ''
+}
+
+/**
+ * 按分组方式算出图片相对目标目录的子目录。
+ * 完全平铺返回空数组，表示直接放进目标目录根下。
+ */
+export const folderOf = (image: ScannedImage, layout: CopyLayout): string[] => {
+  switch (layout) {
+    case 'flat':
+      return []
+    case 'machine':
+      return [machineOf(image)]
+    case 'type':
+      return [typeOf(image)]
+    case 'machine-type':
+      return [machineOf(image), typeOf(image)]
+  }
+}
+
+/** 过滤出勾选的机台；machines 为空表示全选 */
+export const filterByMachines = (
+  images: ScannedImage[],
+  machines: string[],
+): ScannedImage[] => {
+  if (!machines.length) return images
+
+  const allowed = new Set(machines)
+
+  return images.filter((image) => allowed.has(machineOf(image)))
+}
+
+const compareName = (a: string, b: string): number =>
+  a.localeCompare(b, 'zh-CN', { numeric: true })
+
+/** 预检查：让界面在选目录前就能告诉用户会复制多少、建几个文件夹 */
+export const planPreview = (
+  images: ScannedImage[],
+  params: CopyTaskParams,
+): CopyPlanPreview => {
+  const picked = filterByMachines(images, params.machines)
+  const perMachine = new Map<string, number>()
+  const folders = new Set<string>()
+
+  for (const image of picked) {
+    const machine = machineOf(image)
+    perMachine.set(machine, (perMachine.get(machine) ?? 0) + 1)
+
+    const segments = folderOf(image, params.layout)
+    if (segments.length) folders.add(segments.join('/'))
+  }
+
+  return {
+    machines: [...perMachine.keys()].sort(compareName),
+    total: picked.length,
+    perMachine: [...perMachine.entries()]
+      .map(([machine, images]) => ({ machine, images }))
+      .sort((a, b) => compareName(a.machine, b.machine)),
+    folders: [...folders].sort(compareName),
+  }
+}
+
+interface PlanItem {
+  image: ScannedImage
+  /** 相对目标目录的文件夹，空数组表示根下 */
+  folder: string[]
+  from: string
+  to: string
+  renamed: boolean
+}
+
+export interface CopyRunnerOptions {
+  scanTaskId: string
+  targetDir: string
+  params: CopyTaskParams
+  images: ScannedImage[]
+  emit: (task: CopyTask) => void
   load?: CopyLoadOptions
 }
 
 /**
- * 把扫描结果平铺复制到目标目录，并写入 source.txt 路径清单。
+ * 一次复制任务的执行体。
  *
- * 目标名先按批规划：每批开始前查一次同名冲突，规划完再并发复制。
- * 如果一次把几万张的目标名全部算好，内存里会同时挂着几万个 PathLike；
- * 分批后峰值只与 batchSize 相关。
+ * 与扫描任务的差异：复制是逐文件 IO，单个文件失败不该中断整批，
+ * 所以失败只记录不抛出；而暂停/取消要在文件之间生效，不能等整批跑完。
  */
-export const copyImagesTo = async (
-  images: ScannedImage[],
-  targetDir: string,
-  options: CopyOptions = {},
-): Promise<CopyImagesResult> => {
-  if (!images.length) {
-    throw new Error('没有可复制的图片，请先完成扫描')
-  }
+export class CopyTaskRunner {
+  readonly id = crypto.randomUUID()
+  /** 创建时间，任务表按它淘汰最老的已结束任务 */
+  readonly createdAt = Date.now()
+  scanTaskId: string
+  targetDir: string
+  private params: CopyTaskParams
 
-  const concurrency = Math.max(
-    1,
-    Math.floor(options.load?.concurrency ?? DEFAULT_COPY_CONCURRENCY),
-  )
-  const batchSize = Math.max(
-    1,
-    Math.floor(options.load?.batchSize ?? DEFAULT_COPY_BATCH_SIZE),
-  )
+  private readonly source: ScannedImage[]
+  private readonly emit: (task: CopyTask) => void
+  private readonly concurrency: number
+  private readonly batchSize: number
 
-  let entries: string[]
-  try {
-    entries = await readdir(toFsPath(targetDir))
-  } catch (error) {
-    throw new Error(
-      `目标目录不可访问：${targetDir}（${(error as Error)?.message ?? '未知错误'}）`,
+  private status: CopyTask['status'] = 'pending'
+  private error: string | null = null
+  private manifestPath: string | null = null
+
+  private plan: PlanItem[] = []
+  private cursor = 0
+  private copied = 0
+  private renamed = 0
+  private failures: CopyFailure[] = []
+  private currentPath = ''
+  private startedAt: number | null = null
+  private finishedAt: number | null = null
+  private lastEmitAt = 0
+
+  private paused = false
+  private resumeWaiters: (() => void)[] = []
+  /**
+   * 每次 run 重新创建：取消过的信号会一直是 aborted，
+   * 重试或换目录重跑时沿用它会让任务一启动就自己取消。
+   */
+  private abortController = new AbortController()
+  private readonly settled: Promise<void>
+  private markSettled: () => void = () => {}
+
+  constructor(options: CopyRunnerOptions) {
+    this.scanTaskId = options.scanTaskId
+    this.targetDir = options.targetDir
+    this.params = options.params
+    this.source = options.images
+    this.emit = options.emit
+    this.concurrency = Math.max(
+      1,
+      Math.floor(options.load?.concurrency ?? DEFAULT_COPY_CONCURRENCY),
     )
-  }
+    this.batchSize = Math.max(
+      1,
+      Math.floor(options.load?.batchSize ?? DEFAULT_COPY_BATCH_SIZE),
+    )
 
-  // 已占用的目标名，跨批累积，保证同一次任务内不重名
-  const taken = new Set(entries.map((name) => name.toLowerCase()))
-  const total = images.length
-  const failed: string[] = []
-  let copied = 0
-  let renamed = 0
-  let lastReportAt = 0
-
-  // 清单先行写入：复制中途失败时，用户至少还能从 source.txt 找到原始路径
-  const manifestPath = join(targetDir, MANIFEST_NAME)
-  await writeFile(
-    toFsPath(manifestPath),
-    images.map((image) => image.path).join('\n'),
-    'utf-8',
-  )
-
-  const report = (force = false): void => {
-    if (!options.onProgress) return
-
-    const now = Date.now()
-    if (!force && now - lastReportAt < PROGRESS_INTERVAL_MS) return
-
-    lastReportAt = now
-    options.onProgress({
-      copied,
-      total,
-      failed: failed.length,
-      batchIndex: Math.min(
-        Math.ceil((copied + failed.length) / batchSize),
-        Math.ceil(total / batchSize),
-      ),
-      batchTotal: Math.ceil(total / batchSize),
+    this.settled = new Promise<void>((resolve) => {
+      this.markSettled = resolve
     })
   }
 
-  for (let offset = 0; offset < total; offset += batchSize) {
-    const batch = images.slice(offset, offset + batchSize)
+  // ---------------------------------------------------------------- 对外操作
 
-    // 规划本批目标名：先查重名再占位，避免同批内互相覆盖
-    const plan = batch.map((image) => {
-      const target = uniqueName(image.name, taken)
-      taken.add(target.toLowerCase())
+  start(): CopyTask {
+    if (this.status !== 'pending') return this.snapshot()
 
-      return {
-        from: image.absolutePath,
-        to: join(targetDir, target),
-        renamed: target !== image.name,
-      }
-    })
+    this.status = 'running'
+    this.startedAt = Date.now()
+    this.touch('', true)
+    void this.run()
 
-    // 每批内部按并发闸门切片推进，批与批之间自然形成一次让出
-    for (let index = 0; index < plan.length; index += concurrency) {
-      const slice = plan.slice(index, index + concurrency)
+    return this.snapshot()
+  }
 
-      await Promise.all(
-        slice.map(async (item) => {
-          try {
-            await copyFile(toFsPath(item.from), toFsPath(item.to))
-            copied += 1
-            if (item.renamed) renamed += 1
-          } catch (error) {
-            // 源文件被占用、权限不足等，记录后继续，不中断整批
-            console.error(`复制文件 ${item.from} 失败:`, error)
-            failed.push(item.from)
-          } finally {
-            report()
-          }
-        }),
-      )
+  pause(): CopyTask {
+    if (this.status !== 'running') return this.snapshot()
+
+    this.paused = true
+    this.status = 'paused'
+    this.touch('', true)
+
+    return this.snapshot()
+  }
+
+  resume(): CopyTask {
+    if (this.status !== 'paused') return this.snapshot()
+
+    this.paused = false
+    this.status = 'running'
+
+    for (const resolve of this.resumeWaiters.splice(0)) resolve()
+
+    this.touch('', true)
+
+    return this.snapshot()
+  }
+
+  cancel(): CopyTask {
+    if (this.isFinal()) return this.snapshot()
+
+    this.abortController.abort()
+    this.paused = false
+
+    for (const resolve of this.resumeWaiters.splice(0)) resolve()
+
+    this.status = 'canceled'
+    this.touch('', true)
+
+    return this.snapshot()
+  }
+
+  /** 只重试失败的图片；已成功的不会重来 */
+  retry(): CopyTask {
+    if (!this.isFinal()) return this.snapshot()
+    if (!this.failures.length) return this.snapshot()
+
+    // 把失败项换回待复制队列，其余计数归零
+    this.plan = this.failures.map((failure) => ({
+      image: {
+        path: failure.path,
+        absolutePath: failure.from,
+        name: failure.path.split('/').pop() ?? failure.path,
+      },
+      folder: [],
+      from: failure.from,
+      to: failure.to,
+      renamed: false,
+    }))
+    this.cursor = 0
+    this.copied = 0
+    this.renamed = 0
+    this.failures = []
+    this.finishedAt = null
+    this.error = null
+    this.status = 'running'
+    this.startedAt = Date.now()
+    this.touch('', true)
+    void this.run()
+
+    return this.snapshot()
+  }
+
+  /**
+   * 换一个目标目录，按最初勾选的机台与分组方式完整重跑一次。
+   *
+   * 已经在跑的任务不允许改目录 —— 一半文件在 A 一半在 B，事后没人能说清。
+   */
+  retargetTo(targetDir: string): CopyTask {
+    if (!this.isFinal()) {
+      throw new Error('复制正在进行，请先取消再更换目标目录')
+    }
+    if (!targetDir.trim()) throw new Error('目标目录不能为空')
+    if (targetDir === this.targetDir) return this.snapshot()
+
+    this.targetDir = targetDir
+    this.plan = []
+    this.cursor = 0
+    this.copied = 0
+    this.renamed = 0
+    this.failures = []
+    this.error = null
+    this.manifestPath = null
+    this.currentPath = ''
+    this.finishedAt = null
+    this.startedAt = Date.now()
+    this.status = 'running'
+    this.touch('', true)
+    void this.run()
+
+    return this.snapshot()
+  }
+
+  snapshot(): CopyTask {
+    return {
+      id: this.id,
+      scanTaskId: this.scanTaskId,
+      status: this.status,
+      progress: this.progress(),
+      error: this.error,
+      // 失败明细带上限：几万条全塞进 IPC 会拖垮渲染层。
+      // 批量失败通常发生在网络断开，前 200 条足够定位问题。
+      failures: this.failures.slice(0, 200),
+      manifestPath: this.manifestPath,
     }
   }
 
-  report(true)
+  getFailures(): CopyFailure[] {
+    return this.failures
+  }
 
-  return { copied, failed, manifestPath, renamed }
+  isFinal(): boolean {
+    return (
+      this.status === 'completed' ||
+      this.status === 'canceled' ||
+      this.status === 'failed'
+    )
+  }
+
+  waitSettled(): Promise<void> {
+    return this.settled
+  }
+
+  // ---------------------------------------------------------------- 执行主体
+
+  private progress(): CopyProgress {
+    const total = this.plan.length
+    const done = this.copied + this.failures.length
+    const elapsed = Math.max(
+      0,
+      (this.finishedAt ?? Date.now()) - (this.startedAt ?? Date.now()),
+    )
+    const ratio = total > 0 ? Math.min(1, done / total) : 0
+    const batchTotal = total > 0 ? Math.ceil(total / this.batchSize) : 0
+
+    return {
+      status: this.status,
+      copied: this.copied,
+      total,
+      failed: this.failures.length,
+      batchIndex:
+        batchTotal > 0
+          ? Math.min(Math.max(1, Math.ceil(done / this.batchSize)), batchTotal)
+          : 0,
+      batchTotal,
+      targetDir: this.targetDir,
+      layout: this.params.layout,
+      renamed: this.renamed,
+      currentPath: this.currentPath,
+      startedAt: this.startedAt,
+      finishedAt: this.finishedAt,
+      elapsedMs: elapsed,
+      // 进度过 10% 后估算才稳，否则刚开始会跳出一个很大的数
+      etaMs:
+        this.status === 'running' && ratio > 0.1 && ratio < 1
+          ? Math.round((elapsed / ratio) * (1 - ratio))
+          : null,
+    }
+  }
+
+  private async run(): Promise<void> {
+    // 新一轮执行必须用干净的中断信号，否则「取消后再重试/换目录」会秒退
+    this.abortController = new AbortController()
+
+    try {
+      // 首次执行才做规划；重试时 plan 已经是失败项的子集
+      if (!this.plan.length) {
+        await this.buildPlan()
+      }
+
+      if (!this.plan.length) {
+        this.finish('completed')
+
+        return
+      }
+
+      await this.writeManifest()
+      await this.createFolders()
+      await this.copyAll()
+
+      this.finish('completed')
+    } catch (error) {
+      if (isAbortError(error)) {
+        this.finish('canceled')
+      } else {
+        this.error = (error as Error)?.message ?? '复制过程中发生未知错误'
+        this.finish('failed')
+      }
+    }
+  }
+
+  private finish(status: CopyTask['status']): void {
+    this.finishedAt = Date.now()
+    this.status = status
+    this.currentPath = ''
+    this.touch('', true)
+    this.markSettled()
+  }
+
+  /** 规划目标路径：按布局建子目录，逐个解决同名冲突 */
+  private async buildPlan(): Promise<void> {
+    const picked = filterByMachines(this.source, this.params.machines)
+
+    // 每个目标目录一份已占用名单，跨批累积，保证同次任务内不重名
+    const taken = new Map<string, Set<string>>()
+
+    for (const image of picked) {
+      const folder = folderOf(image, this.params.layout)
+      const dir = folder.length
+        ? join(this.targetDir, ...folder)
+        : this.targetDir
+
+      let names = taken.get(dir)
+
+      if (!names) {
+        names = await this.existingNames(dir)
+        taken.set(dir, names)
+      }
+
+      const target = uniqueName(image.name, names)
+      names.add(target.toLowerCase())
+
+      this.plan.push({
+        image,
+        folder,
+        from: image.absolutePath,
+        to: join(dir, target),
+        renamed: target !== image.name,
+      })
+    }
+  }
+
+  /** 读目标目录已有文件名；分组子目录还不存在时视为空 */
+  private async existingNames(dir: string): Promise<Set<string>> {
+    try {
+      const entries = await readdir(toFsPath(dir))
+
+      return new Set(entries.map((name) => name.toLowerCase()))
+    } catch {
+      return new Set()
+    }
+  }
+
+  private async createFolders(): Promise<void> {
+    const folders = new Set(
+      this.plan.map((item) => item.folder.join('/')).filter(Boolean),
+    )
+
+    for (const folder of folders) {
+      const dir = join(this.targetDir, ...folder.split('/'))
+
+      try {
+        await mkdir(toFsPath(dir), { recursive: true })
+      } catch (error) {
+        throw new Error(
+          `无法创建目录「${dir}」：${(error as Error)?.message ?? '未知错误'}`,
+        )
+      }
+    }
+  }
+
+  /**
+   * 清单写在目标目录根下，内容是参与这次复制的相对路径。
+   * 分组复制时也放根下 —— 跟着某个机台子目录走会让用户找不到。
+   */
+  private async writeManifest(): Promise<void> {
+    const target = join(this.targetDir, MANIFEST_NAME)
+
+    try {
+      await mkdir(toFsPath(this.targetDir), { recursive: true })
+      await writeFile(
+        toFsPath(target),
+        this.plan.map((item) => item.image.path).join('\n'),
+        'utf-8',
+      )
+      this.manifestPath = target
+    } catch {
+      // 清单只是辅助信息，写不进去不该让整次复制失败
+      this.manifestPath = null
+    }
+  }
+
+  private async copyAll(): Promise<void> {
+    const total = this.plan.length
+
+    // 外层按批推进只为让 progress 的批号有意义，真正的并发控制交给 pool
+    while (this.cursor < total) {
+      const batchEnd = Math.min(this.cursor + this.batchSize, total)
+      const batch = this.plan.slice(this.cursor, batchEnd)
+
+      await this.pool(batch, (item) => this.copyOne(item))
+
+      this.cursor = batchEnd
+      this.touch('', true)
+    }
+  }
+
+  private async copyOne(item: PlanItem): Promise<void> {
+    await this.checkpoint()
+
+    this.currentPath = item.to
+
+    try {
+      await copyFile(toFsPath(item.from), toFsPath(item.to))
+
+      this.copied += 1
+      if (item.renamed) this.renamed += 1
+    } catch (error) {
+      // 源文件被占用、权限不足、磁盘满等：记录后继续，不中断整批；
+      // 但取消要立刻传播，不能被当成普通失败吞掉
+      if (isAbortError(error)) throw error
+
+      this.failures.push({
+        path: item.image.path,
+        from: item.from,
+        to: item.to,
+        reason: (error as Error)?.message ?? '未知错误',
+      })
+    } finally {
+      this.touch(item.to)
+    }
+  }
+
+  private touch(currentPath: string, force = false): void {
+    if (currentPath) this.currentPath = currentPath
+
+    const now = Date.now()
+    if (!force && now - this.lastEmitAt < PROGRESS_INTERVAL_MS) return
+
+    this.lastEmitAt = now
+    this.emit(this.snapshot())
+  }
+
+  /** 暂停/取消检查点：遍历待办项与每个文件粘贴前都会经过这里 */
+  private async checkpoint(): Promise<void> {
+    if (this.abortController.signal.aborted) throw abortError()
+
+    while (this.paused) {
+      await new Promise<void>((resolve) => {
+        this.resumeWaiters.push(resolve)
+      })
+    }
+
+    if (this.abortController.signal.aborted) throw abortError()
+  }
+
+  /**
+   * 带并发上限执行，支持中途暂停。
+   *
+   * 不用「每批 slice + Promise.all」：那样暂停只能在批与批之间生效，
+   * 一批 50 个文件要等一整批跑完才停，用户会以为暂停坏了。
+   * 这里改成「谁先空出来谁领下一个」，暂停时立刻停止派发新任务，
+   * 已在途的文件跑完后计数冻结。
+   */
+  private async pool(
+    items: PlanItem[],
+    worker: (item: PlanItem) => Promise<void>,
+  ): Promise<void> {
+    let next = 0
+
+    const lanes = Array.from(
+      { length: Math.min(this.concurrency, items.length) },
+      async () => {
+        while (next < items.length) {
+          await this.checkpoint()
+
+          // 暂停期间不领新活；恢复后接着从 next 走
+          if (this.paused) continue
+
+          const index = next
+          next += 1
+
+          await worker(items[index])
+        }
+      },
+    )
+
+    await Promise.all(lanes)
+  }
 }

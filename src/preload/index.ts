@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-import type { CopyProgress, ElectronAPI, ScanTask } from '../shared/ipc'
+import type { CopyTask, ElectronAPI, ScanTask } from '../shared/ipc'
 
 const api: ElectronAPI = {
   getVersion: () => ipcRenderer.invoke('app:version'),
@@ -51,21 +51,37 @@ const api: ElectronAPI = {
 
   setHistoryLimit: (limit) => ipcRenderer.invoke('history:set-limit', limit),
 
-  copyTaskImages: (taskId, targetDir) =>
-    ipcRenderer.invoke('copy:task', taskId, targetDir),
+  previewCopyPlan: (taskId, params) =>
+    ipcRenderer.invoke('copy:preview', taskId, params),
 
-  onCopyProgress: (listener) => {
-    const handler = (
-      _event: Electron.IpcRendererEvent,
-      progress: CopyProgress,
-    ): void => listener(progress)
+  startCopyTask: (taskId, targetDir, params) =>
+    ipcRenderer.invoke('copy:start', taskId, targetDir, params),
 
-    ipcRenderer.on('fs:copy-progress', handler)
+  pauseCopyTask: (taskId) => ipcRenderer.invoke('copy:pause', taskId),
+
+  resumeCopyTask: (taskId) => ipcRenderer.invoke('copy:resume', taskId),
+
+  cancelCopyTask: (taskId) => ipcRenderer.invoke('copy:cancel', taskId),
+
+  retryCopyFailures: (taskId) => ipcRenderer.invoke('copy:retry', taskId),
+
+  getCopyTask: (taskId) => ipcRenderer.invoke('copy:get', taskId),
+
+  onCopyTaskUpdate: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, task: CopyTask): void =>
+      listener(task)
+
+    ipcRenderer.on('copy:task-update', handler)
 
     return () => {
-      ipcRenderer.removeListener('fs:copy-progress', handler)
+      ipcRenderer.removeListener('copy:task-update', handler)
     }
   },
+
+  copyTaskToNewDir: (taskId, targetDir) =>
+    ipcRenderer.invoke('copy:to-new-dir', taskId, targetDir),
+
+  revealCopyTarget: (targetDir) => ipcRenderer.invoke('copy:reveal', targetDir),
 
   saveExcel: (params) => ipcRenderer.invoke('fs:save-excel', params),
 }

@@ -1,5 +1,7 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 
+import type { CopyTask } from '../../shared/ipc'
+import { useCopyStore } from '../stores/copyStore'
 import { useScanStore } from '../stores/scanStore'
 import { toErrorMessage } from '../utils/error'
 
@@ -11,81 +13,306 @@ interface UseImageCopyProps {
   ) => void
 }
 
+const isFinal = (status: CopyTask['status'] | undefined): boolean =>
+  status === 'completed' || status === 'canceled' || status === 'failed'
+
 /**
- * 复制步骤：按 taskId 让主进程复制全量结果。
- * 渲染层不持有图片数组，避免上万条路径在 IPC 上来回搬。
+ * 复制流程的编排。
+ *
+ * 顺序是刻意固定的：先勾机台与分组 → 预检查给出规模 → 再让用户选目录 → 最后启动。
+ * 反过来的话（先选目录再发现只复制 3 张）用户会觉得流程很蠢。
  */
 export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
-  const { task, copy } = useScanStore()
+  const task = useScanStore((state) => state.task)
+  const copying = useCopyStore((state) => state.task)
+  const machines = useCopyStore((state) => state.machines)
+  const layout = useCopyStore((state) => state.layout)
+  const targetDir = useCopyStore((state) => state.targetDir)
+  const targetName = useCopyStore((state) => state.targetName)
+  const preview = useCopyStore((state) => state.preview)
+  const previewing = useCopyStore((state) => state.previewing)
+  const busy = useCopyStore((state) => state.busy)
+  const error = useCopyStore((state) => state.error)
 
-  const handleCopy = useCallback(async () => {
-    if (!task || task.totalImages === 0) {
-      showToast('没有可复制的图片', '请先完成一次扫描', 'info')
+  const setTask = useCopyStore((state) => state.setTask)
+  const patchTask = useCopyStore((state) => state.patchTask)
+  const setPreview = useCopyStore((state) => state.setPreview)
+  const setPreviewing = useCopyStore((state) => state.setPreviewing)
+  const setBusy = useCopyStore((state) => state.setBusy)
+  const setError = useCopyStore((state) => state.setError)
+  const setTarget = useCopyStore((state) => state.setTarget)
+
+  // 订阅主进程推送：复制进度、状态变化全靠它，暂停/取消后的收尾也走这里
+  useEffect(() => {
+    return window.electronAPI.onCopyTaskUpdate((next) => {
+      patchTask(next)
+
+      // 只在「刚结束」这一帧提示一次，后续重复推送不再打扰
+      if (!isFinal(next.status)) return
+      if (next.status === 'canceled') return
+
+      if (next.status === 'failed') {
+        setError(next.error ?? '复制过程中发生未知错误')
+        return
+      }
+
+      const renamed = next.progress.renamed
+        ? `，${next.progress.renamed} 张重名已改名`
+        : ''
+
+      showToast(
+        next.progress.failed ? '复制完成但有条目失败' : '复制完成',
+        `已复制 ${next.progress.copied} 张${renamed}${
+          next.progress.failed ? `，${next.progress.failed} 张失败` : ''
+        }`,
+        next.progress.failed ? 'error' : 'success',
+      )
+    })
+  }, [patchTask, setError, showToast])
+
+  /** 机台列表：优先用当前任务各机台的实际图片数，没有则回落到参数里的机台 */
+  const machineStats = useMemo(() => {
+    if (!task) return []
+
+    const counts = new Map<string, number>()
+
+    for (const branch of task.branches) {
+      counts.set(branch.machine, branch.images)
+    }
+
+    // 只列出真正有图片的机台：勾选一个 0 张的机台没意义，
+    // 而且会让「会复制多少张」的预检查数字对不上
+    return [...counts.entries()]
+      .filter(([, images]) => images > 0)
+      .map(([machine, images]) => ({ machine, images }))
+      .sort((a, b) =>
+        a.machine.localeCompare(b.machine, 'zh-CN', { numeric: true }),
+      )
+  }, [task])
+
+  const pickedStats = machineStats.filter(
+    (item) => !machines.length || machines.includes(item.machine),
+  )
+  const pickedCount = pickedStats.reduce((sum, item) => sum + item.images, 0)
+
+  /** 预检查：勾选变化后重算一次，让界面实时显示「将复制 N 张、建 M 个目录」 */
+  const refreshPreview = useCallback(async () => {
+    if (!task || !machineStats.length) {
+      setPreview(null)
       return
     }
 
-    const target = await window.electronAPI.pickDirectory({
-      title: '请选择目标目录',
-    })
-
-    if (!target) return
-
-    useScanStore.getState().setCopy({
-      running: true,
-      copied: 0,
-      total: task.totalImages,
-      failed: 0,
-      batchIndex: 0,
-      batchTotal: 0,
-    })
-
-    const unsubscribe = window.electronAPI.onCopyProgress((progress) => {
-      useScanStore.getState().patchCopy({
-        copied: progress.copied,
-        total: progress.total,
-        failed: progress.failed,
-        batchIndex: progress.batchIndex,
-        batchTotal: progress.batchTotal,
-      })
-    })
+    setPreviewing(true)
 
     try {
-      const result = await window.electronAPI.copyTaskImages(
-        task.id,
-        target.path,
-      )
-
-      useScanStore.getState().patchCopy({
-        running: false,
-        copied: result.copied,
-        failed: result.failed.length,
+      const result = await window.electronAPI.previewCopyPlan(task.id, {
+        machines,
+        layout,
       })
 
-      const renamed = result.renamed ? `，${result.renamed} 张重名已改名` : ''
-
-      showToast(
-        '复制完成',
-        `已复制 ${result.copied} 张${renamed}`,
-        result.failed.length ? 'error' : 'success',
-      )
+      setPreview(result)
     } catch (cause) {
-      const message = toErrorMessage(cause, '复制过程中发生未知错误')
-
-      useScanStore.getState().setCopy(null)
-      showToast('复制失败', message, 'error')
+      setPreview(null)
+      setError(toErrorMessage(cause, '无法计算复制计划'))
     } finally {
-      unsubscribe()
+      setPreviewing(false)
     }
-  }, [task, showToast])
+  }, [
+    task,
+    machineStats.length,
+    machines,
+    layout,
+    setPreview,
+    setPreviewing,
+    setError,
+  ])
 
-  const percent =
-    copy && copy.total > 0 ? Math.round((copy.copied / copy.total) * 100) : 0
+  useEffect(() => {
+    void refreshPreview()
+  }, [refreshPreview])
 
+  const handlePickTarget = useCallback(async (): Promise<string | null> => {
+    const picked = await window.electronAPI.pickDirectory({
+      title: '请选择复制目标目录',
+    })
+
+    if (!picked) return null
+
+    setTarget(picked.path, picked.name)
+    setError(null)
+
+    return picked.path
+  }, [setTarget, setError])
+
+  /** 开始复制：目录没选就先弹选择框，选完直接启动，不必再点一次 */
+  const handleStart = useCallback(async () => {
+    if (!task) {
+      showToast('没有可复制的图片', '请先完成一次扫描', 'info')
+      return
+    }
+    if (!pickedCount) {
+      showToast('没有勾选机台', '请至少勾选一个机台', 'info')
+      return
+    }
+
+    let dir = targetDir
+
+    if (!dir) {
+      const picked = await handlePickTarget()
+
+      if (!picked) return
+
+      dir = picked
+    }
+
+    setBusy(true)
+    setError(null)
+
+    try {
+      const created = await window.electronAPI.startCopyTask(task.id, dir, {
+        machines,
+        layout,
+      })
+
+      setTask(created)
+    } catch (cause) {
+      setError(toErrorMessage(cause, '启动复制失败'))
+      showToast('复制失败', toErrorMessage(cause, '启动复制失败'), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }, [
+    task,
+    pickedCount,
+    targetDir,
+    machines,
+    layout,
+    handlePickTarget,
+    setBusy,
+    setError,
+    setTask,
+    showToast,
+  ])
+
+  /** 暂停 / 恢复 / 取消 / 重试 都是同一个形状，抽出来省重复 */
+  const run = useCallback(
+    async (
+      action: (id: string) => Promise<CopyTask | null>,
+      label: string,
+    ): Promise<void> => {
+      if (!copying) return
+
+      setBusy(true)
+
+      try {
+        const next = await action(copying.id)
+
+        if (next) patchTask(next)
+      } catch (cause) {
+        showToast(
+          `${label}失败`,
+          toErrorMessage(cause, `${label}失败`),
+          'error',
+        )
+      } finally {
+        setBusy(false)
+      }
+    },
+    [copying, patchTask, setBusy, showToast],
+  )
+
+  const handlePause = useCallback(
+    () => run((id) => window.electronAPI.pauseCopyTask(id), '暂停'),
+    [run],
+  )
+
+  const handleResume = useCallback(
+    () => run((id) => window.electronAPI.resumeCopyTask(id), '继续'),
+    [run],
+  )
+
+  const handleCancel = useCallback(
+    () => run((id) => window.electronAPI.cancelCopyTask(id), '取消'),
+    [run],
+  )
+
+  const handleRetry = useCallback(
+    () => run((id) => window.electronAPI.retryCopyFailures(id), '重试'),
+    [run],
+  )
+
+  /** 换目录重来：已完成的复制任务改指向新目录，按原计划完整重跑 */
+  const handleChangeTarget = useCallback(async () => {
+    if (!copying || !isFinal(copying.status)) return
+
+    const picked = await handlePickTarget()
+
+    if (!picked) return
+
+    setBusy(true)
+
+    try {
+      const next = await window.electronAPI.copyTaskToNewDir(copying.id, picked)
+
+      if (next) patchTask(next)
+    } catch (cause) {
+      showToast('更换目录失败', toErrorMessage(cause, '更换目录失败'), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }, [copying, handlePickTarget, patchTask, setBusy, showToast])
+
+  const handleReveal = useCallback(async () => {
+    const dir = copying?.progress.targetDir ?? targetDir
+
+    if (!dir) return
+
+    const failure = await window.electronAPI.revealCopyTarget(dir)
+
+    if (failure) showToast('打开目录失败', failure, 'error')
+  }, [copying, targetDir, showToast])
+
+  const percent = useMemo(() => {
+    if (!copying) return 0
+
+    const { copied, failed, total } = copying.progress
+    if (!total) return 0
+
+    return Math.round(((copied + failed) / total) * 100)
+  }, [copying])
+
+  // 扫描没结束、或一张图都没有时不能复制
   const canCopy =
     Boolean(task) &&
     (task?.status === 'completed' || task?.status === 'canceled') &&
     (task?.totalImages ?? 0) > 0 &&
-    !copy?.running
+    !busy
 
-  return { handleCopy, canCopy, percent, copy }
+  const running = copying?.status === 'running' || copying?.status === 'pending'
+
+  const paused = copying?.status === 'paused'
+
+  return {
+    task: copying,
+    machineStats,
+    pickedCount,
+    preview,
+    previewing,
+    targetDir,
+    targetName,
+    busy,
+    error,
+    running,
+    paused,
+    percent,
+    canCopy,
+    handleStart,
+    handlePause,
+    handleResume,
+    handleCancel,
+    handleRetry,
+    handleChangeTarget,
+    handleReveal,
+    handlePickTarget,
+  }
 }
