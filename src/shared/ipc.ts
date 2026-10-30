@@ -151,7 +151,8 @@ export type CopyStatus =
 
 /**
  * 目标目录已有同名文件时的策略。
- * rename 是默认：纯数字自增，img.jpg → img1.jpg → img2.jpg
+ * rename 是默认：目标占着的名字自动编号让开，img.jpg → img1.jpg，
+ * 同名的这一组一张不少全部落盘；skip 才会整组不写。
  */
 export type CopyConflictPolicy = 'rename' | 'skip' | 'overwrite'
 

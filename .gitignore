@@ -27,3 +27,6 @@ release
 *.sw?
 .env
 .npm-cache
+
+# Electron 崩溃时留下的 core dump
+core.*

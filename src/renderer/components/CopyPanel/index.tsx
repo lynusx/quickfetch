@@ -55,8 +55,8 @@ const LAYOUTS: CopyLayout[] = ['flat', 'machine', 'type', 'machine-type']
 
 /** 跟在「将…」后面的动词，别直接拼「跳过已存在」这种标签原文 */
 const CONFLICT_VERB: Record<CopyConflictPolicy, string> = {
-  rename: '改名后复制',
-  skip: '跳过',
+  rename: '自动编号后全部复制',
+  skip: '整组跳过',
   overwrite: '覆盖',
 }
 
@@ -69,8 +69,8 @@ const LAYOUT_HINT: Record<CopyLayout, string> = {
 }
 
 const CONFLICT_HINT: Record<CopyConflictPolicy, string> = {
-  rename: '重名加数字：img1.jpg',
-  skip: '已有同名就不复制',
+  rename: '重名编号，一张不少',
+  skip: '有同名就整组不复制',
   overwrite: '覆盖目标，不可撤销',
 }
 
@@ -356,7 +356,7 @@ const CopyPanel = ({ showToast }: CopyPanelProps) => {
                     : 'text-amber-600 dark:text-amber-500',
                 )}
               >
-                · 其中 {preview.conflicts} 张目标已存在，将
+                ；命中 {preview.conflicts} 个同名文件，将
                 {CONFLICT_VERB[conflict]}
               </span>
             )}

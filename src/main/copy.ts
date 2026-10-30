@@ -180,16 +180,11 @@ export const planPreview = async (
 }
 
 /**
- * 预演一遍重名冲突：按目标目录统计会被改名 / 跳过 / 覆盖的张数。
- *
- * 与 buildPlan 用同一套占用名单逻辑，保证预览数字和实际执行一致 ——
- * 两处各写一套的话，界面说「1 张会改名」而实际改了 3 张，比不提示更糟。
- */
-/**
- * 预演一遍重名冲突：统计目标目录里**已经真实存在**同名文件的张数。
+ * 预演一遍重名冲突：统计目标目录里**已经真实存在**的同名坑位数。
  *
  * 刻意不把「同一批里两张图同名」算进来 —— 那是源目录里的重名，
  * 用户在扫描结果里就能看到，提示「目标已存在」会让人误以为盘上已有文件。
+ * 同名的一批图只占目标里的一个坑位，所以只算一次；覆盖确认弹窗用的就是这个数。
  */
 const countConflicts = async (
   images: ScannedImage[],
@@ -197,8 +192,8 @@ const countConflicts = async (
   targetDir: string,
 ): Promise<number> => {
   const takenByDir = new Map<string, Set<string>>()
-  // 同一个目录下的同名文件只对应目标里的一个坑位，只能算一次冲突。
-  // 算成 N 次的话，界面会承诺「跳过 4 张」而实际只跳过 1 张。
+  // 同一批同名图只占目标里的一个坑位，只能算一次：
+  // 覆盖确认弹窗要报的是「会顶掉几个文件」，不是「涉及几张源图」。
   const seen = new Set<string>()
   let conflicts = 0
 
@@ -573,16 +568,16 @@ export class CopyTaskRunner {
     const conflict = this.params.conflict ?? 'rename'
 
     // 三个名单各管一件事：
-    // - original 是目标目录「开工前」的快照，skip / overwrite 只认它
-    // - taken 是本批累积占用，用来给「同批重名」排队改名
+    // - original 是目标目录「开工前」的快照，用来判断这个名字是不是本来就存在
+    // - taken 是本批累积占用，用来排队编号
     // - handled 记录本批里每个「目录 + 源文件名」出现过几次
     //
     // 合成一个名单会出事：A02-A 下 9 张图都叫 img.jpg，
     // 第 1 张复制过去后名字就被占住了，后面 8 张会被判成「目标已存在」——
     // skip 会把它们全部跳过（丢 8 张图），overwrite 会让它们互相覆盖（也丢 8 张）。
     //
-    // 同一个名字在目标里只有一个坑位：第一张该跳过就跳过、该覆盖就覆盖，
-    // 后面同名的一律改名，否则 4 张同名的图最后只会剩下 1 张。
+    // 所以「目标开工前就有」与「本批刚写进去」必须分开看：
+    // 前者按用户选的重名策略处理，后者只能编号，绝不能覆盖自己刚写的图。
     const original = new Map<string, Set<string>>()
     const taken = new Map<string, Set<string>>()
     const handled = new Map<string, Set<string>>()
@@ -619,17 +614,24 @@ export class CopyTaskRunner {
       let target = image.name
       let action: PlanAction = 'copy'
 
-      if (existedBefore && !repeated) {
+      if (existedBefore) {
         if (conflict === 'skip') {
+          // 目标已有这个名字：整组都不写，不搞「跳一张、改三张」的半吊子
           action = 'skip'
         } else if (conflict === 'overwrite') {
-          target = image.name
+          // 第一张顶掉目标文件，后面同名的编号落盘，否则 4 张最后只剩 1 张
+          target = repeated ? indexedName(image.name, used) : image.name
         } else {
+          // 自动编号：把目标占着的名字让开，这一组一张不少地落盘
           target = indexedName(image.name, used)
         }
       } else if (used.has(lower)) {
-        // 同批重名，或本批第 2 次遇到同名：改名，绝不跳过或覆盖
-        target = indexedName(image.name, used)
+        // 本批内部重名（目标原本没有这个名字）：skip 全跳，其余编号
+        if (conflict === 'skip') {
+          action = 'skip'
+        } else {
+          target = indexedName(image.name, used)
+        }
       }
 
       if (action === 'copy') used.add(target.toLowerCase())
