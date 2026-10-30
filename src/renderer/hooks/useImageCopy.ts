@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 
-import { useImageFilterStore } from '../stores/imageFilterStore'
 import { useImageStore } from '../stores/imageStore'
+import { toErrorMessage } from '../utils/error'
 
 interface UseImageCopyProps {
   showToast: (
@@ -11,78 +11,22 @@ interface UseImageCopyProps {
   ) => void
 }
 
-// 主进程抛出的错误会被 Electron 加上 "Error invoking remote method ..." 前缀
-const toErrorMessage = (error: unknown, fallback: string): string => {
-  const raw = error instanceof Error ? error.message : fallback
-  const index = raw.lastIndexOf('Error: ')
-
-  return index >= 0 ? raw.slice(index + 7) : raw
-}
-
+/**
+ * 复制步骤：把扫描结果按文件名平铺拷贝到目标目录，并写入 source.txt。
+ * 与扫描步骤解耦，只依赖 store 里的 images。
+ */
 export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
-  const { plant, date, shift, times, types, setDirs } = useImageFilterStore()
   const {
     images,
     isScan,
     isCopy,
     copiedImageCount,
-    setImages,
+    setCopiedImageCount,
     setIsCopy,
     setIsError,
-    setIsScan,
     setError,
-    setCopiedImageCount,
   } = useImageStore()
 
-  // 扫描源目录：目录校验与 6 层规则遍历全部在主进程完成
-  const handleImageScan = useCallback(async () => {
-    try {
-      // 1. 重置状态
-      setImages([])
-      setIsError(false)
-      setError(null)
-      setCopiedImageCount(0)
-
-      // 2. 选择 DC 根目录
-      const root = await window.electronAPI.pickDirectory({
-        title: '请选择 DC 目录',
-      })
-
-      // 用户取消选择，直接结束
-      if (!root) return
-
-      // 3. 设置扫描状态
-      setIsScan(true)
-      showToast('扫描开始', '正在扫描文件...', 'info')
-
-      // 4. 主进程扫描（含目录名校验）
-      const { dirs, images: scannedImages } =
-        await window.electronAPI.scanImages({
-          rootPath: root.path,
-          plant,
-          date,
-          shift,
-          times,
-          types,
-        })
-
-      // 5. 更新状态并显示结果
-      setDirs(dirs)
-      setImages(scannedImages)
-      showToast('扫描完成', `共找到 ${scannedImages.length} 张图片`, 'success')
-    } catch (error) {
-      const message = toErrorMessage(error, '扫描过程中发生未知错误')
-
-      setIsError(true)
-      setError(new Error(message))
-      showToast('扫描失败', message, 'error')
-      console.error('扫描出错:', message)
-    } finally {
-      setIsScan(false)
-    }
-  }, [plant, date, shift, times, types, setDirs, setImages, setError])
-
-  // 复制文件到目标目录
   const handleImageCopy = useCallback(async () => {
     if (!images.length) {
       showToast('操作提示', '请先扫描文件', 'info')
@@ -145,7 +89,7 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
       unsubscribe?.()
       setIsCopy(false)
     }
-  }, [images, setCopiedImageCount, setError])
+  }, [images, setCopiedImageCount, setError, setIsError, setIsCopy])
 
   // 计算复制进度百分比
   const getCopyProgress = () => {
@@ -153,17 +97,11 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
     return Math.round((copiedImageCount / images.length) * 100)
   }
 
-  // 检测是否可以开始扫描
-  const canStartScan = () =>
-    times.length > 0 && types.length > 0 && !isScan && !isCopy
-
   // 检测是否可以开始复制
   const canStartCopy = () => images.length > 0 && !isScan && !isCopy
 
   return {
-    handleImageScan,
     handleImageCopy,
-    canStartScan,
     canStartCopy,
     getCopyProgress,
   }

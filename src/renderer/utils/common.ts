@@ -93,3 +93,7 @@ export const formatFileSize = (bytes: number): string => {
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
+
+/** 毫秒转可读耗时：<1s 显示毫秒，其余保留一位小数秒 */
+export const formatDuration = (ms: number): string =>
+  ms < 1000 ? `${ms} 毫秒` : `${(ms / 1000).toFixed(1)} 秒`

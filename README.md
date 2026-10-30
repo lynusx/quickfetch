@@ -7,6 +7,8 @@ RCA EL 图片拷贝与 Excel 解析工具，基于 Electron + React 的桌面应
 - 图片拷贝要求目标机器上存在名为 `DC` 的根目录，目录层级为：
   `DC/<厂区子目录>/EL/<日期 YYYYMMDD>/<班次>/<时段>/<类型>/<图片>`
 - 支持扩展名：`.png` `.jpg` `.jpeg` `.webp` `.gif`
+- 扫描在主进程用 `fs.readdir` 完成（不再受浏览器 File System Access API 限制），
+  支持并发遍历、进度推送与中途取消；扫描与复制是两个独立步骤
 - 扫描结果会写入目标目录的 `source.txt`（相对路径清单），图片按文件名平铺拷贝到目标目录
 
 ## 开发
@@ -36,8 +38,11 @@ pnpm dist:win                 # 在 out/ 基础上打 Windows x64 NSIS 安装包
 src/
 ├── main/                 # 主进程
 │   ├── index.ts          # 窗口创建、应用生命周期
-│   ├── ipc.ts            # 文件系统 IPC（选目录/扫描/拷贝/写文本/另存 Excel）
-│   └── scan.ts           # 6 层目录规则扫描
+│   ├── ipc.ts            # 文件系统 IPC（选目录/扫描/取消/拷贝/写文本/另存 Excel）
+│   └── scanner/          # 6 层目录规则扫描引擎
+│       ├── index.ts      # 扫描主流程（并发遍历、进度、取消、错误归类）
+│       ├── errors.ts     # ScanError 与错误码
+│       └── limiter.ts    # readdir 并发闸门
 ├── preload/index.ts      # contextBridge 暴露 window.electronAPI
 ├── shared/ipc.ts         # 主进程 ↔ preload ↔ 渲染层共用的 IPC 类型契约
 └── renderer/             # 渲染层（React）

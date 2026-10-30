@@ -2,7 +2,7 @@ import { BrowserWindow, app, dialog, ipcMain } from 'electron'
 import { copyFile, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 
-import { scanImages } from './scan'
+import { scanImages } from './scanner'
 
 import type {
   CopyImagesResult,
@@ -10,10 +10,14 @@ import type {
   DirectoryInfo,
   ScanImagesParams,
   ScanImagesResult,
+  ScanProgress,
 } from '../shared/ipc'
 
 /** 单批并发拷贝数，避免大量文件同时打开句柄 */
 const COPY_CONCURRENCY = 10
+
+/** 进行中的扫描任务，key 为渲染层生成的 taskId */
+const scanTasks = new Map<string, AbortController>()
 
 const getParentWindow = (
   sender: Electron.WebContents,
@@ -50,10 +54,34 @@ export const registerIpcHandlers = (): void => {
   ipcMain.handle(
     'fs:scan-images',
     async (
-      _event,
-      params: Omit<ScanImagesParams, 'rootPath'> & { rootPath: string },
-    ): Promise<ScanImagesResult> => scanImages(params),
+      event,
+      params: ScanImagesParams,
+      taskId: string,
+    ): Promise<ScanImagesResult> => {
+      const controller = new AbortController()
+      scanTasks.set(taskId, controller)
+
+      const pushProgress = (progress: ScanProgress): void => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send('fs:scan-progress', progress)
+        }
+      }
+
+      try {
+        return await scanImages(params, {
+          taskId,
+          signal: controller.signal,
+          onProgress: pushProgress,
+        })
+      } finally {
+        scanTasks.delete(taskId)
+      }
+    },
   )
+
+  ipcMain.handle('fs:cancel-scan', (_event, taskId: string): void => {
+    scanTasks.get(taskId)?.abort()
+  })
 
   ipcMain.handle(
     'fs:copy-images',

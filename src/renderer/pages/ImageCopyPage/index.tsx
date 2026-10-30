@@ -4,6 +4,7 @@ import {
   Download,
   FolderOpen,
   Loader2,
+  X,
 } from 'lucide-react'
 
 import ImageFilterPanel from '@/components/ImageFilterPanel'
@@ -21,8 +22,10 @@ import {
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { useImageCopy } from '@/hooks/useImageCopy'
+import { useImageScan } from '@/hooks/useImageScan'
 import { useToast } from '@/hooks/useToast'
 import { useImageStore } from '@/stores/imageStore'
+import { formatDuration } from '@/utils/common'
 
 const Metric = ({
   value,
@@ -45,15 +48,18 @@ const StepBadge = ({ index }: { index: number }) => (
 
 const ImageCopyPage = () => {
   const { showToast } = useToast()
-  const { images, copiedImageCount, isCopy, isScan, isError, error } =
+  const { images, copiedImageCount, isCopy, isError, error, scanSummary } =
     useImageStore()
   const {
+    scanProgress,
+    isScan,
     canStartScan,
-    canStartCopy,
-    getCopyProgress,
     handleImageScan,
-    handleImageCopy,
-  } = useImageCopy({ showToast })
+    handleCancelScan,
+  } = useImageScan({ showToast })
+  const { canStartCopy, getCopyProgress, handleImageCopy } = useImageCopy({
+    showToast,
+  })
 
   const progress = getCopyProgress()
 
@@ -141,6 +147,12 @@ const ImageCopyPage = () => {
                       )}
                       {isScan ? '扫描中…' : '选择 DC 目录'}
                     </Button>
+                    {isScan && (
+                      <Button variant="outline" onClick={handleCancelScan}>
+                        <X data-icon="inline-start" />
+                        取消扫描
+                      </Button>
+                    )}
                     {images.length > 0 && (
                       <Badge variant="secondary">
                         <CircleCheck data-icon="inline-start" />
@@ -148,6 +160,31 @@ const ImageCopyPage = () => {
                       </Badge>
                     )}
                   </div>
+
+                  {isScan && scanProgress && (
+                    <div className="mt-1 flex flex-col gap-1.5 rounded-lg border bg-muted/40 p-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-medium">扫描中</span>
+                        <span className="tabular-nums text-muted-foreground">
+                          已读取 {scanProgress.scannedDirs} 个目录 · 命中{' '}
+                          {scanProgress.matched} 张
+                        </span>
+                      </div>
+                      <p
+                        className="truncate font-mono text-xs text-muted-foreground"
+                        title={scanProgress.currentPath}
+                      >
+                        {scanProgress.currentPath}
+                      </p>
+                    </div>
+                  )}
+
+                  {!isScan && scanSummary && images.length > 0 && (
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      读取 {scanSummary.scannedDirs} 个目录，耗时{' '}
+                      {formatDuration(scanSummary.elapsedMs)}
+                    </p>
+                  )}
                 </div>
               </div>
 
