@@ -97,3 +97,15 @@ export const formatFileSize = (bytes: number): string => {
 /** 毫秒转可读耗时：<1s 显示毫秒，其余保留一位小数秒 */
 export const formatDuration = (ms: number): string =>
   ms < 1000 ? `${ms} 毫秒` : `${(ms / 1000).toFixed(1)} 秒`
+
+/** 剩余时间：超过一分钟按分秒展示，避免「预计 143 秒」这种不好读的数字 */
+export const formatEta = (ms: number | null): string | null => {
+  if (ms === null || !Number.isFinite(ms)) return null
+  if (ms <= 0) return '即将完成'
+  if (ms < 60_000) return `约 ${Math.max(1, Math.round(ms / 1000))} 秒`
+
+  const minutes = Math.floor(ms / 60_000)
+  const seconds = Math.round((ms % 60_000) / 1000)
+
+  return seconds > 0 ? `约 ${minutes} 分 ${seconds} 秒` : `约 ${minutes} 分`
+}

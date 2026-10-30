@@ -46,13 +46,14 @@ src/
 │   ├── index.ts          # 窗口创建、应用生命周期
 │   ├── ipc.ts            # IPC 注册（配置/任务/复制/另存 Excel）
 │   ├── settings.ts       # 根目录与机台列表的持久化（userData/settings.json）
-│   ├── copy.ts           # 平铺复制 + source.txt + 同名自动改名
+│   ├── load.ts           # 并发与分批档位（按现场 8G 机器调，可用环境变量覆盖）
+│   ├── copy.ts           # 平铺复制 + source.txt + 同名自动改名（分批推进）
 │   └── scanner/          # 扫描任务
 │       ├── index.ts      # 对外导出
 │       ├── task.ts       # 任务执行体：前缀探测 → 展开 → 收图，含暂停/取消/进度
 │       ├── registry.ts   # 任务表、快照广播、历史淘汰
 │       ├── fsx.ts        # 带超时的 readdir，区分不存在/无权限/不可达
-│       └── limiter.ts    # 目录读取并发闸门
+│       └── limiter.ts    # 并发闸门，支持运行时降档
 ├── preload/index.ts      # contextBridge 暴露 window.electronAPI
 ├── shared/ipc.ts         # 主进程 ↔ preload ↔ 渲染层共用的 IPC 类型契约
 └── renderer/             # 渲染层（React）
@@ -89,3 +90,27 @@ src/
   复制时传 `taskId` 让主进程取全量，避免上万条路径在 IPC 上来回搬
 - 主进程/preload 打包为 CommonJS（`.cjs`），渲染层为 ESM；仓库本身是 `type: module`
 - 路由使用 `HashRouter`：生产环境通过 `file://` 加载，history 路由会 404
+
+## 资源占用
+
+现场电脑为 8G 内存 + 256G 盘，图片根目录在共享盘上，所以读取强度是刻意压低的：
+
+| 项 | 默认值 | 说明 |
+| --- | --- | --- |
+| 目录读取并发 | 4 | 每个并发约占一个句柄 + 一条 SMB 请求 |
+| 机台分批 | 2 | 一批机台跑完再开下一批，内存峰值只与单批相关 |
+| 复制并发 | 6 | Windows 上共享冲突高发，不宜再高 |
+| 复制分批 | 50 张 | 批之间让出事件循环，进度也可按批反馈 |
+
+改档位只动 `src/main/load.ts`；临时压降可用环境变量 `SHX_READ_CONCURRENCY`、
+`SHX_MACHINE_BATCH`、`SHX_COPY_CONCURRENCY`、`SHX_COPY_BATCH`，不必重新打包。
+
+三条硬约束：
+
+- **并发闸门不可嵌套**。已占用名额的任务里不要再 `limiter(...)` 调用自己，
+  并发降到 1 时会死锁。所以第 5 层是「先并发读、再串行处理结果」两步走，
+  机台层也不再包一层 limiter。
+- **探测与收尾共用同一个闸门**，总并发不会叠加。探测只拿目录名（几 MB），
+  文件明细统一在 `collectDetails` 补读，避免几万张图的路径同时驻留内存。
+- **失败率自适应降档**：每 20 次读取统计一次，不可达超过 25% 就降一档（下限 1），
+  单次超时同步从 20 秒收紧到 8 秒。只降不升——反复试探只会让吃紧的机器更抖。

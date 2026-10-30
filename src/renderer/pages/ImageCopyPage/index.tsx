@@ -22,7 +22,7 @@ import { useToast } from '@/hooks/useToast'
 import { useScanStore } from '@/stores/scanStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { ScanBranch, ScanTaskStatus } from '../../../shared/ipc'
-import { formatDuration } from '@/utils/common'
+import { formatDuration, formatEta } from '@/utils/common'
 import { cn } from '@/lib/utils'
 
 const STATUS_META: Record<
@@ -71,6 +71,8 @@ const ImageCopyPage = () => {
   const abnormal = branches.filter(
     (branch) => branch.status !== 'hit' && branch.status !== 'empty',
   )
+  const eta =
+    task && task.status === 'running' ? formatEta(task.progress.etaMs) : null
 
   return (
     <div className="flex flex-col gap-6">
@@ -116,6 +118,27 @@ const ImageCopyPage = () => {
                   <span className="tabular-nums">
                     命中 {task?.totalImages ?? 0} 张
                   </span>
+                </div>
+                {/* 现场机器资源有限，把实际的并发档位和批次暴露出来，
+                    出问题时能一眼看出是不是并发被自动降下来了 */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                  {task && task.progress.batchTotal > 0 && (
+                    <span className="tabular-nums">
+                      第 {task.progress.batchIndex}/{task.progress.batchTotal}{' '}
+                      批
+                    </span>
+                  )}
+                  {task && task.progress.concurrency > 0 && (
+                    <span className="tabular-nums">
+                      并发 {task.progress.concurrency}
+                    </span>
+                  )}
+                  {task && task.progress.detailsPending > 0 && (
+                    <span className="tabular-nums">
+                      待读明细 {task.progress.detailsPending}
+                    </span>
+                  )}
+                  {eta && <span className="tabular-nums">剩余 {eta}</span>}
                 </div>
                 {task?.progress.currentPath && (
                   <p
@@ -211,6 +234,11 @@ const ImageCopyPage = () => {
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-medium">
                       {copy.running ? '复制中' : '复制完成'}
+                      {copy.batchTotal > 1 && (
+                        <span className="ml-2 font-normal text-muted-foreground">
+                          第 {copy.batchIndex}/{copy.batchTotal} 批
+                        </span>
+                      )}
                     </span>
                     <span className="tabular-nums text-muted-foreground">
                       {copy.copied} / {copy.total} 张

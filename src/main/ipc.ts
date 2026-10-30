@@ -3,6 +3,7 @@ import { writeFile } from 'node:fs/promises'
 import { basename } from 'node:path'
 
 import { copyImagesTo } from './copy'
+import { load } from './load'
 import { createTask, getRunner, getTask } from './scanner'
 import { readSettings, refreshMachines, saveRootPath } from './settings'
 
@@ -102,7 +103,14 @@ export const registerIpcHandlers = (): void => {
 
       return createTask(
         { ...params, machines },
-        { rootPath: settings.rootPath, entry: settings.entry },
+        {
+          rootPath: settings.rootPath,
+          entry: settings.entry,
+          load: {
+            readConcurrency: load.readConcurrency,
+            machineBatchSize: load.machineBatchSize,
+          },
+        },
       )
     },
   )
@@ -154,6 +162,10 @@ export const registerIpcHandlers = (): void => {
       const sender = event.sender
 
       const result = await copyImagesTo(runner.getImages(), targetDir, {
+        load: {
+          concurrency: load.copyConcurrency,
+          batchSize: load.copyBatchSize,
+        },
         onProgress: (progress) => {
           if (!sender.isDestroyed()) {
             sender.send('fs:copy-progress', progress)

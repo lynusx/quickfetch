@@ -35,6 +35,8 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
       copied: 0,
       total: task.totalImages,
       failed: 0,
+      batchIndex: 0,
+      batchTotal: 0,
     })
 
     const unsubscribe = window.electronAPI.onCopyProgress((progress) => {
@@ -42,6 +44,8 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
         copied: progress.copied,
         total: progress.total,
         failed: progress.failed,
+        batchIndex: progress.batchIndex,
+        batchTotal: progress.batchTotal,
       })
     })
 

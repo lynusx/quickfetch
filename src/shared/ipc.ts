@@ -89,6 +89,23 @@ export interface ScanTaskProgress {
   dirsUnreachable: number
   images: number
   currentPath: string
+  /**
+   * 已探测但尚未读取文件明细的目录数。
+   * 分批的意义就在这里：探测跑完整棵树很便宜，逐目录读文件明细才占内存，
+   * 这个值大于 0 说明还有尾巴没扫干净。
+   */
+  detailsPending: number
+  /** 当前生效的并发数，现场机器吃紧时会自动下调 */
+  concurrency: number
+  /** 当前批次序号，从 1 开始；batchTotal 为总批次 */
+  batchIndex: number
+  batchTotal: number
+  /** 需要逐目录读文件明细的总数，收尾阶段才有值 */
+  detailTotal: number
+  /** 已读完备的明细目录数 */
+  detailDone: number
+  /** 预计剩余毫秒，样本不足时为 null */
+  etaMs: number | null
 }
 
 /**
@@ -116,6 +133,9 @@ export interface CopyProgress {
   copied: number
   total: number
   failed: number
+  /** 当前批次，从 1 开始 */
+  batchIndex: number
+  batchTotal: number
 }
 
 export interface CopyImagesResult {

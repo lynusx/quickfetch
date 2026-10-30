@@ -8,6 +8,9 @@ interface CopyState {
   copied: number
   total: number
   failed: number
+  /** 当前批次，复制按 batchTotal 大小的批推进，便于现场判断还剩几批 */
+  batchIndex: number
+  batchTotal: number
 }
 
 interface ScanState {
