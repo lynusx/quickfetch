@@ -145,6 +145,10 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
     machineStats.length,
     machines,
     layout,
+    // 冲突数要靠目标目录和策略才能算出来，漏在依赖外会导致
+    // 选完目录后预检查仍显示「没有冲突」
+    conflict,
+    targetDir,
     setPreview,
     setPreviewing,
     setError,

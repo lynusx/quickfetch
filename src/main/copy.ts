@@ -197,14 +197,22 @@ const countConflicts = async (
   targetDir: string,
 ): Promise<number> => {
   const takenByDir = new Map<string, Set<string>>()
+  // 同一个目录下的同名文件只对应目标里的一个坑位，只能算一次冲突。
+  // 算成 N 次的话，界面会承诺「跳过 4 张」而实际只跳过 1 张。
+  const seen = new Set<string>()
   let conflicts = 0
 
   for (const image of images) {
     const folder = folderOf(image, params.layout)
     const dir = folder.length ? join(targetDir, ...folder) : targetDir
     const taken = await namesIn(dir, takenByDir)
+    const lower = image.name.toLowerCase()
+    const key = `${dir}\u0000${lower}`
 
-    if (taken.has(image.name.toLowerCase())) conflicts += 1
+    if (taken.has(lower) && !seen.has(key)) {
+      conflicts += 1
+      seen.add(key)
+    }
   }
 
   return conflicts
@@ -564,8 +572,20 @@ export class CopyTaskRunner {
     const picked = filterByMachines(this.source, this.params.machines)
     const conflict = this.params.conflict ?? 'rename'
 
-    // 每个目标目录一份已占用名单，跨批累积，保证同次任务内不重名
+    // 三个名单各管一件事：
+    // - original 是目标目录「开工前」的快照，skip / overwrite 只认它
+    // - taken 是本批累积占用，用来给「同批重名」排队改名
+    // - handled 记录本批里每个「目录 + 源文件名」出现过几次
+    //
+    // 合成一个名单会出事：A02-A 下 9 张图都叫 img.jpg，
+    // 第 1 张复制过去后名字就被占住了，后面 8 张会被判成「目标已存在」——
+    // skip 会把它们全部跳过（丢 8 张图），overwrite 会让它们互相覆盖（也丢 8 张）。
+    //
+    // 同一个名字在目标里只有一个坑位：第一张该跳过就跳过、该覆盖就覆盖，
+    // 后面同名的一律改名，否则 4 张同名的图最后只会剩下 1 张。
+    const original = new Map<string, Set<string>>()
     const taken = new Map<string, Set<string>>()
+    const handled = new Map<string, Set<string>>()
 
     for (const image of picked) {
       const folder = folderOf(image, this.params.layout)
@@ -573,24 +593,46 @@ export class CopyTaskRunner {
         ? join(this.targetDir, ...folder)
         : this.targetDir
 
-      const names = await namesIn(dir, taken)
-      const exists = names.has(image.name.toLowerCase())
+      const existing = await namesIn(dir, original)
 
-      // 三种策略只在「目标已存在」时才有区别，否则一律原样复制
+      let used = taken.get(dir)
+
+      if (!used) {
+        // 从原始快照复制一份，后续改的都是副本
+        used = new Set(existing)
+        taken.set(dir, used)
+      }
+
+      let seen = handled.get(dir)
+
+      if (!seen) {
+        seen = new Set()
+        handled.set(dir, seen)
+      }
+
+      const lower = image.name.toLowerCase()
+      const existedBefore = existing.has(lower)
+      const repeated = seen.has(lower)
+
+      seen.add(lower)
+
       let target = image.name
       let action: PlanAction = 'copy'
 
-      if (exists) {
+      if (existedBefore && !repeated) {
         if (conflict === 'skip') {
           action = 'skip'
         } else if (conflict === 'overwrite') {
           target = image.name
         } else {
-          target = indexedName(image.name, names)
+          target = indexedName(image.name, used)
         }
+      } else if (used.has(lower)) {
+        // 同批重名，或本批第 2 次遇到同名：改名，绝不跳过或覆盖
+        target = indexedName(image.name, used)
       }
 
-      names.add(target.toLowerCase())
+      if (action === 'copy') used.add(target.toLowerCase())
 
       this.plan.push({
         image,

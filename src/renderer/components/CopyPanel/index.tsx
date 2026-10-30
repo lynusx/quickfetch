@@ -53,6 +53,13 @@ const STATUS_META: Record<
 
 const LAYOUTS: CopyLayout[] = ['flat', 'machine', 'type', 'machine-type']
 
+/** 跟在「将…」后面的动词，别直接拼「跳过已存在」这种标签原文 */
+const CONFLICT_VERB: Record<CopyConflictPolicy, string> = {
+  rename: '改名后复制',
+  skip: '跳过',
+  overwrite: '覆盖',
+}
+
 /** 分组方式的直观说明：光看「按机台+类型分组」不知道会建几层目录 */
 const LAYOUT_HINT: Record<CopyLayout, string> = {
   flat: '全部直接放在目标目录下',
@@ -186,20 +193,25 @@ const CopyPanel = ({ showToast }: CopyPanelProps) => {
               {activeDir || '尚未选择，开始复制前必须先选择'}
             </span>
           </div>
+          {/* 判禁用只看「有没有任务在跑」。这里原来还要求 finished，
+              而 finished 依赖已有复制任务 —— 首次进来按钮是灰的，
+              与「开始复制前必须先选目录」正好打架 */}
           <Button
             variant="outline"
             size="sm"
             className="shrink-0"
-            disabled={busy || running || paused || !finished}
+            disabled={busy || running || paused}
             onClick={() =>
               void (task && finished && task.progress.targetDir
                 ? handleChangeTarget()
                 : handlePickTarget())
             }
             title={
-              finished
-                ? '更换目录并按原勾选完整重跑一次'
-                : '复制进行中不能更换目录'
+              running || paused
+                ? '复制进行中不能更换目录'
+                : finished
+                  ? '更换目录并按原勾选完整重跑一次'
+                  : '选择复制目标目录'
             }
           >
             {activeDir ? '更换' : '选择目录'}
@@ -345,7 +357,7 @@ const CopyPanel = ({ showToast }: CopyPanelProps) => {
                 )}
               >
                 · 其中 {preview.conflicts} 张目标已存在，将
-                {COPY_CONFLICT_LABEL[conflict]}
+                {CONFLICT_VERB[conflict]}
               </span>
             )}
           </p>
