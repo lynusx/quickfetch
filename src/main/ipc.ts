@@ -4,12 +4,29 @@ import { basename } from 'node:path'
 
 import { copyImagesTo } from './copy'
 import { load } from './load'
-import { createTask, getRunner, getTask } from './scanner'
-import { readSettings, refreshMachines, saveRootPath } from './settings'
+import {
+  clearRecords,
+  createTask,
+  deleteRecord,
+  getRunner,
+  getTask,
+  listHistory,
+  readRecord,
+  startTask,
+  toTask,
+  trimRecords,
+} from './scanner'
+import {
+  readSettings,
+  refreshMachines,
+  saveHistoryLimit,
+  saveRootPath,
+} from './settings'
 
 import type {
   CopyImagesResult,
   DirectoryInfo,
+  ScanHistoryItem,
   ScanTask,
   ScanTaskParams,
 } from '../shared/ipc'
@@ -115,9 +132,14 @@ export const registerIpcHandlers = (): void => {
     },
   )
 
-  ipcMain.handle('scan:start', (_event, taskId: string) =>
-    requireRunner(taskId).start(),
-  )
+  // 启动走 registry.startTask：它在任务结束后负责把结果写入历史
+  ipcMain.handle('scan:start', (_event, taskId: string): ScanTask => {
+    const task = startTask(taskId)
+
+    if (!task) throw new Error('任务不存在或已过期，请重新开始扫描')
+
+    return task
+  })
 
   ipcMain.handle('scan:pause', (_event, taskId: string) =>
     requireRunner(taskId).pause('user'),
@@ -135,19 +157,65 @@ export const registerIpcHandlers = (): void => {
 
   ipcMain.handle(
     'scan:images',
-    (_event, taskId: string, offset: number, limit: number) => {
+    async (_event, taskId: string, offset: number, limit: number) => {
+      // 内存里的任务优先；重启后从历史记录里读
       const runner = getRunner(taskId)
 
-      if (!runner) return { images: [], total: 0 }
+      if (runner) {
+        const all = runner.getImages()
 
-      const all = runner.getImages()
+        return { images: all.slice(offset, offset + limit), total: all.length }
+      }
+
+      const record = await readRecord(taskId)
+
+      if (!record) return { images: [], total: 0 }
 
       return {
-        images: all.slice(offset, offset + limit),
-        total: all.length,
+        images: record.images.slice(offset, offset + limit),
+        total: record.images.length,
       }
     },
   )
+
+  // ------------------------------------------------------------------ 历史
+
+  ipcMain.handle(
+    'history:list',
+    (): Promise<ScanHistoryItem[]> => listHistory(),
+  )
+
+  ipcMain.handle('history:load', async (_event, taskId: string) => {
+    // 当前会话的任务直接取内存快照，历史文件只作为重启后的来源
+    const live = getTask(taskId)
+
+    if (live) return live
+
+    const record = await readRecord(taskId)
+
+    return record ? toTask(record) : null
+  })
+
+  ipcMain.handle('history:delete', async (_event, taskId: string) => {
+    await deleteRecord(taskId)
+
+    return listHistory()
+  })
+
+  ipcMain.handle('history:clear', async () => {
+    await clearRecords()
+
+    return listHistory()
+  })
+
+  ipcMain.handle('history:set-limit', async (_event, limit: number) => {
+    const settings = await saveHistoryLimit(limit)
+
+    // 收紧保留条数后立即裁剪，避免用户以为改了设置却还占着磁盘
+    await trimRecords(settings.historyLimit)
+
+    return settings
+  })
 
   // ------------------------------------------------------------------ 复制
 
@@ -158,10 +226,19 @@ export const registerIpcHandlers = (): void => {
       taskId: string,
       targetDir: string,
     ): Promise<CopyImagesResult> => {
-      const runner = requireRunner(taskId)
       const sender = event.sender
 
-      const result = await copyImagesTo(runner.getImages(), targetDir, {
+      // 历史任务（重启后恢复的）没有内存 runner，改从结果文件取全量图片
+      const runner = getRunner(taskId)
+      const images = runner
+        ? runner.getImages()
+        : ((await readRecord(taskId))?.images ?? [])
+
+      if (!images.length) {
+        throw new Error('该任务没有可复制的图片，请重新扫描')
+      }
+
+      const result = await copyImagesTo(images, targetDir, {
         load: {
           concurrency: load.copyConcurrency,
           batchSize: load.copyBatchSize,

@@ -27,6 +27,8 @@ export interface AppSettings {
   machines: MachineInfo[]
   /** 上次识别机台的时间，ISO 字符串 */
   updatedAt: string | null
+  /** 历史扫描记录的保留条数，默认 10 */
+  historyLimit: number
 }
 
 export interface ScanTaskParams {
@@ -147,6 +149,28 @@ export interface CopyImagesResult {
   renamed: number
 }
 
+/**
+ * 历史任务列表项。
+ *
+ * 只带摘要，不带 branches 与 preview —— 历史记录是每次启动都要读一遍的，
+ * 二十个任务的机台列表加起来会有几百条对象，页面没展开时不需要。
+ */
+export interface ScanHistoryItem {
+  id: string
+  status: ScanTaskStatus
+  params: ScanTaskParams
+  /** 命中图片数 */
+  totalImages: number
+  /** 有结果的机台数，用于「3/10 台命中」这类摘要 */
+  hitMachines: number
+  machineCount: number
+  elapsedMs: number
+  createdAt: number
+  finishedAt: number | null
+  /** 结果明细文件是否存在；文件被删或损坏时加载会返回 null */
+  restorable: boolean
+}
+
 export interface ElectronAPI {
   getVersion: () => Promise<string>
   /** 打开系统目录选择框；用户取消时返回 null */
@@ -175,6 +199,20 @@ export interface ElectronAPI {
   ) => Promise<{ images: ScannedImage[]; total: number }>
   /** 订阅任务快照变更，返回取消订阅函数 */
   onScanTaskUpdate: (listener: (task: ScanTask) => void) => () => void
+
+  /**
+   * 历史扫描记录，按创建时间倒序。
+   * 默认只保留最近 10 次，可在历史面板里调整。
+   */
+  listScanHistory: () => Promise<ScanHistoryItem[]>
+  /** 读取某次历史任务的完整快照（含各机台结果与前 200 条预览） */
+  loadScanHistory: (taskId: string) => Promise<ScanTask | null>
+  /** 删除单条历史记录，连带删除其结果文件 */
+  deleteScanHistory: (taskId: string) => Promise<ScanHistoryItem[]>
+  /** 清空全部历史记录 */
+  clearScanHistory: () => Promise<ScanHistoryItem[]>
+  /** 历史保留条数，写入配置持久化 */
+  setHistoryLimit: (limit: number) => Promise<AppSettings>
 
   /** 把一个任务的图片平铺复制到目标目录，并写入 source.txt */
   copyTaskImages: (

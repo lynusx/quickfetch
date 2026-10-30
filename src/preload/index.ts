@@ -41,6 +41,16 @@ const api: ElectronAPI = {
     }
   },
 
+  listScanHistory: () => ipcRenderer.invoke('history:list'),
+
+  loadScanHistory: (taskId) => ipcRenderer.invoke('history:load', taskId),
+
+  deleteScanHistory: (taskId) => ipcRenderer.invoke('history:delete', taskId),
+
+  clearScanHistory: () => ipcRenderer.invoke('history:clear'),
+
+  setHistoryLimit: (limit) => ipcRenderer.invoke('history:set-limit', limit),
+
   copyTaskImages: (taskId, targetDir) =>
     ipcRenderer.invoke('copy:task', taskId, targetDir),
 

@@ -15,6 +15,8 @@ interface SettingsAction {
   load: () => Promise<void>
   saveRoot: (rootPath: string) => Promise<boolean>
   refresh: () => Promise<void>
+  /** 调整历史保留条数，主进程会立即裁剪超额记录 */
+  saveHistoryLimit: (limit: number) => Promise<void>
   clearError: () => void
 }
 
@@ -61,6 +63,15 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
         set({ error: toErrorMessage(error, '重新识别机台失败') })
       } finally {
         set({ saving: false })
+      }
+    },
+
+    saveHistoryLimit: async (limit) => {
+      set({ error: null })
+      try {
+        set({ settings: await window.electronAPI.setHistoryLimit(limit) })
+      } catch (error) {
+        set({ error: toErrorMessage(error, '保存历史保留条数失败') })
       }
     },
 

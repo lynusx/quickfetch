@@ -179,6 +179,10 @@ export class ScanTaskRunner {
   private resumeWaiters: (() => void)[] = []
   private readonly abortController = new AbortController()
 
+  /** 执行体的终态信号，落盘历史前等它 */
+  private readonly settled: Promise<boolean>
+  private markSettled: (ok: boolean) => void = () => {}
+
   private branches: ScanBranch[] = []
   private images: ScannedImage[] = []
   private progress: ScanTaskProgress = emptyProgress()
@@ -214,6 +218,10 @@ export class ScanTaskRunner {
     this.params = params
     this.context = context
     this.emit = emit
+
+    this.settled = new Promise<boolean>((resolve) => {
+      this.markSettled = resolve
+    })
 
     // 分支顺序与机台选择顺序一致，并发完成时也不会乱序
     this.branches = params.machines.map((machine) => ({
@@ -338,6 +346,16 @@ export class ScanTaskRunner {
     return this.status
   }
 
+  /**
+   * 等待任务真正结束（含取消后的异步收尾）。
+   *
+   * cancel() 是立即返回 canceled 的，执行体还要几个检查点才退出；
+   * 落盘历史必须等收尾完成，否则会把「取消瞬间」的中间结果写成最终结果。
+   */
+  waitSettled(): Promise<boolean> {
+    return this.settled
+  }
+
   // ---------------------------------------------------------------- 执行主体
 
   private async run(): Promise<void> {
@@ -392,6 +410,8 @@ export class ScanTaskRunner {
     } finally {
       this.finishedAt = Date.now()
       this.touch('', true)
+      // 通知等待方：快照已定稿，可以落盘了
+      this.markSettled(true)
     }
   }
 

@@ -4,6 +4,10 @@ import { basename, join } from 'node:path'
 
 import type { AppSettings, MachineInfo, Plant } from '../shared/ipc'
 
+import {
+  DEFAULT_HISTORY_LIMIT,
+  normalizeHistoryLimit,
+} from '../shared/historyLimit'
 import { toFsPath } from './pathx'
 
 const SETTINGS_VERSION = 1 as const
@@ -18,6 +22,7 @@ const defaultSettings = (): AppSettings => ({
   entry: ENTRY,
   machines: [],
   updatedAt: null,
+  historyLimit: DEFAULT_HISTORY_LIMIT,
 })
 
 /** 机台目录名首字母决定厂区：A 为东区、B 为西区 */
@@ -98,6 +103,8 @@ export const readSettings = async (): Promise<AppSettings> => {
       ...defaultSettings(),
       ...parsed,
       entry: ENTRY,
+      // 老版本配置文件没有该字段，回落到默认值而不是 undefined
+      historyLimit: normalizeHistoryLimit(parsed.historyLimit),
     }
   } catch {
     return defaultSettings()
@@ -122,12 +129,15 @@ export const saveRootPath = async (rootPath: string): Promise<AppSettings> => {
   }
 
   const machines = await discoverMachines(trimmed)
+  const current = await readSettings()
   const settings: AppSettings = {
     version: SETTINGS_VERSION,
     rootPath: trimmed,
     entry: ENTRY,
     machines,
     updatedAt: new Date().toISOString(),
+    // 换根目录不该把历史保留条数重置回默认值
+    historyLimit: current.historyLimit,
   }
 
   await writeSettings(settings)
@@ -145,6 +155,20 @@ export const refreshMachines = async (): Promise<AppSettings> => {
   const settings: AppSettings = {
     ...current,
     machines,
+    updatedAt: new Date().toISOString(),
+  }
+
+  await writeSettings(settings)
+
+  return settings
+}
+
+/** 调整历史保留条数并立即裁剪，超出的旧记录直接删掉 */
+export const saveHistoryLimit = async (limit: number): Promise<AppSettings> => {
+  const current = await readSettings()
+  const settings: AppSettings = {
+    ...current,
+    historyLimit: normalizeHistoryLimit(limit),
     updatedAt: new Date().toISOString(),
   }
 

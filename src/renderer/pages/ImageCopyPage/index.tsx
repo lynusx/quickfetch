@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import {
   CircleAlert,
   Download,
@@ -8,6 +9,7 @@ import {
   Wand2,
 } from 'lucide-react'
 
+import HistoryPanel from '@/components/HistoryPanel'
 import ImageFilterPanel from '@/components/ImageFilterPanel'
 import ScanSetupPanel from '@/components/ScanSetupPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -19,10 +21,17 @@ import { Separator } from '@/components/ui/separator'
 import { useImageCopy } from '@/hooks/useImageCopy'
 import { useScanTask } from '@/hooks/useScanTask'
 import { useToast } from '@/hooks/useToast'
+import { useImageFilterStore } from '@/stores/imageFilterStore'
 import { useScanStore } from '@/stores/scanStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import type { ScanBranch, ScanTaskStatus } from '../../../shared/ipc'
+import type {
+  ScanBranch,
+  ScanHistoryItem,
+  ScanTaskStatus,
+} from '../../../shared/ipc'
 import { formatDuration, formatEta } from '@/utils/common'
+import { toErrorMessage } from '@/utils/error'
+import { DEFAULT_HISTORY_LIMIT } from '../../../shared/historyLimit'
 import { cn } from '@/lib/utils'
 
 const STATUS_META: Record<
@@ -62,7 +71,70 @@ const ImageCopyPage = () => {
 
   const settingsError = useSettingsStore((state) => state.error)
   const settings = useSettingsStore((state) => state.settings)
+  const saveHistoryLimit = useSettingsStore((state) => state.saveHistoryLimit)
   const scanError = useScanStore((state) => state.error)
+  const historyLimit = settings?.historyLimit ?? DEFAULT_HISTORY_LIMIT
+
+  /**
+   * 载入历史任务：把参数回填到筛选面板，再替换当前任务快照。
+   *
+   * 参数必须回填 —— 否则界面上显示的是「今天 / 白班」，结果却是上周的，
+   * 用户点「开始扫描」时很容易按错误参数重跑。
+   */
+  const restoreHistory = useCallback(
+    async (item: ScanHistoryItem) => {
+      try {
+        const loaded = await window.electronAPI.loadScanHistory(item.id)
+
+        if (!loaded) {
+          showToast(
+            '记录已失效',
+            '该历史记录的结果文件已不存在，请重新扫描',
+            'error',
+          )
+          return
+        }
+
+        const filters = useImageFilterStore.getState()
+
+        // 厂区跟着历史里的机台走：否则机台已选中却不在当前厂区的列表里，
+        // 用户只看到「机台 3/10」却找不到高亮的那几个
+        const plants = new Set(
+          item.params.machines
+            .map(
+              (name) =>
+                settings?.machines.find((machine) => machine.name === name)
+                  ?.plant,
+            )
+            .filter(Boolean),
+        )
+
+        if (plants.size === 1)
+          filters.setPlant([...plants][0] as 'east' | 'west')
+
+        filters.setSelectedMachines(item.params.machines)
+        filters.setDate(item.params.date)
+        filters.setShift(item.params.shift)
+        filters.setSlots(item.params.slots)
+        filters.setTypes(item.params.types)
+
+        useScanStore.getState().setCopy(null)
+        useScanStore.getState().setTask(loaded)
+        showToast(
+          '已载入历史记录',
+          `${item.totalImages} 张图片，可直接查看或复制`,
+          'info',
+        )
+      } catch (cause) {
+        showToast(
+          '载入失败',
+          toErrorMessage(cause, '载入历史记录失败'),
+          'error',
+        )
+      }
+    },
+    [showToast, settings],
+  )
 
   const status = task ? STATUS_META[task.status] : null
   const configured = Boolean(settings?.rootPath)
@@ -299,6 +371,15 @@ const ImageCopyPage = () => {
               )}
             </CardContent>
           </Card>
+
+          <HistoryPanel
+            onRestore={(item) => void restoreHistory(item)}
+            showToast={showToast}
+            activeId={task?.id ?? null}
+            activeStatus={task?.status ?? null}
+            limit={historyLimit}
+            onLimitChange={(limit) => void saveHistoryLimit(limit)}
+          />
 
           {settingsError && (
             <Alert variant="destructive">
