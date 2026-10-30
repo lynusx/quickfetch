@@ -24,7 +24,6 @@ import {
 import {
   Field,
   FieldContent,
-  FieldDescription,
   FieldGroup,
   FieldLabel,
 } from '@/components/ui/field'
@@ -47,77 +46,48 @@ const toDateInputValue = (date: string) => {
 }
 
 const ImageFilterPanel = () => {
-  const {
-    plant,
-    date,
-    shift,
-    types,
-    times,
-    setPlant,
-    setDate,
-    setShift,
-    setTimes,
-    setTypes,
-  } = useImageFilterStore()
+  const { date, shift, slots, types, setDate, setShift, setSlots, setTypes } =
+    useImageFilterStore()
   const { ngTypes, addNgType, removeNgType } = useUserPreferencesStore()
 
   const [newType, setNewType] = useState('')
 
-  // 缓存所有可选时间
-  const availableTimes = useMemo(() => getAllAvailableTimes(shift), [shift])
+  // 时段随班次联动：白班 8–19、夜班 20–7，不做两维笛卡尔积
+  const availableSlots = useMemo(() => getAllAvailableTimes(shift), [shift])
 
-  // 当天班次信息，用于「切回当前班次时恢复默认时段」
   const {
     shift: currentShift,
     date: currentDate,
-    times: currentTimes,
+    times: currentSlots,
   } = getShiftInfo(new Date())
 
   useEffect(() => {
-    if (!date) setDate(currentDate)
-    if (!shift) setShift(currentShift)
-    if (times.length === 0) setTimes(currentTimes)
-    // 仅在挂载时初始化
+    setDate(currentDate)
+    setShift(currentShift)
+    setSlots(currentSlots)
+    // 仅在挂载时带出当前班次，之后完全由用户控制
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleShiftChange = (value: string) => {
     if (!value) return
+
     const next = value as '白班' | '夜班'
     setShift(next)
-    // 切换班次后清空时段；切回当前班次则恢复默认时段
-    setTimes(next === currentShift ? currentTimes : [])
+    // 切班次后原时段不再合法，切回当前班次时恢复默认时段
+    setSlots(next === currentShift ? currentSlots : [])
   }
 
   const handleAddType = () => {
     const value = newType.trim()
     if (!value || ngTypes.includes(value)) return
+
     addNgType(value)
     setNewType('')
   }
 
   return (
     <FieldGroup>
-      {/* 厂区 */}
-      <Field>
-        <FieldLabel>厂区</FieldLabel>
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          value={plant}
-          onValueChange={(value) => value && setPlant(value as 'A' | 'B')}
-          className="w-full"
-        >
-          <ToggleGroupItem value="A" className="flex-1">
-            东区
-          </ToggleGroupItem>
-          <ToggleGroupItem value="B" className="flex-1">
-            西区
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </Field>
-
-      {/* 日期 */}
       <Field>
         <FieldLabel htmlFor="scan-date">
           <CalendarDays data-icon="inline-start" />
@@ -132,7 +102,6 @@ const ImageFilterPanel = () => {
         />
       </Field>
 
-      {/* 班次 */}
       <Field>
         <FieldLabel>班次</FieldLabel>
         <ToggleGroup
@@ -143,22 +112,21 @@ const ImageFilterPanel = () => {
           className="w-full"
         >
           <ToggleGroupItem value="白班" className="flex-1">
-            白班 08:30–20:30
+            白班
           </ToggleGroupItem>
           <ToggleGroupItem value="夜班" className="flex-1">
-            夜班 20:30–08:30
+            夜班
           </ToggleGroupItem>
         </ToggleGroup>
       </Field>
 
-      {/* 时段 */}
       <Field>
         <div className="flex items-center justify-between gap-2">
           <FieldLabel className="mb-0">
             <Clock3 data-icon="inline-start" />
             时段
             <span className="font-normal text-muted-foreground tabular-nums">
-              {times.length}/{availableTimes.length}
+              {slots.length}/{availableSlots.length}
             </span>
           </FieldLabel>
           <div className="flex items-center gap-1">
@@ -166,8 +134,8 @@ const ImageFilterPanel = () => {
               type="button"
               variant="ghost"
               size="xs"
-              disabled={times.length === 0}
-              onClick={() => setTimes([])}
+              disabled={slots.length === 0}
+              onClick={() => setSlots([])}
             >
               清空
             </Button>
@@ -175,7 +143,7 @@ const ImageFilterPanel = () => {
               type="button"
               variant="ghost"
               size="xs"
-              onClick={() => setTimes(availableTimes)}
+              onClick={() => setSlots(availableSlots)}
             >
               <CheckCheck data-icon="inline-start" />
               全选
@@ -187,24 +155,23 @@ const ImageFilterPanel = () => {
             type="multiple"
             variant="outline"
             size="sm"
-            value={times}
-            onValueChange={setTimes}
-            className="grid grid-cols-4 gap-1.5"
+            value={slots}
+            onValueChange={setSlots}
+            className="grid grid-cols-6 gap-1.5"
           >
-            {availableTimes.map((time) => (
+            {availableSlots.map((slot) => (
               <ToggleGroupItem
-                key={time}
-                value={time}
+                key={slot}
+                value={slot}
                 className="h-8 w-full tabular-nums"
               >
-                {time} 时
+                {slot}
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
         </FieldContent>
       </Field>
 
-      {/* 类型 */}
       <Field>
         <div className="flex items-center justify-between gap-2">
           <FieldLabel className="mb-0">
@@ -244,39 +211,33 @@ const ImageFilterPanel = () => {
                 <DialogHeader>
                   <DialogTitle>编辑类型</DialogTitle>
                   <DialogDescription>
-                    自定义图片类型，支持添加与删除，修改后立即生效。
+                    类型名需与目录名完全一致
                   </DialogDescription>
                 </DialogHeader>
 
                 <div className="flex flex-wrap gap-1.5">
-                  {ngTypes.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      暂无类型，请先添加
-                    </p>
-                  ) : (
-                    ngTypes.map((type) => (
-                      <Badge
-                        key={type}
-                        variant="secondary"
-                        className="gap-1 pr-1"
+                  {ngTypes.map((type) => (
+                    <Badge
+                      key={type}
+                      variant="secondary"
+                      className="gap-1 pr-1"
+                    >
+                      {type}
+                      <button
+                        type="button"
+                        onClick={() => removeNgType(type)}
+                        aria-label={`删除 ${type}`}
+                        className="rounded-sm text-muted-foreground transition-colors hover:text-destructive"
                       >
-                        {type}
-                        <button
-                          type="button"
-                          onClick={() => removeNgType(type)}
-                          aria-label={`删除 ${type}`}
-                          className="rounded-sm text-muted-foreground transition-colors hover:text-destructive"
-                        >
-                          <X className="size-3" />
-                        </button>
-                      </Badge>
-                    ))
-                  )}
+                        <X className="size-3" />
+                      </button>
+                    </Badge>
+                  ))}
                 </div>
 
                 <InputGroup>
                   <InputGroupInput
-                    placeholder="新增类型，如 NG_脏污_D"
+                    placeholder="NG_脏污_D"
                     value={newType}
                     onChange={(event) => setNewType(event.target.value)}
                     onKeyDown={(event) => {
@@ -326,7 +287,6 @@ const ImageFilterPanel = () => {
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
-          <FieldDescription>未选中任何类型时不会执行扫描</FieldDescription>
         </FieldContent>
       </Field>
     </FieldGroup>

@@ -1,28 +1,47 @@
 import { BrowserWindow, app, dialog, ipcMain } from 'electron'
-import { copyFile, writeFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { writeFile } from 'node:fs/promises'
+import { basename } from 'node:path'
 
-import { scanImages } from './scanner'
+import { copyImagesTo } from './copy'
+import { createTask, getRunner, getTask } from './scanner'
+import { readSettings, refreshMachines, saveRootPath } from './settings'
 
 import type {
   CopyImagesResult,
-  CopyProgress,
   DirectoryInfo,
-  ScanImagesParams,
-  ScanImagesResult,
-  ScanProgress,
+  ScanTask,
+  ScanTaskParams,
 } from '../shared/ipc'
-
-/** 单批并发拷贝数，避免大量文件同时打开句柄 */
-const COPY_CONCURRENCY = 10
-
-/** 进行中的扫描任务，key 为渲染层生成的 taskId */
-const scanTasks = new Map<string, AbortController>()
 
 const getParentWindow = (
   sender: Electron.WebContents,
 ): BrowserWindow | undefined =>
   BrowserWindow.fromWebContents(sender) ?? undefined
+
+const requireRunner = (taskId: string) => {
+  const runner = getRunner(taskId)
+
+  if (!runner) {
+    throw new Error('任务不存在或已被清理，请重新创建扫描任务')
+  }
+
+  return runner
+}
+
+const validateParams = (params: ScanTaskParams): void => {
+  if (!params.machines.length) {
+    throw new Error('请至少选择一个机台')
+  }
+  if (!/^\d{8}$/.test(params.date)) {
+    throw new Error('日期格式不正确，应为 YYYYMMDD')
+  }
+  if (!params.slots.length) {
+    throw new Error('请至少选择一个时段')
+  }
+  if (!params.types.length) {
+    throw new Error('请至少选择一个不良类型')
+  }
+}
 
 export const registerIpcHandlers = (): void => {
   ipcMain.handle('app:version', () => app.getVersion())
@@ -51,91 +70,102 @@ export const registerIpcHandlers = (): void => {
     },
   )
 
+  // ------------------------------------------------------------------ 配置
+
+  ipcMain.handle('settings:read', () => readSettings())
+
+  ipcMain.handle('settings:save-root', (_event, rootPath: string) =>
+    saveRootPath(rootPath),
+  )
+
+  ipcMain.handle('settings:refresh', () => refreshMachines())
+
+  // ------------------------------------------------------------------ 扫描
+
   ipcMain.handle(
-    'fs:scan-images',
+    'scan:create',
+    async (_event, params: ScanTaskParams): Promise<ScanTask> => {
+      const settings = await readSettings()
+
+      if (!settings.rootPath) {
+        throw new Error('尚未配置 DC 根目录，请先填写或选择根目录路径')
+      }
+
+      validateParams(params)
+
+      const known = new Set(settings.machines.map((item) => item.name))
+      const machines = params.machines.filter((name) => known.has(name))
+
+      if (!machines.length) {
+        throw new Error('所选机台已不存在，请点击「重新识别」刷新机台列表')
+      }
+
+      return createTask(
+        { ...params, machines },
+        { rootPath: settings.rootPath, entry: settings.entry },
+      )
+    },
+  )
+
+  ipcMain.handle('scan:start', (_event, taskId: string) =>
+    requireRunner(taskId).start(),
+  )
+
+  ipcMain.handle('scan:pause', (_event, taskId: string) =>
+    requireRunner(taskId).pause('user'),
+  )
+
+  ipcMain.handle('scan:resume', (_event, taskId: string) =>
+    requireRunner(taskId).resume(),
+  )
+
+  ipcMain.handle('scan:cancel', (_event, taskId: string) =>
+    requireRunner(taskId).cancel(),
+  )
+
+  ipcMain.handle('scan:get', (_event, taskId: string) => getTask(taskId))
+
+  ipcMain.handle(
+    'scan:images',
+    (_event, taskId: string, offset: number, limit: number) => {
+      const runner = getRunner(taskId)
+
+      if (!runner) return { images: [], total: 0 }
+
+      const all = runner.getImages()
+
+      return {
+        images: all.slice(offset, offset + limit),
+        total: all.length,
+      }
+    },
+  )
+
+  // ------------------------------------------------------------------ 复制
+
+  ipcMain.handle(
+    'copy:task',
     async (
       event,
-      params: ScanImagesParams,
       taskId: string,
-    ): Promise<ScanImagesResult> => {
-      const controller = new AbortController()
-      scanTasks.set(taskId, controller)
-
-      const pushProgress = (progress: ScanProgress): void => {
-        if (!event.sender.isDestroyed()) {
-          event.sender.send('fs:scan-progress', progress)
-        }
-      }
-
-      try {
-        return await scanImages(params, {
-          taskId,
-          signal: controller.signal,
-          onProgress: pushProgress,
-        })
-      } finally {
-        scanTasks.delete(taskId)
-      }
-    },
-  )
-
-  ipcMain.handle('fs:cancel-scan', (_event, taskId: string): void => {
-    scanTasks.get(taskId)?.abort()
-  })
-
-  ipcMain.handle(
-    'fs:copy-images',
-    async (
-      event,
-      params: { files: string[]; targetDir: string },
+      targetDir: string,
     ): Promise<CopyImagesResult> => {
-      const { files, targetDir } = params
-      const total = files.length
-      const failed: string[] = []
-      let copied = 0
+      const runner = requireRunner(taskId)
+      const sender = event.sender
 
-      const report = (): void => {
-        const progress: CopyProgress = {
-          copied,
-          total,
-          failed: failed.length,
-        }
-        if (!event.sender.isDestroyed()) {
-          event.sender.send('fs:copy-progress', progress)
-        }
-      }
+      const result = await copyImagesTo(runner.getImages(), targetDir, {
+        onProgress: (progress) => {
+          if (!sender.isDestroyed()) {
+            sender.send('fs:copy-progress', progress)
+          }
+        },
+      })
 
-      const copyOne = async (file: string): Promise<void> => {
-        try {
-          await copyFile(file, join(targetDir, basename(file)))
-          copied += 1
-        } catch (error) {
-          // 同名文件被占用、权限不足等，记录后继续
-          console.error(`复制文件 ${file} 失败:`, error)
-          failed.push(file)
-        } finally {
-          report()
-        }
-      }
-
-      for (let i = 0; i < total; i += COPY_CONCURRENCY) {
-        await Promise.all(files.slice(i, i + COPY_CONCURRENCY).map(copyOne))
-      }
-
-      return { copied, failed }
+      return result
     },
   )
 
-  ipcMain.handle(
-    'fs:write-text-file',
-    async (
-      _event,
-      params: { dir: string; filename: string; lines: string[] },
-    ): Promise<void> => {
-      const { dir, filename, lines } = params
-      await writeFile(join(dir, filename), lines.join('\n'), 'utf-8')
-    },
-  )
+  // ------------------------------------------------------------------ 其它
 
   ipcMain.handle(
     'fs:save-excel',

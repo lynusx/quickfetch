@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-import type { CopyProgress, ElectronAPI, ScanProgress } from '../shared/ipc'
+import type { CopyProgress, ElectronAPI, ScanTask } from '../shared/ipc'
 
 const api: ElectronAPI = {
   getVersion: () => ipcRenderer.invoke('app:version'),
@@ -8,25 +8,41 @@ const api: ElectronAPI = {
   pickDirectory: (options) =>
     ipcRenderer.invoke('fs:pick-directory', options ?? {}),
 
-  scanImages: (params, taskId) =>
-    ipcRenderer.invoke('fs:scan-images', params, taskId),
+  readSettings: () => ipcRenderer.invoke('settings:read'),
 
-  cancelScan: (taskId) => ipcRenderer.invoke('fs:cancel-scan', taskId),
+  saveRootPath: (rootPath) =>
+    ipcRenderer.invoke('settings:save-root', rootPath),
 
-  onScanProgress: (listener) => {
-    const handler = (
-      _event: Electron.IpcRendererEvent,
-      progress: ScanProgress,
-    ): void => listener(progress)
+  refreshMachines: () => ipcRenderer.invoke('settings:refresh'),
 
-    ipcRenderer.on('fs:scan-progress', handler)
+  createScanTask: (params) => ipcRenderer.invoke('scan:create', params),
+
+  startScanTask: (taskId) => ipcRenderer.invoke('scan:start', taskId),
+
+  pauseScanTask: (taskId) => ipcRenderer.invoke('scan:pause', taskId),
+
+  resumeScanTask: (taskId) => ipcRenderer.invoke('scan:resume', taskId),
+
+  cancelScanTask: (taskId) => ipcRenderer.invoke('scan:cancel', taskId),
+
+  getScanTask: (taskId) => ipcRenderer.invoke('scan:get', taskId),
+
+  getScanTaskImages: (taskId, offset, limit) =>
+    ipcRenderer.invoke('scan:images', taskId, offset, limit),
+
+  onScanTaskUpdate: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, task: ScanTask): void =>
+      listener(task)
+
+    ipcRenderer.on('scan:task-update', handler)
 
     return () => {
-      ipcRenderer.removeListener('fs:scan-progress', handler)
+      ipcRenderer.removeListener('scan:task-update', handler)
     }
   },
 
-  copyImages: (params) => ipcRenderer.invoke('fs:copy-images', params),
+  copyTaskImages: (taskId, targetDir) =>
+    ipcRenderer.invoke('copy:task', taskId, targetDir),
 
   onCopyProgress: (listener) => {
     const handler = (
@@ -40,8 +56,6 @@ const api: ElectronAPI = {
       ipcRenderer.removeListener('fs:copy-progress', handler)
     }
   },
-
-  writeTextFile: (params) => ipcRenderer.invoke('fs:write-text-file', params),
 
   saveExcel: (params) => ipcRenderer.invoke('fs:save-excel', params),
 }

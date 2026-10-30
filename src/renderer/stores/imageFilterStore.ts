@@ -1,49 +1,63 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 
+import type { Plant } from '../../shared/ipc'
 import { useUserPreferencesStore } from './userPreferencesStore'
 
-const ngTypes = useUserPreferencesStore.getState().ngTypes
+const defaultTypes = useUserPreferencesStore.getState().ngTypes
 
 interface ImageFilterState {
-  plant: 'A' | 'B'
-  dirs: string[]
-  types: string[]
+  /** 当前查看的厂区，只影响机台列表的展示，不参与路径拼接 */
+  plant: Plant
+  /** 选中的机台目录名，可跨厂区多选 */
+  selectedMachines: string[]
   date: string
   shift: '白班' | '夜班'
-  times: string[]
+  slots: string[]
+  types: string[]
 }
 
 interface ImageFilterAction {
-  setPlant: (plant: 'A' | 'B') => void
-  setDirs: (dirs: string[]) => void
-  setTypes: (types: string[]) => void
-  removeType: (type: string) => void
+  setPlant: (plant: Plant) => void
+  setSelectedMachines: (machines: string[]) => void
+  toggleMachine: (machine: string) => void
   setDate: (date: string) => void
   setShift: (shift: '白班' | '夜班') => void
-  setTimes: (times: string[]) => void
+  setSlots: (slots: string[]) => void
+  setTypes: (types: string[]) => void
+  removeType: (type: string) => void
 }
 
 export const useImageFilterStore = create<
   ImageFilterState & ImageFilterAction
 >()(
   devtools((set) => ({
-    plant: 'A',
-    dirs: [],
-    types: ngTypes,
+    plant: 'east',
+    selectedMachines: [],
+    types: defaultTypes,
     date: '',
-    shift: '' as '白班' | '夜班',
-    times: [],
+    shift: '白班',
+    slots: [],
 
     setPlant: (plant) => set({ plant }),
-    setDirs: (dirs) => set({ dirs }),
-    setTypes: (types) => set({ types }),
-    removeType: (type) =>
+
+    setSelectedMachines: (selectedMachines) => set({ selectedMachines }),
+
+    toggleMachine: (machine) =>
       set((state) => ({
-        types: state.types.filter((t) => t !== type),
+        selectedMachines: state.selectedMachines.includes(machine)
+          ? state.selectedMachines.filter((item) => item !== machine)
+          : [...state.selectedMachines, machine],
       })),
+
     setDate: (date) => set({ date }),
     setShift: (shift) => set({ shift }),
-    setTimes: (times) => set({ times }),
+    setSlots: (slots) => set({ slots }),
+    setTypes: (types) => set({ types }),
+
+    removeType: (type) =>
+      set((state) => ({
+        types: state.types.filter((item) => item !== type),
+      })),
   })),
 )

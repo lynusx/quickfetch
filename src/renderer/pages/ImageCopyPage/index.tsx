@@ -1,298 +1,284 @@
 import {
   CircleAlert,
-  CircleCheck,
   Download,
-  FolderOpen,
   Loader2,
-  X,
+  Pause,
+  Play,
+  Square,
+  Wand2,
 } from 'lucide-react'
 
 import ImageFilterPanel from '@/components/ImageFilterPanel'
+import ScanSetupPanel from '@/components/ScanSetupPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { useImageCopy } from '@/hooks/useImageCopy'
-import { useImageScan } from '@/hooks/useImageScan'
+import { useScanTask } from '@/hooks/useScanTask'
 import { useToast } from '@/hooks/useToast'
-import { useImageStore } from '@/stores/imageStore'
+import { useScanStore } from '@/stores/scanStore'
+import { useSettingsStore } from '@/stores/settingsStore'
+import type { ScanBranch, ScanTaskStatus } from '../../../shared/ipc'
 import { formatDuration } from '@/utils/common'
+import { cn } from '@/lib/utils'
 
-const Metric = ({
-  value,
-  label,
-}: {
-  value: string | number
-  label: string
-}) => (
-  <div className="flex flex-col items-center justify-center gap-1 px-3 py-3">
-    <span className="text-2xl font-semibold tabular-nums">{value}</span>
-    <span className="text-xs text-muted-foreground">{label}</span>
-  </div>
-)
+const STATUS_META: Record<
+  ScanTaskStatus,
+  {
+    label: string
+    variant: 'default' | 'secondary' | 'destructive' | 'outline'
+  }
+> = {
+  pending: { label: '待开始', variant: 'outline' },
+  running: { label: '进行中', variant: 'secondary' },
+  paused: { label: '已暂停', variant: 'outline' },
+  completed: { label: '已完成', variant: 'default' },
+  canceled: { label: '已取消', variant: 'outline' },
+  failed: { label: '失败', variant: 'destructive' },
+}
 
-const StepBadge = ({ index }: { index: number }) => (
-  <span className="flex size-7 shrink-0 items-center justify-center rounded-full border bg-muted text-xs font-semibold tabular-nums">
-    {index}
-  </span>
-)
+const PHASE_LABEL: Record<string, string> = {
+  probe: '探测目录',
+  collect: '收集图片',
+  done: '已结束',
+}
+
+const branchText = (branch: ScanBranch): string => {
+  if (branch.message) return branch.message
+  if (branch.status === 'hit')
+    return `${branch.images} 张 · ${branch.matchedDirs} 个目录`
+  if (branch.status === 'skipped') return '未探测'
+  return '无图片'
+}
 
 const ImageCopyPage = () => {
   const { showToast } = useToast()
-  const { images, copiedImageCount, isCopy, isError, error, scanSummary } =
-    useImageStore()
-  const {
-    scanProgress,
-    isScan,
-    canStartScan,
-    handleImageScan,
-    handleCancelScan,
-  } = useImageScan({ showToast })
-  const { canStartCopy, getCopyProgress, handleImageCopy } = useImageCopy({
-    showToast,
-  })
+  const { task, creating, busy, canStart, start, pause, resume, cancel } =
+    useScanTask({ showToast })
+  const { handleCopy, canCopy, percent, copy } = useImageCopy({ showToast })
 
-  const progress = getCopyProgress()
+  const settingsError = useSettingsStore((state) => state.error)
+  const settings = useSettingsStore((state) => state.settings)
+  const scanError = useScanStore((state) => state.error)
 
-  const status = isScan
-    ? { label: '扫描中', variant: 'secondary' as const }
-    : isCopy
-      ? { label: '复制中', variant: 'secondary' as const }
-      : isError
-        ? { label: '异常', variant: 'destructive' as const }
-        : images.length > 0
-          ? { label: '待复制', variant: 'default' as const }
-          : { label: '就绪', variant: 'outline' as const }
+  const status = task ? STATUS_META[task.status] : null
+  const configured = Boolean(settings?.rootPath)
+  const progressValue = task?.progress.percent ?? 0
+  const branches = task?.branches ?? []
+  const abnormal = branches.filter(
+    (branch) => branch.status !== 'hit' && branch.status !== 'empty',
+  )
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-2">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            图片批量拷贝
-          </h1>
-          <Badge variant="secondary">活跃</Badge>
-        </div>
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          按 DC
-          目录层级扫描指定厂区、日期与班次的图片，再批量拷贝到目标目录，并生成
-          source.txt 路径清单。
-        </p>
+      <header className="flex items-center gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">图片批量拷贝</h1>
+        {status && <Badge variant={status.variant}>{status.label}</Badge>}
       </header>
 
       <div className="grid items-start gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
-        {/* 参数面板 */}
         <Card className="xl:sticky xl:top-6">
           <CardHeader>
-            <CardTitle>扫描配置</CardTitle>
-            <CardDescription>
-              目录结构：DC / 厂区 / EL / 日期 / 班次 / 时段 / 类型
-            </CardDescription>
+            <CardTitle>扫描范围</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-col gap-6">
+            <ScanSetupPanel />
+            <Separator />
             <ImageFilterPanel />
           </CardContent>
         </Card>
 
         <div className="flex flex-col gap-6">
-          {/* 执行区 */}
           <Card>
-            <CardHeader>
-              <CardTitle>执行</CardTitle>
-              <CardDescription>
-                先扫描源目录确认数量，再选择目标目录完成拷贝
-              </CardDescription>
-              <CardAction>
-                <Badge variant={status.variant}>{status.label}</Badge>
-              </CardAction>
-            </CardHeader>
-
             <CardContent className="flex flex-col gap-5">
-              <div className="grid grid-cols-3 divide-x rounded-lg border">
-                <Metric value={images.length} label="匹配图片" />
-                <Metric value={copiedImageCount} label="已复制" />
-                <Metric value={`${progress}%`} label="进度" />
+              <div className="flex flex-col gap-2">
+                <div className="flex items-baseline justify-between text-sm">
+                  <span className="font-medium">
+                    {task
+                      ? task.progress.phase === 'done'
+                        ? STATUS_META[task.status].label
+                        : PHASE_LABEL[task.progress.phase]
+                      : '未开始'}
+                  </span>
+                  <span className="tabular-nums text-muted-foreground">
+                    {progressValue}%
+                  </span>
+                </div>
+                <Progress value={progressValue} />
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="tabular-nums">
+                    读取 {task?.progress.dirsScanned ?? 0} 个目录 · 跳过{' '}
+                    {task?.progress.dirsSkipped ?? 0}
+                  </span>
+                  <span className="tabular-nums">
+                    命中 {task?.totalImages ?? 0} 张
+                  </span>
+                </div>
+                {task?.progress.currentPath && (
+                  <p
+                    className="truncate font-mono text-[11px] text-muted-foreground"
+                    title={task.progress.currentPath}
+                  >
+                    {task.progress.currentPath}
+                  </p>
+                )}
               </div>
 
-              <div className="flex items-start gap-3">
-                <StepBadge index={1} />
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <div className="flex flex-col gap-0.5">
-                    <p className="text-sm font-medium">扫描源目录</p>
-                    <p className="text-xs text-muted-foreground">
-                      选择名为 DC 的根目录，按当前配置匹配图片
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      onClick={handleImageScan}
-                      disabled={!canStartScan()}
-                    >
-                      {isScan ? (
-                        <Loader2
-                          className="animate-spin"
-                          data-icon="inline-start"
-                        />
-                      ) : (
-                        <FolderOpen data-icon="inline-start" />
-                      )}
-                      {isScan ? '扫描中…' : '选择 DC 目录'}
-                    </Button>
-                    {isScan && (
-                      <Button variant="outline" onClick={handleCancelScan}>
-                        <X data-icon="inline-start" />
-                        取消扫描
+              <div className="flex flex-wrap items-center gap-2">
+                {!busy ? (
+                  <Button
+                    onClick={() => void start()}
+                    disabled={!canStart || !configured}
+                  >
+                    {creating ? (
+                      <Loader2
+                        className="animate-spin"
+                        data-icon="inline-start"
+                      />
+                    ) : (
+                      <Wand2 data-icon="inline-start" />
+                    )}
+                    开始扫描
+                  </Button>
+                ) : (
+                  <>
+                    {task?.status === 'paused' ? (
+                      <Button onClick={() => void resume()}>
+                        <Play data-icon="inline-start" />
+                        继续
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        onClick={() => void pause()}
+                        disabled={task?.status !== 'running'}
+                      >
+                        <Pause data-icon="inline-start" />
+                        暂停
                       </Button>
                     )}
-                    {images.length > 0 && (
-                      <Badge variant="secondary">
-                        <CircleCheck data-icon="inline-start" />
-                        {images.length} 张
-                      </Badge>
-                    )}
-                  </div>
-
-                  {isScan && scanProgress && (
-                    <div className="mt-1 flex flex-col gap-1.5 rounded-lg border bg-muted/40 p-3">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-medium">扫描中</span>
-                        <span className="tabular-nums text-muted-foreground">
-                          已读取 {scanProgress.scannedDirs} 个目录 · 命中{' '}
-                          {scanProgress.matched} 张
-                        </span>
-                      </div>
-                      <p
-                        className="truncate font-mono text-xs text-muted-foreground"
-                        title={scanProgress.currentPath}
-                      >
-                        {scanProgress.currentPath}
-                      </p>
-                    </div>
-                  )}
-
-                  {!isScan && scanSummary && images.length > 0 && (
-                    <p className="text-xs text-muted-foreground tabular-nums">
-                      读取 {scanSummary.scannedDirs} 个目录，耗时{' '}
-                      {formatDuration(scanSummary.elapsedMs)}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="flex items-start gap-3">
-                <StepBadge index={2} />
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <div className="flex flex-col gap-0.5">
-                    <p className="text-sm font-medium">复制到目标目录</p>
-                    <p className="text-xs text-muted-foreground">
-                      图片按文件名平铺拷贝，并在目标目录写入 source.txt
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      onClick={handleImageCopy}
-                      disabled={!canStartCopy()}
-                    >
-                      {isCopy ? (
-                        <Loader2
-                          className="animate-spin"
-                          data-icon="inline-start"
-                        />
-                      ) : (
-                        <Download data-icon="inline-start" />
-                      )}
-                      {isCopy ? '复制中…' : '选择目标目录'}
+                    <Button variant="outline" onClick={() => void cancel()}>
+                      <Square data-icon="inline-start" />
+                      取消
                     </Button>
-                    {copiedImageCount > 0 && (
-                      <Badge variant="secondary">
-                        <CircleCheck data-icon="inline-start" />
-                        {progress}%
-                      </Badge>
-                    )}
-                  </div>
-
-                  {(isCopy || copiedImageCount > 0) && (
-                    <div className="mt-1 flex flex-col gap-2 rounded-lg border bg-muted/40 p-3">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-medium">复制进度</span>
-                        <span className="tabular-nums text-muted-foreground">
-                          {copiedImageCount} / {images.length} 张
-                        </span>
-                      </div>
-                      <Progress value={progress} />
-                    </div>
-                  )}
-                </div>
+                  </>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={() => void handleCopy()}
+                  disabled={!canCopy}
+                >
+                  <Download data-icon="inline-start" />
+                  复制到目标目录
+                </Button>
               </div>
+
+              {task?.status === 'paused' && task.pauseReason === 'network' && (
+                <Alert variant="destructive">
+                  <CircleAlert />
+                  <AlertTitle>网络中断，任务已暂停</AlertTitle>
+                  <AlertDescription>
+                    恢复共享盘连接后点击「继续」，已扫描的结果不会丢失
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {(scanError || task?.error) && (
+                <Alert variant="destructive">
+                  <CircleAlert />
+                  <AlertTitle>扫描失败</AlertTitle>
+                  <AlertDescription>
+                    {scanError ?? task?.error}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {!configured && (
+                <Alert>
+                  <CircleAlert />
+                  <AlertTitle>先配置 DC 根目录</AlertTitle>
+                  <AlertDescription>
+                    在左侧填写或选择根目录，应用会自动识别机台并记住这条路径
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {copy && (
+                <div className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium">
+                      {copy.running ? '复制中' : '复制完成'}
+                    </span>
+                    <span className="tabular-nums text-muted-foreground">
+                      {copy.copied} / {copy.total} 张
+                      {copy.failed > 0 && ` · 失败 ${copy.failed}`}
+                    </span>
+                  </div>
+                  <Progress value={percent} />
+                </div>
+              )}
+
+              {task && task.status !== 'pending' && (
+                <>
+                  <Separator />
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium">各机台结果</span>
+                      <span className="tabular-nums text-muted-foreground">
+                        {formatDuration(task.elapsedMs)}
+                        {abnormal.length > 0 &&
+                          ` · ${abnormal.length} 台无结果`}
+                      </span>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto rounded-lg border">
+                      {branches.map((branch) => (
+                        <div
+                          key={branch.machine}
+                          className="flex items-center gap-3 border-b px-3 py-2 text-xs last:border-b-0"
+                        >
+                          <span className="w-24 shrink-0 font-mono">
+                            {branch.machine}
+                          </span>
+                          <span
+                            className={cn(
+                              'min-w-0 flex-1 truncate',
+                              branch.status === 'hit'
+                                ? 'text-muted-foreground'
+                                : 'text-muted-foreground/80',
+                            )}
+                            title={branchText(branch)}
+                          >
+                            {branchText(branch)}
+                          </span>
+                          <span
+                            className={cn(
+                              'shrink-0 tabular-nums',
+                              branch.status === 'hit'
+                                ? 'text-foreground'
+                                : 'text-muted-foreground',
+                            )}
+                          >
+                            {branch.images > 0 ? `${branch.images} 张` : '—'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 
-          {isError && error && (
+          {settingsError && (
             <Alert variant="destructive">
               <CircleAlert />
-              <AlertTitle>操作失败</AlertTitle>
-              <AlertDescription>{error.message}</AlertDescription>
+              <AlertTitle>配置未保存</AlertTitle>
+              <AlertDescription>{settingsError}</AlertDescription>
             </Alert>
           )}
-
-          {/* 使用说明 */}
-          <Card>
-            <CardHeader>
-              <CardTitle>使用说明</CardTitle>
-              <CardDescription>
-                三步完成一次拷贝：配置参数、扫描、复制
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ol className="flex flex-col gap-4 text-sm">
-                <li className="flex gap-3">
-                  <span className="font-mono text-xs text-muted-foreground">
-                    01
-                  </span>
-                  <span>
-                    <span className="font-medium">参数配置。</span>
-                    <span className="text-muted-foreground">
-                      选择厂区、图片类型，系统会根据当前时间自动带出日期、班次与时段。
-                    </span>
-                  </span>
-                </li>
-                <li className="flex gap-3">
-                  <span className="font-mono text-xs text-muted-foreground">
-                    02
-                  </span>
-                  <span>
-                    <span className="font-medium">扫描文件。</span>
-                    <span className="text-muted-foreground">
-                      选择 DC 目录，系统会递归匹配符合条件的所有子目录。
-                    </span>
-                  </span>
-                </li>
-                <li className="flex gap-3">
-                  <span className="font-mono text-xs text-muted-foreground">
-                    03
-                  </span>
-                  <span>
-                    <span className="font-medium">批量拷贝。</span>
-                    <span className="text-muted-foreground">
-                      选择目标路径，图片将拷贝到该目录，并生成记录来源路径的
-                      source.txt。
-                    </span>
-                  </span>
-                </li>
-              </ol>
-            </CardContent>
-          </Card>
         </div>
       </div>
     </div>

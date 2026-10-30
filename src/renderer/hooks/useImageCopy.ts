@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 
-import { useImageStore } from '../stores/imageStore'
+import { useScanStore } from '../stores/scanStore'
 import { toErrorMessage } from '../utils/error'
 
 interface UseImageCopyProps {
@@ -12,97 +12,76 @@ interface UseImageCopyProps {
 }
 
 /**
- * 复制步骤：把扫描结果按文件名平铺拷贝到目标目录，并写入 source.txt。
- * 与扫描步骤解耦，只依赖 store 里的 images。
+ * 复制步骤：按 taskId 让主进程复制全量结果。
+ * 渲染层不持有图片数组，避免上万条路径在 IPC 上来回搬。
  */
 export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
-  const {
-    images,
-    isScan,
-    isCopy,
-    copiedImageCount,
-    setCopiedImageCount,
-    setIsCopy,
-    setIsError,
-    setError,
-  } = useImageStore()
+  const { task, copy } = useScanStore()
 
-  const handleImageCopy = useCallback(async () => {
-    if (!images.length) {
-      showToast('操作提示', '请先扫描文件', 'info')
+  const handleCopy = useCallback(async () => {
+    if (!task || task.totalImages === 0) {
+      showToast('没有可复制的图片', '请先完成一次扫描', 'info')
       return
     }
 
-    let unsubscribe: (() => void) | undefined
+    const target = await window.electronAPI.pickDirectory({
+      title: '请选择目标目录',
+    })
+
+    if (!target) return
+
+    useScanStore.getState().setCopy({
+      running: true,
+      copied: 0,
+      total: task.totalImages,
+      failed: 0,
+    })
+
+    const unsubscribe = window.electronAPI.onCopyProgress((progress) => {
+      useScanStore.getState().patchCopy({
+        copied: progress.copied,
+        total: progress.total,
+        failed: progress.failed,
+      })
+    })
 
     try {
-      // 1. 重置状态
-      setCopiedImageCount(0)
-      setError(null)
-      setIsError(false)
+      const result = await window.electronAPI.copyTaskImages(
+        task.id,
+        target.path,
+      )
 
-      // 2. 选择目标目录
-      const target = await window.electronAPI.pickDirectory({
-        title: '请选择目标目录',
+      useScanStore.getState().patchCopy({
+        running: false,
+        copied: result.copied,
+        failed: result.failed.length,
       })
 
-      if (!target) return
+      const renamed = result.renamed ? `，${result.renamed} 张重名已改名` : ''
 
-      // 3. 订阅主进程拷贝进度
-      unsubscribe = window.electronAPI.onCopyProgress(({ copied }) => {
-        setCopiedImageCount(copied)
-      })
+      showToast(
+        '复制完成',
+        `已复制 ${result.copied} 张${renamed}`,
+        result.failed.length ? 'error' : 'success',
+      )
+    } catch (cause) {
+      const message = toErrorMessage(cause, '复制过程中发生未知错误')
 
-      setIsCopy(true)
-      showToast('复制开始', '正在复制文件...', 'info')
-
-      // 4. 写入路径清单
-      await window.electronAPI.writeTextFile({
-        dir: target.path,
-        filename: 'source.txt',
-        lines: images.map((img) => img.path),
-      })
-
-      // 5. 批量复制
-      const result = await window.electronAPI.copyImages({
-        files: images.map((img) => img.absolutePath),
-        targetDir: target.path,
-      })
-
-      // 6. 结果提示
-      if (result.failed.length) {
-        showToast(
-          '复制完成',
-          `成功 ${result.copied} 张，失败 ${result.failed.length} 张`,
-          'error',
-        )
-      } else {
-        showToast('复制完成', `已成功复制 ${result.copied} 张图片`, 'success')
-      }
-    } catch (error) {
-      const message = toErrorMessage(error, '复制过程中发生未知错误')
-
-      setIsError(true)
-      setError(new Error(message))
+      useScanStore.getState().setCopy(null)
       showToast('复制失败', message, 'error')
     } finally {
-      unsubscribe?.()
-      setIsCopy(false)
+      unsubscribe()
     }
-  }, [images, setCopiedImageCount, setError, setIsError, setIsCopy])
+  }, [task, showToast])
 
-  // 计算复制进度百分比
-  const getCopyProgress = () => {
-    if (!images.length) return 0
-    return Math.round((copiedImageCount / images.length) * 100)
-  }
+  const percent =
+    copy && copy.total > 0 ? Math.round((copy.copied / copy.total) * 100) : 0
 
-  // 检测是否可以开始复制
-  const canStartCopy = () => images.length > 0 && !isScan && !isCopy
+  const canCopy =
+    Boolean(task) &&
+    (task?.status === 'completed' || task?.status === 'canceled') &&
+    (task?.totalImages ?? 0) > 0 &&
+    !copy?.running
 
-  return {
-    handleImageCopy,
-    canStartCopy,
-    getCopyProgress,
-  }
+  return { handleCopy, canCopy, percent, copy }
 }

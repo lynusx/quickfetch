@@ -1,7 +1,3 @@
-import type { ScannedImage } from '../../shared/ipc'
-
-export type Image = ScannedImage
-
 export interface ExcelFile {
   id: string
   file: File

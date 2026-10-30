@@ -5,11 +5,17 @@ RCA EL 图片拷贝与 Excel 解析工具，基于 Electron + React 的桌面应
 ## 使用需知
 
 - 图片拷贝要求目标机器上存在名为 `DC` 的根目录，目录层级为：
-  `DC/<厂区子目录>/EL/<日期 YYYYMMDD>/<班次>/<时段>/<类型>/<图片>`
+  `DC/<机台>/EL/<日期 YYYYMMDD>/<班次>/<时段>/<类型>/<图片>`
+- 根目录只需配置一次，会持久化到用户数据目录（Windows 为 `%APPDATA%/shx-tools/settings.json`），
+  再次打开直接复用；配置时自动识别 `DC` 下的机台目录，首字母 `A` 归东区、`B` 归西区
 - 支持扩展名：`.png` `.jpg` `.jpeg` `.webp` `.gif`
-- 扫描在主进程用 `fs.readdir` 完成（不再受浏览器 File System Access API 限制），
-  支持并发遍历、进度推送与中途取消；扫描与复制是两个独立步骤
-- 扫描结果会写入目标目录的 `source.txt`（相对路径清单），图片按文件名平铺拷贝到目标目录
+- 扫描在主进程用 `fs.readdir` 完成（不再受浏览器 File System Access API 限制），分三段执行：
+  探前缀（机台 → EL → 日期 → 班次）→ 列真实时段与类型后取交集 → 只对命中的类型目录收图。
+  父级缺失的分支整段跳过，不发无效请求
+- 任务状态：待开始 / 进行中 / 已暂停 / 已完成 / 已取消 / 失败。暂停可断点续跑；
+  连续 5 个目录不可达会自动暂停并提示网络中断
+- 扫描结果会写入目标目录的 `source.txt`（相对路径清单），图片按文件名平铺拷贝；
+  遇到同名文件自动改名为 `name (2).jpg`，不覆盖已有文件
 
 ## 开发
 
@@ -38,11 +44,15 @@ pnpm dist:win                 # 在 out/ 基础上打 Windows x64 NSIS 安装包
 src/
 ├── main/                 # 主进程
 │   ├── index.ts          # 窗口创建、应用生命周期
-│   ├── ipc.ts            # 文件系统 IPC（选目录/扫描/取消/拷贝/写文本/另存 Excel）
-│   └── scanner/          # 6 层目录规则扫描引擎
-│       ├── index.ts      # 扫描主流程（并发遍历、进度、取消、错误归类）
-│       ├── errors.ts     # ScanError 与错误码
-│       └── limiter.ts    # readdir 并发闸门
+│   ├── ipc.ts            # IPC 注册（配置/任务/复制/另存 Excel）
+│   ├── settings.ts       # 根目录与机台列表的持久化（userData/settings.json）
+│   ├── copy.ts           # 平铺复制 + source.txt + 同名自动改名
+│   └── scanner/          # 扫描任务
+│       ├── index.ts      # 对外导出
+│       ├── task.ts       # 任务执行体：前缀探测 → 展开 → 收图，含暂停/取消/进度
+│       ├── registry.ts   # 任务表、快照广播、历史淘汰
+│       ├── fsx.ts        # 带超时的 readdir，区分不存在/无权限/不可达
+│       └── limiter.ts    # 目录读取并发闸门
 ├── preload/index.ts      # contextBridge 暴露 window.electronAPI
 ├── shared/ipc.ts         # 主进程 ↔ preload ↔ 渲染层共用的 IPC 类型契约
 └── renderer/             # 渲染层（React）
@@ -50,10 +60,10 @@ src/
     ├── main.tsx          # HashRouter 挂载
     ├── App.tsx           # 路由表 + Toaster / TooltipProvider
     ├── pages/            # 页面（图片拷贝、Excel 解析、布局）
-    ├── components/       # 业务组件
+    ├── components/       # 业务组件（根目录与机台选择、参数面板）
     │   └── ui/           # shadcn/ui 组件（CLI 生成，勿手改样式约定）
-    ├── hooks/            # 业务逻辑
-    ├── stores/           # zustand 状态
+    ├── hooks/            # 业务逻辑（任务生命周期、复制）
+    ├── stores/           # zustand 状态（配置、任务快照、筛选参数）
     ├── lib/utils.ts      # cn()
     ├── utils/            # 通用工具
     ├── types/            # 渲染层类型（Excel 等）
@@ -74,5 +84,8 @@ src/
 ## 架构约定
 
 - 渲染层不做任何文件系统操作，全部经 `window.electronAPI` 走 IPC，由主进程用 `node:fs` 执行
+- 配置（根目录、机台列表）只有主进程一份，落盘在 `userData/settings.json`；渲染层只持有镜像
+- 扫描结果全量留在主进程，按 `taskId` 引用；渲染层只接收统计与前 200 条预览，
+  复制时传 `taskId` 让主进程取全量，避免上万条路径在 IPC 上来回搬
 - 主进程/preload 打包为 CommonJS（`.cjs`），渲染层为 ESM；仓库本身是 `type: module`
 - 路由使用 `HashRouter`：生产环境通过 `file://` 加载，history 路由会 404
