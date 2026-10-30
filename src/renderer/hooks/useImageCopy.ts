@@ -73,13 +73,21 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
       const renamed = next.progress.renamed
         ? `，${next.progress.renamed} 张重名已改名`
         : ''
+      const { copied, failed, skipped } = next.progress
+      // 跳过项算完成，但结果里要单独说清，不然「已复制 0 张」像是没干活
+      const skippedText = skipped ? `，${skipped} 张已跳过（目标已存在）` : ''
+      const title = failed
+        ? '复制完成但有条目失败'
+        : skipped && !copied
+          ? '目标目录已存在全部文件'
+          : '复制完成'
 
       showToast(
-        next.progress.failed ? '复制完成但有条目失败' : '复制完成',
-        `已复制 ${next.progress.copied} 张${renamed}${
-          next.progress.failed ? `，${next.progress.failed} 张失败` : ''
+        title,
+        `已复制 ${copied} 张${renamed}${skippedText}${
+          failed ? `，${failed} 张失败` : ''
         }`,
-        next.progress.failed ? 'error' : 'success',
+        failed ? 'error' : 'success',
       )
     })
   }, [patchTask, setError, showToast])
@@ -292,10 +300,11 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
   const percent = useMemo(() => {
     if (!copying) return 0
 
-    const { copied, failed, total } = copying.progress
+    // 跳过项同样算已完成：否则「跳过策略 + 目标已有同名」时进度条会停在中途
+    const { copied, failed, skipped, total } = copying.progress
     if (!total) return 0
 
-    return Math.round(((copied + failed) / total) * 100)
+    return Math.round(((copied + failed + skipped) / total) * 100)
   }, [copying])
 
   // 扫描没结束、或一张图都没有时不能复制

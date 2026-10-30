@@ -467,7 +467,10 @@ const CopyPanel = ({ showToast }: CopyPanelProps) => {
               )}
             </span>
             <span className="tabular-nums text-muted-foreground">
-              {task.progress.copied} / {task.progress.total} 张
+              {/* 有跳过项时按「已完成」计，否则「55 / 60 张 · 跳过 6」会被读成只做了 55 张 */}
+              {task.progress.skipped > 0
+                ? `已完成 ${task.progress.copied + task.progress.failed + task.progress.skipped} / ${task.progress.total} 张`
+                : `${task.progress.copied} / ${task.progress.total} 张`}
               {task.progress.skipped > 0 && ` · 跳过 ${task.progress.skipped}`}
               {task.progress.failed > 0 && ` · 失败 ${task.progress.failed}`}
               {task.progress.renamed > 0 && ` · 改名 ${task.progress.renamed}`}

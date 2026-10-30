@@ -482,7 +482,10 @@ export class CopyTaskRunner {
 
   private progress(): CopyProgress {
     const total = this.plan.length
-    const done = this.copied + this.failures.length
+    // 跳过的也是「处理完了」：它已经比对过目标目录并做出了决定，
+    // 只是没落盘。把它排除在分母外会让进度条永远差一截，
+    // 全是跳过时甚至停在 0%，用户会以为任务卡住了。
+    const done = this.copied + this.failures.length + this.skipped
     const elapsed = Math.max(
       0,
       (this.finishedAt ?? Date.now()) - (this.startedAt ?? Date.now()),
