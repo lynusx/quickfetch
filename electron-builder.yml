@@ -6,6 +6,12 @@ directories:
   output: release
   buildResources: build
 
+# electron-builder 打包时会单独下载一次目标平台的 Electron 二进制，
+# 与 ensure-electron.cjs 的镜像保持一致，避免国内网络下直连 GitHub 超时。
+# 设置 ELECTRON_BUILDER_BINARIES_MIRROR 环境变量可覆盖。
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/
+
 # 只打包构建产物，源码不进安装包
 files:
   - out/**/*
