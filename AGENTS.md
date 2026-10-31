@@ -31,6 +31,25 @@ npx shadcn@latest info --json
 > CodeBuddy 只读 `/root/.codebuddy/skills/`；在 CodeBuddy 里需要显式去读这几个文件，
 > 而不是指望它被自动加载。
 
+### 换主题 / 加组件时 CLI 会卡在框架识别
+
+`shadcn apply` 与 `init` 在本仓库都会报 “could not detect a supported framework”——
+它只认 next / vite / react-router / astro，Electron 不在列。`add` 不受影响。
+
+要应用预设，先造一个最小 Vite 骨架再跑，别去改本仓库的 `package.json` 骗检测：
+
+```bash
+mkdir -p /tmp/probe/src && cd /tmp/probe
+# 需要 package.json(含 vite+react+tailwindcss)、vite.config.ts、tsconfig.json(paths: @/*)、
+# index.html、src/index.css(@import "tailwindcss";)
+npx shadcn@latest init --preset <code> --base radix --yes --no-reinstall --cwd /tmp/probe
+```
+
+然后把 `/tmp/probe/src/index.css` 的变量块搬回 `src/renderer/index.css`，
+`components.json` 的 `style` / `baseColor` / `menuColor` 一并对齐。
+**预设的 `style` 会改变组件源码**（luma 的按钮是 `rounded-4xl` 胶囊形），
+光换 CSS 变量只能换配色，形状不会变。
+
 ## 这个项目的几条硬约束
 
 **架构**：Electron 三进程，IPC 契约全部集中在 `src/shared/ipc.ts`。新增通道三处一起改：
