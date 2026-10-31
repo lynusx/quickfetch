@@ -2,6 +2,7 @@ import { join } from 'node:path'
 
 import type {
   ScanBranch,
+  ScanCategory,
   ScanTask,
   ScanTaskParams,
   ScanTaskProgress,
@@ -11,10 +12,11 @@ import type {
 
 import { timeoutForConcurrency, createAdaptiveGate } from '../adaptive'
 import type { AdaptiveGate } from '../adaptive'
-import { isNetworkError, probePath, readDirSafe } from './fsx'
+import { isNetworkError, readDirSafe } from './fsx'
 import type { DirReadResult } from './fsx'
 import { createLimiter } from './limiter'
 import type { Limiter } from './limiter'
+import type { MachineResolver } from './resolver'
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif'])
 
@@ -52,17 +54,10 @@ const chunk = <T>(items: T[], size: number): T[][] => {
   return result
 }
 
-/** 取绝对路径相对根目录的层级，用于生成结果里展示用的相对路径 */
-const relativeSegments = (root: string, full: string): string[] =>
-  full
-    .slice(root.length)
-    .split(/[\\/]+/)
-    .filter(Boolean)
-
 /** 并发档位上下限 */
 const MIN_CONCURRENCY = 1
-const MAX_CONCURRENCY = 8
-const MAX_BATCH_SIZE = 4
+const MAX_CONCURRENCY = 12
+const MAX_BATCH_SIZE = 12
 
 /** 单次读取超时的可调范围，随并发档位一起收紧 */
 const MIN_TIMEOUT_MS = 8_000
@@ -103,10 +98,13 @@ const isAbortError = (error: unknown): boolean =>
   error instanceof Error && error.name === 'AbortError'
 
 export interface TaskContext {
-  /** DC 根目录的原始 UNC 路径 */
-  rootPath: string
-  /** 工序层目录名，如 EL */
-  entry: string
+  /** 扫描类别；参数里的 category 优先，这里作为兜底 */
+  category: ScanCategory
+  /**
+   * 机台 → 路径前缀。EL 与力禧特的差别全在这里，
+   * 拿到 base 之后日期、班次、时段、类型四层的处理完全一致。
+   */
+  resolver: MachineResolver
   /** 并发与分批参数，缺省走现场机器的保守档 */
   load?: LoadOptions
 }
@@ -367,17 +365,12 @@ export class ScanTaskRunner {
 
   private async run(): Promise<void> {
     try {
-      // 阶段 0：根目录预检。断网时一次就能定位，不必让几百个目录逐个等超时
-      const root = await probePath(this.context.rootPath)
+      // 阶段 0：配置预检。少配了根目录/入口就在开跑前说清楚，
+      // 不必让每台机台都各自失败一次再汇总。
+      const problem = this.context.resolver.validate()
 
-      if (!root.ok) {
-        this.fail(
-          root.status === 'unreachable'
-            ? `网络路径不可达：${this.context.rootPath}，请确认共享盘已连接后重试`
-            : root.status === 'denied'
-              ? `没有访问「${this.context.rootPath}」的权限，请检查共享目录授权`
-              : `根目录不存在：${this.context.rootPath}，请重新选择`,
-        )
+      if (problem) {
+        this.fail(problem)
         return
       }
 
@@ -427,71 +420,49 @@ export class ScanTaskRunner {
     this.error = message
   }
 
-  /** 单个机台分支：机台 → EL → 日期 → 班次 → 时段 → 类型 */
+  /** 单个机台分支：机台 → 解析出的路径前缀 → 日期 → 班次 → 时段 → 类型 */
   private async scanMachine(machine: string, limiter: Limiter): Promise<void> {
     const branch = this.branches.find((item) => item.machine === machine)
     if (!branch) return
 
-    const machineDir = join(this.context.rootPath, machine)
+    // 第 1 步：把机台换成绝对路径前缀。
+    // EL 会校验「根/机台/EL」存在；力禧特要先探出这台机器用的是
+    // el 还是 SaveImages。解析本身含网络读取，所以也走闸门。
+    const resolved = await limiter(() => this.context.resolver.resolve(machine))
 
-    // 第 1 层：机台目录本身，顺带确认 EL 是否存在
-    const machineRead = await this.read(machineDir)
-
-    if (machineRead.status !== 'ok') {
-      this.markBroken(branch, machineRead, 'EL', `${machine} 目录`)
+    if (!resolved.ok) {
+      this.markUnresolved(branch, resolved)
       return
     }
 
-    if (!machineRead.dirs.includes(this.context.entry)) {
-      this.markBroken(
-        branch,
-        { status: 'missing', dirs: [], files: [], elapsedMs: 0 },
-        'EL',
-        machine,
-        {
-          expected: this.context.entry,
-          actual: machineRead.dirs,
-        },
-      )
+    const base = resolved.base
+    const baseRead = await this.read(base)
+
+    if (baseRead.status !== 'ok') {
+      this.markBroken(branch, baseRead, resolved.brokenAt ?? 'EL', base)
       return
     }
 
-    // 第 2 层：EL → 日期
-    const entryDir = join(machineDir, this.context.entry)
-    const entryRead = await this.read(entryDir)
-
-    if (entryRead.status !== 'ok') {
-      this.markBroken(
-        branch,
-        entryRead,
-        '日期',
-        `${machine}/${this.context.entry}`,
-      )
-      return
-    }
+    // 第 2 层：共享名 / EL → 日期
+    const entryRead = baseRead
 
     if (!entryRead.dirs.includes(this.params.date)) {
       this.markBroken(
         branch,
         { status: 'missing', dirs: [], files: [], elapsedMs: 0 },
         '日期',
-        `${machine}/${this.context.entry}`,
+        base,
         { expected: this.params.date, actual: entryRead.dirs },
       )
       return
     }
 
     // 第 3 层：日期 → 班次
-    const dateDir = join(entryDir, this.params.date)
+    const dateDir = join(base, this.params.date)
     const dateRead = await this.read(dateDir)
 
     if (dateRead.status !== 'ok') {
-      this.markBroken(
-        branch,
-        dateRead,
-        '班次',
-        `${machine}/${this.context.entry}/${this.params.date}`,
-      )
+      this.markBroken(branch, dateRead, '班次', `${base}/${this.params.date}`)
       return
     }
 
@@ -500,7 +471,7 @@ export class ScanTaskRunner {
         branch,
         { status: 'missing', dirs: [], files: [], elapsedMs: 0 },
         '班次',
-        `${machine}/${this.context.entry}/${this.params.date}`,
+        `${base}/${this.params.date}`,
         { expected: this.params.shift, actual: dateRead.dirs },
       )
       return
@@ -515,7 +486,7 @@ export class ScanTaskRunner {
         branch,
         shiftRead,
         '时段',
-        `${machine}/${this.context.entry}/${this.params.date}/${this.params.shift}`,
+        `${base}/${this.params.date}/${this.params.shift}`,
       )
       return
     }
@@ -697,7 +668,7 @@ export class ScanTaskRunner {
     branch.status = 'hit'
     this.progress.dirsHit += 1
 
-    const segments = relativeSegments(this.context.rootPath, item.dir)
+    const segments = this.context.resolver.segments(item.machine, item.dir)
 
     for (const name of images) {
       this.images.push({
@@ -726,17 +697,12 @@ export class ScanTaskRunner {
       this.unreachableStreak += 1
       this.recordSample(true)
 
+      // 力禧特各机台不同 IP，没有共同根可复探；连续不可达只能说明整批
+      // 都不在这张网里，直接暂停让用户接入专用内网后继续。
+      // EL 虽然共享一个根，但续探根目录会让每个批次多一次网络往返，
+      // 而现场的断网往往整片发生，直接暂停后由用户确认恢复更省事。
       if (this.unreachableStreak >= NETWORK_FAILURE_LIMIT) {
-        const root = await probePath(this.context.rootPath, {
-          timeoutMs: this.timeoutMs,
-        })
-
-        // 根目录仍可达说明只是个别目录异常，重置计数继续；否则判定断连并暂停
-        if (root.ok) {
-          this.unreachableStreak = 0
-        } else {
-          this.pause('network')
-        }
+        this.pause('network')
       }
     }
 
@@ -777,6 +743,33 @@ export class ScanTaskRunner {
 
     this.probedMachines += 1
     this.touch(where, true)
+  }
+
+  /**
+   * 机台根本换不出路径前缀：入口里没有它、主机不通、共享名也探不到。
+   *
+   * 这类失败跟「某个目录读不到」不同，优先给出按原因分类的提示，
+   * 现场才能一眼分清是没接专用内网、IP 变了，还是没权限。
+   */
+  private markUnresolved(
+    branch: ScanBranch,
+    resolved: {
+      reason: string
+      brokenAt?: ScanBranch['brokenAt']
+      unreachable?: ScanBranch['unreachableReason']
+    },
+  ): void {
+    const skipped = this.params.slots.length * this.params.types.length
+    this.doneLeaves += skipped
+    this.progress.dirsSkipped += skipped
+
+    branch.brokenAt = resolved.brokenAt ?? '共享名'
+    branch.status = resolved.unreachable ? 'unreachable' : 'missing'
+    branch.unreachableReason = resolved.unreachable
+    branch.message = resolved.reason
+
+    this.probedMachines += 1
+    this.touch(branch.machine, true)
   }
 
   // ---------------------------------------------------------------- 进度与节流

@@ -115,6 +115,8 @@ const toItem = (record: HistoryRecord): ScanHistoryItem => ({
   id: record.id,
   status: record.status,
   params: record.params,
+  // 老记录没有 category，它们全是 EL 扫出来的，按 el 补齐即可，不需要迁移
+  category: record.params.category ?? 'el',
   totalImages: record.images.length,
   hitMachines: record.branches.filter((branch) => branch.images > 0).length,
   machineCount: record.branches.length,

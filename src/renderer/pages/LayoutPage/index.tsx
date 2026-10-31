@@ -16,7 +16,8 @@ import {
 } from '@/components/ui/sidebar'
 
 const PAGE_TITLES: Record<string, string> = {
-  '/image-copy': '图片拷贝',
+  '/image-copy': 'EL 图片扫描',
+  '/lxt': '力禧特图片扫描',
   '/excel-parse': 'Excel 解析',
   '/settings': '设置',
 }

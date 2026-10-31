@@ -5,6 +5,8 @@ import { DEFAULT_PREFERENCES } from '../../shared/ipc'
 import type {
   AppPreferences,
   AppSettings,
+  LxtSettings,
+  LxtSetupResult,
   PreferenceKey,
 } from '../../shared/ipc'
 import { toErrorMessage } from '../utils/error'
@@ -24,6 +26,10 @@ interface SettingsAction {
   saveHistoryLimit: (limit: number) => Promise<void>
   /** 局部更新复制与性能偏好；界面先改再落盘，写失败会回滚 */
   savePreferences: (patch: Partial<AppPreferences>) => Promise<void>
+  /** 设置力禧特入口并解析其中的 .lnk；成功时返回本次识别的增量信息 */
+  setupLxt: (entryRoot: string) => Promise<LxtSetupResult | null>
+  /** 按当前入口重新识别，与已有配置增量合并 */
+  refreshLxt: () => Promise<LxtSetupResult | null>
   clearError: () => void
 }
 
@@ -31,6 +37,17 @@ interface SettingsAction {
 export const selectPreferences = (state: {
   settings: AppSettings | null
 }): AppPreferences => state.settings?.preferences ?? DEFAULT_PREFERENCES
+
+/** 力禧特配置，未读回配置时给空值 */
+export const selectLxt = (state: {
+  settings: AppSettings | null
+}): LxtSettings =>
+  state.settings?.lxt ?? {
+    entryRoot: null,
+    machines: [],
+    skipped: [],
+    updatedAt: null,
+  }
 
 /** 被环境变量接管、设置页里改了也不生效的项 */
 export const selectEnvOverrides = (state: {
@@ -112,6 +129,34 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
           settings: before,
           error: toErrorMessage(error, '保存设置失败'),
         })
+      }
+    },
+
+    setupLxt: async (entryRoot) => {
+      set({ saving: true, error: null })
+      try {
+        const result = await window.electronAPI.setupLxtRoot(entryRoot)
+        set({ settings: result.settings })
+        return result
+      } catch (error) {
+        set({ error: toErrorMessage(error, '识别力禧特入口失败') })
+        return null
+      } finally {
+        set({ saving: false })
+      }
+    },
+
+    refreshLxt: async () => {
+      set({ saving: true, error: null })
+      try {
+        const result = await window.electronAPI.refreshLxtMachines()
+        set({ settings: result.settings })
+        return result
+      } catch (error) {
+        set({ error: toErrorMessage(error, '重新识别入口失败') })
+        return null
+      } finally {
+        set({ saving: false })
       }
     },
 

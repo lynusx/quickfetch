@@ -66,8 +66,34 @@ const branchText = (branch: ScanBranch): string => {
 
 const ImageCopyPage = () => {
   const { showToast } = useToast()
-  const { task, creating, busy, canStart, start, pause, resume, cancel } =
-    useScanTask({ showToast })
+
+  // 参数在点击那一刻才从 store 取：44 个机台勾选与筛选条件都可能在
+  // 订阅回调里被改，闭包捕获旧值会让「开始扫描」用的是上一轮的筛选。
+  const {
+    task,
+    creating,
+    busy,
+    other,
+    otherLabel,
+    start,
+    pause,
+    resume,
+    cancel,
+  } = useScanTask({
+    category: 'el',
+    showToast,
+    getParams: () => {
+      const filters = useImageFilterStore.getState()
+
+      return {
+        machines: filters.selectedMachines,
+        date: filters.date,
+        shift: filters.shift,
+        slots: filters.slots,
+        types: filters.types,
+      }
+    },
+  })
 
   const settingsError = useSettingsStore((state) => state.error)
   const settings = useSettingsStore((state) => state.settings)
@@ -109,8 +135,7 @@ const ImageCopyPage = () => {
             .filter(Boolean),
         )
 
-        if (plants.size === 1)
-          filters.setPlant([...plants][0] as 'east' | 'west')
+        if (plants.size === 1) filters.setPlant([...plants][0] as string)
 
         filters.setSelectedMachines(item.params.machines)
         filters.setDate(item.params.date)
@@ -138,6 +163,14 @@ const ImageCopyPage = () => {
 
   const status = task ? STATUS_META[task.status] : null
   const configured = Boolean(settings?.rootPath)
+  // 参数齐了才让点：机台/时段/类型任一为空都会让主进程直接报错
+  const filters = useImageFilterStore()
+  const ready =
+    filters.selectedMachines.length > 0 &&
+    filters.slots.length > 0 &&
+    filters.types.length > 0 &&
+    Boolean(filters.date)
+  const canStart = !busy && !creating && ready && !other
   const progressValue = task?.progress.percent ?? 0
   const branches = task?.branches ?? []
   const abnormal = branches.filter(
@@ -149,7 +182,9 @@ const ImageCopyPage = () => {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex items-center gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">图片批量拷贝</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          EL 图片批量拷贝
+        </h1>
         {status && <Badge variant={status.variant}>{status.label}</Badge>}
       </header>
 
@@ -270,6 +305,14 @@ const ImageCopyPage = () => {
                   重扫一遍
                 </Button>
               </div>
+
+              {other && otherLabel && (
+                <Alert>
+                  <CircleAlert />
+                  <AlertTitle>另一类扫描正在进行</AlertTitle>
+                  <AlertDescription>{otherLabel}</AlertDescription>
+                </Alert>
+              )}
 
               {task?.status === 'paused' && task.pauseReason === 'network' && (
                 <Alert variant="destructive">

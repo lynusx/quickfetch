@@ -5,16 +5,23 @@ import { basename, join } from 'node:path'
 import type {
   AppPreferences,
   AppSettings,
+  LxtMachine,
+  LxtSettings,
   MachineInfo,
   Plant,
 } from '../shared/ipc'
 
-import { DEFAULT_PREFERENCES, PREFERENCE_RANGE } from '../shared/ipc'
+import {
+  DEFAULT_PREFERENCES,
+  LXT_SHARES,
+  PREFERENCE_RANGE,
+} from '../shared/ipc'
 import {
   DEFAULT_HISTORY_LIMIT,
   normalizeHistoryLimit,
 } from '../shared/historyLimit'
 import { envOverriddenKeys } from './load'
+import { lxtKey } from './lxt'
 import { toFsPath } from './pathx'
 
 const SETTINGS_VERSION = 1 as const
@@ -31,6 +38,7 @@ const defaultSettings = (): AppSettings => ({
   updatedAt: null,
   historyLimit: DEFAULT_HISTORY_LIMIT,
   preferences: { ...DEFAULT_PREFERENCES },
+  lxt: { entryRoot: null, machines: [], skipped: [], updatedAt: null },
   envOverrides: [],
 })
 
@@ -92,6 +100,84 @@ export const normalizePreferences = (
       PREFERENCE_RANGE.copyBatchSize.max,
       DEFAULT_PREFERENCES.copyBatchSize,
     ),
+    lxtScanConcurrency: clampInt(
+      merged.lxtScanConcurrency,
+      PREFERENCE_RANGE.lxtScanConcurrency.min,
+      PREFERENCE_RANGE.lxtScanConcurrency.max,
+      DEFAULT_PREFERENCES.lxtScanConcurrency,
+    ),
+    lxtScanBatchSize: clampInt(
+      merged.lxtScanBatchSize,
+      PREFERENCE_RANGE.lxtScanBatchSize.min,
+      PREFERENCE_RANGE.lxtScanBatchSize.max,
+      DEFAULT_PREFERENCES.lxtScanBatchSize,
+    ),
+  }
+}
+
+/** 只认 el / SaveImages，认不出就当没探过，下次扫描补探 */
+const normalizeShare = (value: unknown): LxtMachine['share'] =>
+  LXT_SHARES.includes(value as (typeof LXT_SHARES)[number])
+    ? (value as LxtMachine['share'])
+    : null
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null
+
+/**
+ * 归一化力禧特配置。
+ *
+ * 机台的 key 一律按「厂区/机台」重算，不信任文件里存的那份 ——
+ * 万一厂区名被手改过，key 和 plant 对不上，历史记录就关联不回去了。
+ */
+export const normalizeLxt = (raw: unknown): LxtSettings => {
+  if (!isRecord(raw)) {
+    return { entryRoot: null, machines: [], skipped: [], updatedAt: null }
+  }
+
+  const machines: LxtMachine[] = []
+  const seen = new Set<string>()
+
+  for (const item of Array.isArray(raw.machines) ? raw.machines : []) {
+    if (!isRecord(item)) continue
+
+    const plant = typeof item.plant === 'string' ? item.plant : ''
+    const name = typeof item.name === 'string' ? item.name : ''
+    const host = typeof item.host === 'string' ? item.host : ''
+
+    if (!plant || !name || !host) continue
+
+    const key = lxtKey(plant, name)
+    if (seen.has(key)) continue
+
+    seen.add(key)
+    machines.push({
+      plant,
+      name,
+      key,
+      host,
+      share: normalizeShare(item.share),
+      stale: item.stale === true,
+    })
+  }
+
+  const skipped = (Array.isArray(raw.skipped) ? raw.skipped : [])
+    .filter(isRecord)
+    .map((item) => ({
+      plant: typeof item.plant === 'string' ? item.plant : '',
+      file: typeof item.file === 'string' ? item.file : '',
+      reason: typeof item.reason === 'string' ? item.reason : '',
+    }))
+    .filter((item) => item.file)
+
+  return {
+    entryRoot:
+      typeof raw.entryRoot === 'string' && raw.entryRoot.trim()
+        ? raw.entryRoot
+        : null,
+    machines,
+    skipped,
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : null,
   }
 }
 
@@ -177,6 +263,7 @@ export const readSettings = async (): Promise<AppSettings> => {
       historyLimit: normalizeHistoryLimit(parsed.historyLimit),
       // 同理：1.10.x 及更早的配置没有 preferences
       preferences: normalizePreferences(parsed.preferences),
+      lxt: normalizeLxt(parsed.lxt),
       // 运行期字段，不落盘，每次读的时候按当前环境算
       envOverrides: envOverriddenKeys(),
     }
@@ -215,6 +302,7 @@ export const saveRootPath = async (rootPath: string): Promise<AppSettings> => {
     // 换根目录不该把历史保留条数与偏好重置回默认值
     historyLimit: current.historyLimit,
     preferences: current.preferences,
+    lxt: current.lxt,
     envOverrides: current.envOverrides,
   }
 
@@ -269,4 +357,50 @@ export const savePreferences = async (
   await writeSettings(settings)
 
   return settings
+}
+
+/** 只替换力禧特那段配置，其余字段原样保留 */
+export const saveLxt = async (lxt: LxtSettings): Promise<AppSettings> => {
+  const current = await readSettings()
+  const settings: AppSettings = {
+    ...current,
+    lxt: normalizeLxt(lxt),
+    updatedAt: new Date().toISOString(),
+  }
+
+  await writeSettings(settings)
+
+  return settings
+}
+
+/**
+ * 回写单台机台探测到的共享名。
+ *
+ * 边扫边写，不攒到最后一起写：45 台可能跑十几分钟，中途崩了也不该
+ * 把这十几分钟的探测结果全丢掉。写失败只记日志 —— 探测缓存丢失
+ * 只是下次多探一次，不该让正在跑的扫描失败。
+ */
+export const rememberLxtShare = async (
+  key: string,
+  share: LxtSettings['machines'][number]['share'],
+  host: string,
+): Promise<void> => {
+  try {
+    const current = await readSettings()
+    const index = current.lxt.machines.findIndex((item) => item.key === key)
+
+    if (index < 0) return
+
+    const machine = current.lxt.machines[index]
+
+    // 期间入口被重新识别、IP 变了，这次探测结果已经过期，不能写回去
+    if (machine.host !== host || machine.share === share) return
+
+    const machines = [...current.lxt.machines]
+    machines[index] = { ...machine, share }
+
+    await saveLxt({ ...current.lxt, machines })
+  } catch (error) {
+    console.error('保存共享名探测结果失败:', error)
+  }
 }

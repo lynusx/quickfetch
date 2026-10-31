@@ -18,6 +18,10 @@ const api: ElectronAPI = {
   savePreferences: (patch) =>
     ipcRenderer.invoke('settings:save-preferences', patch),
 
+  setupLxtRoot: (entryRoot) => ipcRenderer.invoke('lxt:setup-root', entryRoot),
+
+  refreshLxtMachines: () => ipcRenderer.invoke('lxt:refresh'),
+
   createScanTask: (params) => ipcRenderer.invoke('scan:create', params),
 
   startScanTask: (taskId) => ipcRenderer.invoke('scan:start', taskId),

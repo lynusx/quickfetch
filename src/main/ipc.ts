@@ -6,6 +6,7 @@ import { filterByMachines, planPreview } from './copy'
 import { getCopyRunner, startCopy } from './copyRegistry'
 import { loadFrom } from './load'
 import { toFsPath } from './pathx'
+import { createElResolver, createLxtResolver } from './scanner/resolver'
 import {
   clearRecords,
   createTask,
@@ -21,17 +22,24 @@ import {
 import {
   readSettings,
   refreshMachines,
+  rememberLxtShare,
   saveHistoryLimit,
+  saveLxt,
   savePreferences,
   saveRootPath,
 } from './settings'
-
+import { discoverLxt, mergeLxtMachines } from './lxt'
+import type { LxtShare } from '../shared/ipc'
+import type { MachineResolver } from './scanner/resolver'
 import type {
   AppPreferences,
+  AppSettings,
   CopyPlanPreview,
   CopyTask,
   CopyTaskParams,
   DirectoryInfo,
+  LxtSetupResult,
+  ScanCategory,
   ScanHistoryItem,
   ScanTask,
   ScanTaskParams,
@@ -66,6 +74,48 @@ const validateParams = (params: ScanTaskParams): void => {
   if (!params.types.length) {
     throw new Error('请至少选择一个不良类型')
   }
+}
+
+/**
+ * 力禧特任务：只保留入口里还存在的机台。
+ *
+ * stale 的机台不参与扫描 —— 入口里已经没有它的 .lnk，连地址都是旧的；
+ * 但它仍留在配置里，因为历史记录与复制分组还引用着它。
+ */
+const createLxtTask = (
+  settings: AppSettings,
+  params: ScanTaskParams,
+): ScanTask => {
+  const active = settings.lxt.machines.filter((item) => !item.stale)
+  const known = new Set(active.map((item) => item.key))
+  const machines = params.machines.filter((key) => known.has(key))
+
+  if (!machines.length) {
+    throw new Error('所选机台已不在入口目录中，请点击「重新识别」刷新机台列表')
+  }
+
+  const hosts = new Map(active.map((item) => [item.key, item.host]))
+  const shares = new Map<string, LxtShare | null>(
+    active.map((item) => [item.key, item.share]),
+  )
+
+  const resolver: MachineResolver = createLxtResolver({
+    hosts,
+    shares,
+    // 探测到的共享名随手回写配置，下次扫描不必再探一次
+    onShare: (machine, share, host) => {
+      void rememberLxtShare(machine, share, host)
+    },
+  })
+
+  return createTask(
+    { ...params, category: 'lxt', machines },
+    {
+      category: 'lxt',
+      resolver,
+      load: loadFrom(settings.preferences, 'lxt'),
+    },
+  )
 }
 
 export const registerIpcHandlers = (): void => {
@@ -110,6 +160,49 @@ export const registerIpcHandlers = (): void => {
     (_event, patch: Partial<AppPreferences>) => savePreferences(patch),
   )
 
+  // ------------------------------------------------------------ 力禧特入口
+
+  /**
+   * 设置入口目录并解析其中的 .lnk。
+   *
+   * 只读入口，不连机台：入口在办公网、机台在专用内网，识别阶段去连机台
+   * 只会让界面卡在超时上。共享名（el / SaveImages）留到扫描该机台时再探。
+   */
+  const setupLxt = async (entryRoot: string): Promise<LxtSetupResult> => {
+    const current = await readSettings()
+    const { machines: discovered, skipped } = await discoverLxt(entryRoot)
+    const merged = mergeLxtMachines(current.lxt.machines, discovered)
+
+    const settings = await saveLxt({
+      entryRoot,
+      machines: merged.machines,
+      skipped,
+      updatedAt: new Date().toISOString(),
+    })
+
+    return {
+      // saveLxt 返回的是落盘后的完整配置，这里补上运行时字段
+      settings,
+      added: merged.added,
+      removed: merged.removed,
+      relocated: merged.relocated,
+    }
+  }
+
+  ipcMain.handle('lxt:setup-root', (_event, entryRoot: string) =>
+    setupLxt(entryRoot.trim()),
+  )
+
+  ipcMain.handle('lxt:refresh', async () => {
+    const current = await readSettings()
+
+    if (!current.lxt.entryRoot) {
+      throw new Error('尚未配置力禧特入口目录，请先选择入口')
+    }
+
+    return setupLxt(current.lxt.entryRoot)
+  })
+
   // ------------------------------------------------------------------ 扫描
 
   ipcMain.handle(
@@ -117,11 +210,18 @@ export const registerIpcHandlers = (): void => {
     async (_event, params: ScanTaskParams): Promise<ScanTask> => {
       const settings = await readSettings()
 
+      // 老历史记录与旧界面可能不带 category，一律按 EL 处理
+      const category: ScanCategory = params.category ?? 'el'
+
+      validateParams(params)
+
+      if (category === 'lxt') {
+        return createLxtTask(settings, params)
+      }
+
       if (!settings.rootPath) {
         throw new Error('尚未配置 DC 根目录，请先填写或选择根目录路径')
       }
-
-      validateParams(params)
 
       const known = new Set(settings.machines.map((item) => item.name))
       const machines = params.machines.filter((name) => known.has(name))
@@ -131,10 +231,10 @@ export const registerIpcHandlers = (): void => {
       }
 
       return createTask(
-        { ...params, machines },
+        { ...params, category, machines },
         {
-          rootPath: settings.rootPath,
-          entry: settings.entry,
+          category,
+          resolver: createElResolver(settings.rootPath, settings.entry),
           load: loadFrom(settings.preferences),
         },
       )

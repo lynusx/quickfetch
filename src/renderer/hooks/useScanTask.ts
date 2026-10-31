@@ -1,18 +1,26 @@
 import { useCallback, useEffect, useRef } from 'react'
 
-import type { ScanTaskStatus } from '../../shared/ipc'
+import type {
+  ScanCategory,
+  ScanTask,
+  ScanTaskParams,
+  ScanTaskStatus,
+} from '../../shared/ipc'
+import { SCAN_CATEGORY_LABEL } from '../../shared/ipc'
 import { useCopyStore } from '../stores/copyStore'
-import { useImageFilterStore } from '../stores/imageFilterStore'
 import { useScanStore } from '../stores/scanStore'
 import { formatDuration } from '../utils/common'
 import { toErrorMessage } from '../utils/error'
 
 interface UseScanTaskProps {
+  category: ScanCategory
   showToast: (
     title: string,
     message: string,
     type: 'success' | 'error' | 'info',
   ) => void
+  /** 由页面自己从各自的筛选 store 里取，两类扫描的参数来源不同 */
+  getParams: () => Omit<ScanTaskParams, 'category'>
 }
 
 const isBusy = (status: ScanTaskStatus | undefined): boolean =>
@@ -23,14 +31,23 @@ const isBusy = (status: ScanTaskStatus | undefined): boolean =>
  *
  * 进度不通过 invoke 的返回值传递，而是订阅主进程推送的整份任务快照，
  * 这样即使页面切走再回来，状态依然是最新的。
+ *
+ * 两类扫描共用一个 store，全局只允许一个任务在跑 —— 45 台力禧特可能跑
+ * 十几分钟，允许并行时两张网的读取会互相拖累，且现场基本只在一个网络下作业。
  */
-export const useScanTask = ({ showToast }: UseScanTaskProps) => {
+export const useScanTask = ({
+  category,
+  showToast,
+  getParams,
+}: UseScanTaskProps) => {
   const { task, creating, error, setTask, setCreating, setError } =
     useScanStore()
-  const { selectedMachines, date, shift, slots, types } = useImageFilterStore()
 
   const toastRef = useRef(showToast)
   toastRef.current = showToast
+
+  const paramsRef = useRef(getParams)
+  paramsRef.current = getParams
 
   useEffect(() => {
     // 页面切走再回来时，用当前状态作为基线，避免重复弹出「扫描完成」
@@ -56,8 +73,10 @@ export const useScanTask = ({ showToast }: UseScanTaskProps) => {
           toastRef.current('扫描失败', next.error, 'error')
         } else if (next.status === 'paused' && next.pauseReason === 'network') {
           toastRef.current(
-            '网络中断',
-            '共享盘连接中断，任务已暂停，恢复连接后点击继续',
+            '网络不通',
+            category === 'lxt'
+              ? '连不上机台，请确认已接入力禧特专用内网后点击继续'
+              : '共享盘连接中断，任务已暂停，恢复连接后点击继续',
             'error',
           )
         }
@@ -67,7 +86,7 @@ export const useScanTask = ({ showToast }: UseScanTaskProps) => {
     })
 
     return unsubscribe
-  }, [])
+  }, [category])
 
   // 重新进入页面时补一次同步，避免错过订阅空窗期的状态变更
   useEffect(() => {
@@ -90,11 +109,8 @@ export const useScanTask = ({ showToast }: UseScanTaskProps) => {
 
     try {
       const created = await window.electronAPI.createScanTask({
-        machines: selectedMachines,
-        date,
-        shift,
-        slots,
-        types,
+        ...paramsRef.current(),
+        category,
       })
 
       // 创建瞬间就落到 store，进度条立即从 0% 开始，不等第一个进度事件
@@ -110,17 +126,7 @@ export const useScanTask = ({ showToast }: UseScanTaskProps) => {
     } finally {
       setCreating(false)
     }
-  }, [
-    selectedMachines,
-    date,
-    shift,
-    slots,
-    types,
-    setTask,
-    setCreating,
-    setError,
-    showToast,
-  ])
+  }, [category, setTask, setCreating, setError, showToast])
 
   const pause = useCallback(async () => {
     if (!task) return
@@ -139,20 +145,26 @@ export const useScanTask = ({ showToast }: UseScanTaskProps) => {
 
   const busy = isBusy(task?.status)
 
-  const canStart =
-    !busy &&
-    !creating &&
-    selectedMachines.length > 0 &&
-    slots.length > 0 &&
-    types.length > 0 &&
-    Boolean(date)
+  /**
+   * 别的类别正在扫。全局互斥：另一页的按钮要置灰并说明在扫什么，
+   * 而不是允许点下去再报错。
+   */
+  const other: ScanTask | null =
+    task && busy && (task.params.category ?? 'el') !== category ? task : null
+
+  const otherLabel = other
+    ? `正在扫描 ${SCAN_CATEGORY_LABEL[other.params.category ?? 'el']}（${
+        other.branches.filter((branch) => branch.status !== 'skipped').length
+      }/${other.branches.length} 台），完成后再开始`
+    : null
 
   return {
     task,
     creating,
     error,
     busy,
-    canStart,
+    other,
+    otherLabel,
     start,
     pause,
     resume,

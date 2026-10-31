@@ -6,8 +6,22 @@ export interface DirectoryInfo {
   name: string
 }
 
-/** 厂区：由机台目录名首字母派生，A 为东区、B 为西区 */
-export type Plant = 'east' | 'west'
+/**
+ * 厂区标签。
+ *
+ * 以前是 'east' | 'west' 两个枚举，由机台目录名首字母派生。力禧特的机台
+ * 叫 7A、LX2，前缀既没有 A 也没有 B，厂区只能来自入口目录下的文件夹名，
+ * 而且以后可能多出「三区」。所以改成字符串标签，界面按机台列表去重后动态渲染。
+ */
+export type Plant = string
+
+export const PLANT_LABEL: Record<string, string> = {
+  east: '东区',
+  west: '西区',
+}
+
+/** 老配置里的 east / west 统一换成中文，其余标签原样保留 */
+export const plantLabel = (plant: Plant): string => PLANT_LABEL[plant] ?? plant
 
 export interface MachineInfo {
   /** DC 下的机台目录名，如 A03-B、A-LXJC-01 */
@@ -15,12 +29,32 @@ export interface MachineInfo {
   plant: Plant
 }
 
+/**
+ * 扫描类别：一类图片来源对应一套完全不同的取数逻辑。
+ *
+ * - el：单一根目录 + 固定工序层 EL，机台是根目录下的子目录
+ * - lxt：每台机器一个 IP，入口是一堆 .lnk 快捷方式，第二层是 el / SaveImages
+ */
+export type ScanCategory = 'el' | 'lxt'
+
+export const SCAN_CATEGORY_LABEL: Record<ScanCategory, string> = {
+  el: 'EL',
+  lxt: '力禧特',
+}
+
+/** 力禧特第二层的两个候选共享名，探测顺序即优先级 */
+export const LXT_SHARES = ['el', 'SaveImages'] as const
+
+export type LxtShare = (typeof LXT_SHARES)[number]
+
 /** 偏好里能调数值的四项，用来标注「被环境变量接管」 */
 export type PreferenceKey =
   | 'scanConcurrency'
   | 'scanBatchSize'
   | 'copyConcurrency'
   | 'copyBatchSize'
+  | 'lxtScanConcurrency'
+  | 'lxtScanBatchSize'
 
 /** 环境变量名 → 偏好字段，主进程解析与界面提示共用一份 */
 export const PREFERENCE_ENV: Record<PreferenceKey, string> = {
@@ -28,6 +62,8 @@ export const PREFERENCE_ENV: Record<PreferenceKey, string> = {
   scanBatchSize: 'SHX_MACHINE_BATCH',
   copyConcurrency: 'SHX_COPY_CONCURRENCY',
   copyBatchSize: 'SHX_COPY_BATCH',
+  lxtScanConcurrency: 'SHX_LXT_READ_CONCURRENCY',
+  lxtScanBatchSize: 'SHX_LXT_MACHINE_BATCH',
 }
 
 /**
@@ -46,6 +82,8 @@ export interface AppSettings {
   historyLimit: number
   /** 设置页里的复制与性能偏好 */
   preferences: AppPreferences
+  /** 力禧特配置；未配置过时为默认空值 */
+  lxt: LxtSettings
   /**
    * 被环境变量接管的偏好项。
    *
@@ -55,9 +93,67 @@ export interface AppSettings {
   envOverrides: PreferenceKey[]
 }
 
+/** 力禧特的一台机台：入口里的一个 .lnk 解析出来的结果 */
+export interface LxtMachine {
+  /** 厂区标签，取自入口目录下的子文件夹名，如 东区 */
+  plant: Plant
+  /** .lnk 文件名（去扩展名），如 7A、LX2 */
+  name: string
+  /** 复合键「厂区/机台」，东西区都有 LX2，必须带厂区才唯一 */
+  key: string
+  /** .lnk 解析出的目标，形如 \\10.108.8.220 */
+  host: string
+  /**
+   * 该机台实际使用的共享名，第一次扫描时探测并缓存。
+   *
+   * el 与 SaveImages 不同机台可能不一样，只能逐台探；为 null 表示还没探过，
+   * 下次扫描该机台时补探。
+   */
+  share: LxtShare | null
+  /**
+   * 入口里已找不到这个 .lnk。
+   * 不直接删除，是因为历史记录和复制分组还引用着它。
+   */
+  stale: boolean
+}
+
+/** 被跳过的 .lnk：解析失败，或者目标根本不是网络路径 */
+export interface LxtSkippedLink {
+  /** 所在厂区文件夹 */
+  plant: Plant
+  file: string
+  reason: string
+}
+
+export interface LxtSettings {
+  /** 力禧特入口根目录，其下每个含 .lnk 的子文件夹算一个厂区 */
+  entryRoot: string | null
+  machines: LxtMachine[]
+  /** 最近一次识别时被跳过的 .lnk 清单，供界面展示 */
+  skipped: LxtSkippedLink[]
+  /** 最近一次识别时间，ISO 字符串 */
+  updatedAt: string | null
+}
+
+/** 识别入口后回给界面的结果，顺带带上完整配置 */
+export interface LxtSetupResult {
+  settings: AppSettings
+  /** 新增的机台数 */
+  added: number
+  /** 入口里已消失、被标记为 stale 的机台数 */
+  removed: number
+  /** 目标地址变化、share 缓存被清掉的机台数 */
+  relocated: number
+}
+
 export interface ScanTaskParams {
   /** 选中的机台目录名，允许多选 */
   machines: string[]
+  /**
+   * 扫描类别。老历史记录没有这个字段，读出来时按 el 补齐。
+   * 界面拿到省略值时按 el 处理，主进程建任务时总是显式传。
+   */
+  category?: ScanCategory
   /** YYYYMMDD，当前仅支持单日 */
   date: string
   shift: '白班' | '夜班'
@@ -68,7 +164,14 @@ export interface ScanTaskParams {
 }
 
 export interface ScannedImage {
-  /** 相对 DC 根目录的展示路径，统一使用 / 分隔（用于 source.txt 与日志） */
+  /**
+   * 结果路径，统一使用 / 分隔（用于 source.txt 与日志）。
+   *
+   * - EL：相对 DC 根目录，形如 A03-B/EL/20261030/白班/8/NG_脏污_B/x.jpg，
+   *   复制分组取第 0 段当机台
+   * - 力禧特：每台机器一个 IP，没有共同根，所以按「厂区/机台/日期/…」
+   *   拼成展示路径，第 0 段是厂区、第 1 段是机台
+   */
   path: string
   /** 真实绝对路径，仅用于主进程复制，不展示 */
   absolutePath: string
@@ -77,10 +180,16 @@ export interface ScannedImage {
 
 /** 单个机台分支的执行结果，界面诊断面板的数据来源 */
 export interface ScanBranch {
+  /** 机台标识。EL 是机台目录名；力禧特是「厂区/机台」复合键 */
   machine: string
   status: 'hit' | 'empty' | 'missing' | 'unreachable' | 'skipped'
   /** 断链发生在哪一层，用于精确提示 */
-  brokenAt?: 'EL' | '日期' | '班次' | '时段' | '类型'
+  brokenAt?: 'EL' | '共享名' | '日期' | '班次' | '时段' | '类型'
+  /**
+   * 不可达的具体原因。仅 unreachable 时有值，界面按它给出不同提示：
+   * 接入专用内网、共享名变了、还是没权限。
+   */
+  unreachableReason?: 'network' | 'share' | 'denied'
   /** 实际读到图片的类型目录数 */
   matchedDirs: number
   images: number
@@ -205,6 +314,12 @@ export interface AppPreferences {
   copyConcurrency: number
   /** 每批复制的文件数 */
   copyBatchSize: number
+  /**
+   * 力禧特单独一组：45 台机器各走一个 IP、又在另一张专用内网，
+   * 跟 EL 共用一套档位时总有一边在将就。
+   */
+  lxtScanConcurrency: number
+  lxtScanBatchSize: number
 }
 
 export const DEFAULT_PREFERENCES: AppPreferences = {
@@ -214,6 +329,9 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   scanBatchSize: 2,
   copyConcurrency: 6,
   copyBatchSize: 50,
+  // 力禧特 45 台各一个 IP，走的是另一张网，批次开大些才不至于跑二十几批
+  lxtScanConcurrency: 6,
+  lxtScanBatchSize: 6,
 }
 
 /**
@@ -225,6 +343,8 @@ export const PREFERENCE_RANGE = {
   scanBatchSize: { min: 1, max: 4, step: 1 },
   copyConcurrency: { min: 1, max: 16, step: 1 },
   copyBatchSize: { min: 1, max: 500, step: 10 },
+  lxtScanConcurrency: { min: 1, max: 12, step: 1 },
+  lxtScanBatchSize: { min: 1, max: 12, step: 1 },
 } as const
 
 export interface CopyTaskParams {
@@ -311,6 +431,8 @@ export interface ScanHistoryItem {
   id: string
   status: ScanTaskStatus
   params: ScanTaskParams
+  /** 类别；老记录没有该字段时按 el 补齐，两个页面各看各的 */
+  category: ScanCategory
   /** 命中图片数 */
   totalImages: number
   /** 有结果的机台数，用于「3/10 台命中」这类摘要 */
@@ -336,6 +458,15 @@ export interface ElectronAPI {
   refreshMachines: () => Promise<AppSettings>
   /** 局部更新复制与性能偏好，返回落盘后的完整配置 */
   savePreferences: (patch: Partial<AppPreferences>) => Promise<AppSettings>
+
+  /**
+   * 设置力禧特入口根目录并解析其中的 .lnk。
+   * 只读入口目录，不碰机台网络 —— 入口在办公网、机台在专用内网，
+   * 识别阶段去连机台只会让界面卡在超时上。
+   */
+  setupLxtRoot: (entryRoot: string) => Promise<LxtSetupResult>
+  /** 按当前入口重新识别，与已有配置增量合并 */
+  refreshLxtMachines: () => Promise<LxtSetupResult>
 
   /** 创建扫描任务（状态 pending），创建瞬间即可拿到进度快照 */
   createScanTask: (params: ScanTaskParams) => Promise<ScanTask>
