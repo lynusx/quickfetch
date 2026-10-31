@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FolderOpen, RefreshCw, TriangleAlert } from 'lucide-react'
+import {
+  ExclamationTriangleIcon,
+  FileIcon,
+  ReloadIcon,
+} from '@radix-ui/react-icons'
+import {
+  Button,
+  Callout,
+  Flex,
+  IconButton,
+  Text,
+  TextField,
+} from '@radix-ui/themes'
 
 import { ChoiceList, ChoiceRadio } from '@/components/ChoiceList'
-import { Button } from '@/components/ui/button'
-import { Field, FieldLabel } from '@/components/ui/field'
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@/components/ui/input-group'
 import { useToast } from '@/hooks/useToast'
 import type { PlantFilterStore } from '../stores/plantFilterStore'
 import type { EntrySetupResult, LxtSkippedLink, Plant } from '@shared/ipc'
@@ -19,13 +23,11 @@ import { plantLabel } from '@shared/ipc'
 const compare = (a: string, b: string): number =>
   a.localeCompare(b, 'zh-CN', { numeric: true })
 
-/** 只用到这几项，力禧特的 LxtMachine 与利珀的 PlMachine 都满足 */
 export interface PickableMachine {
   plant: Plant
   name: string
   key: string
   host: string
-  /** 第二层目录的探测缓存；力禧特是 el / SaveImages，利珀是标识目录名 */
   share: unknown
   stale: boolean
 }
@@ -34,9 +36,9 @@ interface PlantMachinePickerProps {
   /** 已识别的机台（含 stale），由页面从 settings 里传进来 */
   machines: PickableMachine[]
   entryRoot: string | null
-  skipped: LxtSkippedLink[]
-  saving: boolean
-  error: string | null
+  skipped?: LxtSkippedLink[]
+  saving?: boolean
+  error?: string | null
   /** 该页的筛选状态，两类各有自己的实例 */
   filter: PlantFilterStore
   onSetup: (entryRoot: string) => Promise<EntrySetupResult | null>
@@ -60,9 +62,9 @@ interface PlantMachinePickerProps {
 const PlantMachinePicker = ({
   machines,
   entryRoot,
-  skipped,
-  saving,
-  error,
+  skipped = [],
+  saving = false,
+  error = null,
   filter,
   onSetup,
   onRefresh,
@@ -123,110 +125,143 @@ const PlantMachinePicker = ({
 
     const parts = [`${result.added} 台新增`]
     if (result.removed) parts.push(`${result.removed} 台已从入口移除`)
-    if (result.relocated) parts.push(`${result.relocated} 台地址变更`)
+    if (result.relocated) parts.push(`${result.relocated} 台位置已更新`)
 
-    showToast('已识别入口', parts.join('，'), 'success')
+    showToast('机台识别完成', parts.join('，') || '机台列表无变化', 'info')
     onChanged?.()
   }
 
   const pickRoot = async () => {
     const picked = await window.electronAPI.pickDirectory({
-      title: '请选择入口目录（其下应有东区、西区等文件夹）',
+      title: '选择快捷方式入口目录',
     })
-
     if (!picked) return
 
     setDraft(picked.path)
     announce(await onSetup(picked.path))
   }
 
-  const handleSave = async () => {
-    const value = draft.trim()
-
-    if (!value || value === entryRoot) return
-
-    announce(await onSetup(value))
+  const commitDraft = async () => {
+    const trimmed = draft.trim()
+    if (!trimmed || trimmed === (entryRoot ?? '')) return
+    announce(await onSetup(trimmed))
   }
 
   const toggleAll = () => {
-    const keys = visible.map((item) => item.key)
-    const allSelected = keys.every((key) => selectedMachines.includes(key))
-
-    setSelectedMachines(
-      allSelected
-        ? selectedMachines.filter((key) => !keys.includes(key))
-        : [...new Set([...selectedMachines, ...keys])],
-    )
+    const currentKeys = visible.map((m) => m.key)
+    const allSelected = currentKeys.every((k) => selectedMachines.includes(k))
+    if (allSelected) {
+      setSelectedMachines(
+        selectedMachines.filter((k) => !currentKeys.includes(k)),
+      )
+    } else {
+      const merged = new Set([...selectedMachines, ...currentKeys])
+      setSelectedMachines([...merged])
+    }
   }
 
   const configured = Boolean(entryRoot)
 
   return (
-    <div className="flex flex-col gap-5">
-      <Field>
-        <FieldLabel htmlFor="plant-root">入口目录</FieldLabel>
-        <InputGroup>
-          <InputGroupInput
-            id="plant-root"
+    <Flex direction="column" gap="4">
+      {/* 入口目录输入框 */}
+      <Flex direction="column" gap="1">
+        <Text size="2" weight="medium">
+          入口目录
+        </Text>
+        <Flex gap="2">
+          <TextField.Root
+            size="2"
             value={draft}
             placeholder={labels.rootPlaceholder}
-            spellCheck={false}
-            className="font-mono text-xs"
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') void handleSave()
+            disabled={saving}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => void commitDraft()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void commitDraft()
             }}
-            onBlur={() => void handleSave()}
-          />
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton
-              size="icon-xs"
-              aria-label="选择入口目录"
-              disabled={saving}
-              onClick={() => void pickRoot()}
-            >
-              <FolderOpen />
-            </InputGroupButton>
-          </InputGroupAddon>
-        </InputGroup>
-        <p className="text-xs text-muted-foreground">{labels.rootHint}</p>
-      </Field>
+            style={{ flex: 1, fontFamily: 'var(--font-mono)' }}
+          >
+            <TextField.Slot side="right">
+              <IconButton
+                size="1"
+                variant="ghost"
+                color="gray"
+                disabled={saving}
+                onClick={() => void pickRoot()}
+                title="浏览目录"
+              >
+                <FileIcon width={14} height={14} />
+              </IconButton>
+            </TextField.Slot>
+          </TextField.Root>
+        </Flex>
+        <Text size="1" color="gray">
+          {labels.rootHint}
+        </Text>
+      </Flex>
 
       {skipped.length > 0 && (
-        <details className="rounded-lg border px-3 py-2 text-xs">
-          <summary className="flex cursor-pointer items-center gap-1.5 text-muted-foreground">
-            <TriangleAlert className="size-3.5" />
+        <details
+          style={{
+            borderRadius: 'var(--radius-3)',
+            border: '1px solid var(--gray-4)',
+            padding: 'var(--space-2) var(--space-3)',
+            fontSize: 'var(--font-size-1)',
+            backgroundColor: 'var(--gray-a2)',
+          }}
+        >
+          <summary
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+              color: 'var(--gray-11)',
+            }}
+          >
+            <ExclamationTriangleIcon width={14} height={14} />
             {skipped.length} 个快捷方式已跳过
           </summary>
-          <ul className="mt-2 flex flex-col gap-1">
+          <Flex direction="column" gap="1" mt="2">
             {skipped.map((item) => (
-              <li key={`${item.plant}/${item.file}`} className="font-mono">
+              <Text
+                key={`${item.plant}/${item.file}`}
+                size="1"
+                style={{ fontFamily: 'var(--font-mono)' }}
+              >
                 {item.plant}/{item.file}
-                <span className="ml-2 font-sans text-muted-foreground">
+                <Text size="1" color="gray" ml="2">
                   {item.reason}
-                </span>
-              </li>
+                </Text>
+              </Text>
             ))}
-          </ul>
+          </Flex>
         </details>
       )}
 
       {error && (
-        <p className="text-xs text-destructive" role="alert">
-          {error}
-        </p>
+        <Callout.Root color="red" size="1">
+          <Callout.Text>{error}</Callout.Text>
+        </Callout.Root>
       )}
 
       {configured && active.length > 0 ? (
         <>
-          {/* 厂区：独立的单选类别，与机台平级；选中厂区联动过滤下面的机台列表 */}
-          <Field>
-            <FieldLabel>
-              厂区
-              <span className="font-normal text-muted-foreground tabular-nums">
+          {/* 厂区单选 */}
+          <Flex direction="column" gap="2">
+            <Flex align="center" gap="2">
+              <Text size="2" weight="medium">
+                厂区
+              </Text>
+              <Text
+                size="1"
+                color="gray"
+                style={{ fontVariantNumeric: 'tabular-nums' }}
+              >
                 {plant ? plantLabel(plant) : '未选择'}
-              </span>
-            </FieldLabel>
+              </Text>
+            </Flex>
             <ChoiceRadio
               columns={2}
               value={plant}
@@ -237,22 +272,29 @@ const PlantMachinePicker = ({
                 meta: active.filter((item) => item.plant === name).length,
               }))}
             />
-          </Field>
+          </Flex>
 
-          {/* 机台：与厂区联动的多选列表，只显示当前厂区的机台 */}
-          <Field>
-            <div className="flex items-center justify-between gap-2">
-              <FieldLabel className="mb-0">
-                机台
-                <span className="font-normal text-muted-foreground tabular-nums">
+          {/* 机台多选 */}
+          <Flex direction="column" gap="2">
+            <Flex justify="between" align="center">
+              <Flex align="center" gap="2">
+                <Text size="2" weight="medium">
+                  机台
+                </Text>
+                <Text
+                  size="1"
+                  color="gray"
+                  style={{ fontVariantNumeric: 'tabular-nums' }}
+                >
                   {selectedMachines.length}/{visible.length}
-                </span>
-              </FieldLabel>
-              <div className="flex items-center gap-1">
+                </Text>
+              </Flex>
+              <Flex align="center" gap="1">
                 <Button
                   type="button"
                   variant="ghost"
-                  size="xs"
+                  color="gray"
+                  size="1"
                   onClick={() => setSelectedMachines([])}
                   disabled={!selectedMachines.length}
                 >
@@ -261,35 +303,36 @@ const PlantMachinePicker = ({
                 <Button
                   type="button"
                   variant="ghost"
-                  size="xs"
+                  color="gray"
+                  size="1"
                   onClick={toggleAll}
-                  disabled={!visible.length}
                 >
                   {visible.every((item) => selectedMachines.includes(item.key))
                     ? '取消本区'
                     : '全选本区'}
                 </Button>
-                <Button
+                <IconButton
                   type="button"
                   variant="ghost"
-                  size="icon-xs"
+                  color="gray"
+                  size="1"
                   aria-label="重新识别入口"
                   disabled={saving}
                   onClick={async () => announce(await onRefresh())}
+                  title="重新识别"
                 >
-                  <RefreshCw />
-                </Button>
-              </div>
-            </div>
+                  <ReloadIcon width={13} height={13} />
+                </IconButton>
+              </Flex>
+            </Flex>
 
-            <InputGroup>
-              <InputGroupInput
-                value={keyword}
-                placeholder={labels.searchPlaceholder}
-                spellCheck={false}
-                onChange={(event) => setKeyword(event.target.value)}
-              />
-            </InputGroup>
+            <TextField.Root
+              size="2"
+              value={keyword}
+              placeholder={labels.searchPlaceholder}
+              spellCheck={false}
+              onChange={(e) => setKeyword(e.target.value)}
+            />
 
             {visible.length ? (
               <ChoiceList
@@ -299,27 +342,31 @@ const PlantMachinePicker = ({
                 onValueChange={setSelectedMachines}
                 options={visible.map((machine) => ({
                   value: machine.key,
-                  label: <span className="font-mono">{machine.name}</span>,
+                  label: (
+                    <span style={{ fontFamily: 'var(--font-mono)' }}>
+                      {machine.name}
+                    </span>
+                  ),
                   title: `${machine.host}${
                     machine.share ? ` · ${String(machine.share)}` : ''
                   }`,
                 }))}
               />
             ) : (
-              <p className="text-xs text-muted-foreground">
+              <Text size="1" color="gray">
                 没有匹配「{keyword}」的机台
-              </p>
+              </Text>
             )}
-          </Field>
+          </Flex>
         </>
       ) : (
-        <p className="text-xs text-muted-foreground">
+        <Text size="1" color="gray">
           {configured
             ? '入口里没有可用机台，请检查快捷方式'
             : '选择入口目录后会识别其中的机台'}
-        </p>
+        </Text>
       )}
-    </div>
+    </Flex>
   )
 }
 

@@ -1,21 +1,5 @@
-import { Table2 } from 'lucide-react'
-
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/components/ui/empty'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { TableIcon } from '@radix-ui/react-icons'
+import { Flex, Heading, ScrollArea, Table, Text } from '@radix-ui/themes'
 
 import type { ExcelSheet } from '../types'
 
@@ -36,15 +20,20 @@ const SheetTablePreview = ({
 }: SheetTablePreviewProps) => {
   if (sheet.data.length === 0) {
     return (
-      <Empty className="min-h-60">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <Table2 />
-          </EmptyMedia>
-          <EmptyTitle>暂无可显示的数据</EmptyTitle>
-          <EmptyDescription>调整筛选条件后再试</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <Flex
+        direction="column"
+        align="center"
+        justify="center"
+        gap="2"
+        py="6"
+        style={{ minHeight: 240 }}
+      >
+        <TableIcon width={28} height={28} style={{ color: 'var(--gray-8)' }} />
+        <Heading size="3">暂无可显示的数据</Heading>
+        <Text size="1" color="gray">
+          调整筛选条件后再试
+        </Text>
+      </Flex>
     )
   }
 
@@ -76,46 +65,74 @@ const SheetTablePreview = ({
   const dataRows = displayData.slice(1)
 
   return (
-    <ScrollArea style={{ maxHeight }} className="w-full">
-      <Table>
-        <TableHeader className="sticky top-0 z-10 bg-background">
-          <TableRow>
+    <ScrollArea type="auto" scrollbars="both" style={{ maxHeight }}>
+      <Table.Root size="1" variant="surface">
+        <Table.Header
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 1,
+            backgroundColor: 'var(--color-panel-solid)',
+          }}
+        >
+          <Table.Row>
             {headerRow.map((cell, index) => (
-              <TableHead key={index} className="whitespace-nowrap">
+              <Table.ColumnHeaderCell
+                key={index}
+                style={{ whiteSpace: 'nowrap' }}
+              >
                 {cell}
-              </TableHead>
+              </Table.ColumnHeaderCell>
             ))}
             {showColTruncation && (
-              <TableHead className="whitespace-nowrap text-muted-foreground">
+              <Table.ColumnHeaderCell
+                style={{
+                  whiteSpace: 'nowrap',
+                  color: 'var(--gray-9)',
+                }}
+              >
                 还有 {sheet.colCount - MAX_COLS} 列
-              </TableHead>
+              </Table.ColumnHeaderCell>
             )}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
           {dataRows.map((row, rowIndex) => (
-            <TableRow key={rowIndex}>
+            <Table.Row key={rowIndex}>
               {row.map((cell, cellIndex) => (
-                <TableCell
+                <Table.Cell
                   key={cellIndex}
-                  className="whitespace-nowrap tabular-nums"
+                  style={{
+                    whiteSpace: 'nowrap',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
                 >
                   {cell}
-                </TableCell>
+                </Table.Cell>
               ))}
               {showColTruncation && (
-                <TableCell className="text-muted-foreground">…</TableCell>
+                <Table.Cell style={{ color: 'var(--gray-9)' }}>…</Table.Cell>
               )}
-            </TableRow>
+            </Table.Row>
           ))}
-        </TableBody>
-      </Table>
+        </Table.Body>
+      </Table.Root>
 
       {showRowTruncation && (
-        <p className="border-t px-3 py-2 text-center text-xs text-muted-foreground tabular-nums">
+        <Text
+          as="p"
+          align="center"
+          size="1"
+          color="gray"
+          style={{
+            borderTop: '1px solid var(--gray-4)',
+            fontVariantNumeric: 'tabular-nums',
+            padding: '8px 0',
+          }}
+        >
           还有 {hiddenRowsCount} 行数据未在预览中显示
           {mode === 'result' ? '（复制或导出时包含全量数据）' : ''}
-        </p>
+        </Text>
       )}
     </ScrollArea>
   )

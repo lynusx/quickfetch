@@ -1,40 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  CalendarDays,
-  CheckCheck,
-  Clock3,
-  Layers,
-  Pencil,
-  Plus,
-  X,
-} from 'lucide-react'
+  CalendarIcon,
+  CheckIcon,
+  ClockIcon,
+  Cross2Icon,
+  LayersIcon,
+  Pencil1Icon,
+  PlusIcon,
+} from '@radix-ui/react-icons'
+import {
+  Badge,
+  Button,
+  Dialog,
+  Flex,
+  IconButton,
+  Text,
+  TextField,
+} from '@radix-ui/themes'
 
 import { ChoiceList, ChoiceRadio } from '@/components/ChoiceList'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
-import {
-  Field,
-  FieldContent,
-  FieldGroup,
-  FieldLabel,
-} from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@/components/ui/input-group'
 import { useImageFilterStore } from '../stores/imageFilterStore'
 import { useUserPreferencesStore } from '@/features/settings'
 import { getAllAvailableTimes, getShiftInfo } from '@/utils/common'
@@ -74,35 +58,26 @@ const ImageFilterPanel = () => {
     setDate(currentDate)
     setShift(currentShift)
     setSlots(currentSlots)
-    // 仅在挂载时带出当前班次，之后完全由用户控制
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 勾选的类型是从 localStorage 恢复的，清单里已经没有的要剔掉，
-  // 否则会停在「已选 1 / 共 0」这种点不动的状态
   useEffect(() => {
     if (!types.length) return
-
     const alive = types.filter((type) => ngTypes.includes(type))
-
     if (alive.length !== types.length) setTypes(alive)
   }, [ngTypes, types, setTypes])
 
   const handleShiftChange = (value: string) => {
     if (!value) return
-
     const next = value as '白班' | '夜班'
     setShift(next)
-    // 切班次后原时段不再合法，切回当前班次时恢复默认时段
     setSlots(next === currentShift ? currentSlots : [])
   }
 
   const handleAddType = () => {
     const value = newType.trim()
     if (!value || ngTypes.includes(value)) return
-
     addNgType(value)
-    // 新加的类型直接勾上，省得关掉弹窗再找一遍
     setTypes([...types, value])
     setNewType('')
   }
@@ -113,23 +88,32 @@ const ImageFilterPanel = () => {
   }
 
   return (
-    <FieldGroup>
-      <Field>
-        <FieldLabel htmlFor="scan-date">
-          <CalendarDays data-icon="inline-start" />
+    <Flex direction="column" gap="4">
+      {/* 日期 */}
+      <Flex direction="column" gap="1">
+        <Text
+          as="label"
+          size="2"
+          weight="medium"
+          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+        >
+          <CalendarIcon width={14} height={14} />
           日期
-        </FieldLabel>
-        <Input
-          id="scan-date"
+        </Text>
+        <TextField.Root
           type="date"
+          size="2"
           value={toDateInputValue(date)}
           onChange={(event) => setDate(event.target.value.replace(/-/g, ''))}
-          className="tabular-nums"
+          style={{ fontFamily: 'var(--code-font-family)' }}
         />
-      </Field>
+      </Flex>
 
-      <Field>
-        <FieldLabel>班次</FieldLabel>
+      {/* 班次 */}
+      <Flex direction="column" gap="1">
+        <Text as="label" size="2" weight="medium">
+          班次
+        </Text>
         <ChoiceRadio
           columns={2}
           value={shift}
@@ -139,22 +123,25 @@ const ImageFilterPanel = () => {
             { value: '夜班', label: '夜班' },
           ]}
         />
-      </Field>
+      </Flex>
 
-      <Field>
-        <div className="flex items-center justify-between gap-2">
-          <FieldLabel className="mb-0">
-            <Clock3 data-icon="inline-start" />
-            时段
-            <span className="font-normal text-muted-foreground tabular-nums">
+      {/* 时段 */}
+      <Flex direction="column" gap="2">
+        <Flex justify="between" align="center">
+          <Flex align="center" gap="2">
+            <ClockIcon width={14} height={14} />
+            <Text as="label" size="2" weight="medium">
+              时段
+            </Text>
+            <Text size="1" color="gray">
               {slots.length}/{availableSlots.length}
-            </span>
-          </FieldLabel>
-          <div className="flex items-center gap-1">
+            </Text>
+          </Flex>
+          <Flex align="center" gap="1">
             <Button
               type="button"
               variant="ghost"
-              size="xs"
+              size="1"
               disabled={slots.length === 0}
               onClick={() => setSlots([])}
             >
@@ -163,41 +150,43 @@ const ImageFilterPanel = () => {
             <Button
               type="button"
               variant="ghost"
-              size="xs"
+              size="1"
               onClick={() => setSlots(availableSlots)}
             >
-              <CheckCheck data-icon="inline-start" />
+              <CheckIcon width={14} height={14} />
               全选
             </Button>
-          </div>
-        </div>
-        <FieldContent>
-          <ChoiceList
-            columns={3}
-            value={slots}
-            onValueChange={setSlots}
-            options={availableSlots.map((slot) => ({
-              value: slot,
-              label: <span className="tabular-nums">{slot}</span>,
-            }))}
-          />
-        </FieldContent>
-      </Field>
+          </Flex>
+        </Flex>
 
-      <Field>
-        <div className="flex items-center justify-between gap-2">
-          <FieldLabel className="mb-0">
-            <Layers data-icon="inline-start" />
-            类型
-            <span className="font-normal text-muted-foreground tabular-nums">
+        <ChoiceList
+          columns={3}
+          value={slots}
+          onValueChange={setSlots}
+          options={availableSlots.map((slot) => ({
+            value: slot,
+            label: <span className="tabular-nums">{slot}</span>,
+          }))}
+        />
+      </Flex>
+
+      {/* 类型 */}
+      <Flex direction="column" gap="2">
+        <Flex justify="between" align="center">
+          <Flex align="center" gap="2">
+            <LayersIcon width={14} height={14} />
+            <Text as="label" size="2" weight="medium">
+              类型
+            </Text>
+            <Text size="1" color="gray">
               {types.length}/{ngTypes.length}
-            </span>
-          </FieldLabel>
-          <div className="flex items-center gap-1">
+            </Text>
+          </Flex>
+          <Flex align="center" gap="1">
             <Button
               type="button"
               variant="ghost"
-              size="xs"
+              size="1"
               disabled={types.length === 0}
               onClick={() => setTypes([])}
             >
@@ -206,102 +195,113 @@ const ImageFilterPanel = () => {
             <Button
               type="button"
               variant="ghost"
-              size="xs"
+              size="1"
               disabled={!ngTypes.length}
               onClick={() => setTypes(ngTypes)}
             >
-              <CheckCheck data-icon="inline-start" />
+              <CheckIcon width={14} height={14} />
               全选
             </Button>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button type="button" variant="ghost" size="xs">
-                  <Pencil data-icon="inline-start" />
+            <Dialog.Root>
+              <Dialog.Trigger>
+                <Button type="button" variant="ghost" size="1">
+                  <Pencil1Icon width={14} height={14} />
                   编辑
                 </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>编辑类型</DialogTitle>
-                  <DialogDescription>
-                    类型名需与目录名完全一致
-                  </DialogDescription>
-                </DialogHeader>
+              </Dialog.Trigger>
+              <Dialog.Content maxWidth="450px">
+                <Dialog.Title>编辑类型</Dialog.Title>
+                <Dialog.Description size="2" color="gray" mb="3">
+                  类型名需与目录名完全一致
+                </Dialog.Description>
 
-                <div className="flex flex-wrap gap-1.5">
+                <Flex wrap="wrap" gap="2" mb="3">
                   {ngTypes.length ? (
                     ngTypes.map((type) => (
                       <Badge
                         key={type}
-                        variant="secondary"
-                        className="gap-1 pr-1"
+                        color="gray"
+                        variant="soft"
+                        size="2"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
                       >
                         {type}
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveType(type)}
+                        <IconButton
+                          size="1"
+                          variant="ghost"
+                          color="gray"
                           aria-label={`删除 ${type}`}
-                          className="rounded-sm text-muted-foreground transition-colors hover:text-destructive"
+                          onClick={() => handleRemoveType(type)}
+                          style={{
+                            cursor: 'pointer',
+                            padding: 0,
+                            width: 14,
+                            height: 14,
+                          }}
                         >
-                          <X className="size-3" />
-                        </button>
+                          <Cross2Icon width={10} height={10} />
+                        </IconButton>
                       </Badge>
                     ))
                   ) : (
-                    <p className="text-xs text-muted-foreground">
+                    <Text size="2" color="gray">
                       还没有类型，在下面输入后回车添加
-                    </p>
+                    </Text>
                   )}
-                </div>
+                </Flex>
 
-                <InputGroup>
-                  <InputGroupInput
-                    placeholder="NG_脏污_D"
-                    value={newType}
-                    onChange={(event) => setNewType(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault()
-                        handleAddType()
-                      }
-                    }}
-                  />
-                  <InputGroupAddon align="inline-end">
-                    <InputGroupButton
-                      size="icon-xs"
+                <TextField.Root
+                  size="2"
+                  placeholder="NG_脏污_D"
+                  value={newType}
+                  onChange={(event) => setNewType(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      handleAddType()
+                    }
+                  }}
+                >
+                  <TextField.Slot side="right">
+                    <IconButton
+                      size="1"
+                      variant="ghost"
                       aria-label="添加类型"
                       disabled={
                         !newType.trim() || ngTypes.includes(newType.trim())
                       }
                       onClick={handleAddType}
                     >
-                      <Plus />
-                    </InputGroupButton>
-                  </InputGroupAddon>
-                </InputGroup>
+                      <PlusIcon width={14} height={14} />
+                    </IconButton>
+                  </TextField.Slot>
+                </TextField.Root>
 
-                <DialogFooter>
-                  <DialogClose asChild>
-                    <Button type="button" variant="outline">
+                <Flex justify="end" mt="4">
+                  <Dialog.Close>
+                    <Button type="button" variant="soft" color="gray">
                       关闭
                     </Button>
-                  </DialogClose>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </div>
-        <FieldContent>
-          <ChoiceList
-            columns={1}
-            value={types}
-            onValueChange={setTypes}
-            options={ngTypes.map((type) => ({ value: type, label: type }))}
-            empty="还没有类型，点击「编辑」添加（如 NG_脏污_B）"
-          />
-        </FieldContent>
-      </Field>
-    </FieldGroup>
+                  </Dialog.Close>
+                </Flex>
+              </Dialog.Content>
+            </Dialog.Root>
+          </Flex>
+        </Flex>
+
+        <ChoiceList
+          columns={1}
+          value={types}
+          onValueChange={setTypes}
+          options={ngTypes.map((type) => ({ value: type, label: type }))}
+          empty="还没有类型，点击「编辑」添加（如 NG_脏污_B）"
+        />
+      </Flex>
+    </Flex>
   )
 }
 

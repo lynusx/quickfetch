@@ -1,18 +1,19 @@
 import { useEffect, useState } from 'react'
-import { CircleAlert } from 'lucide-react'
-
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { ExclamationTriangleIcon } from '@radix-ui/react-icons'
 import {
+  Box,
+  Button,
+  Callout,
   Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Separator } from '@/components/ui/separator'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+  Code,
+  Flex,
+  Heading,
+  RadioCards,
+  Separator,
+  Text,
+  TextField,
+} from '@radix-ui/themes'
+
 import {
   selectEnvOverrides,
   selectPreferences,
@@ -31,7 +32,6 @@ import {
   PREFERENCE_ENV,
   PREFERENCE_RANGE,
 } from '@shared/ipc'
-import { cn } from '@/lib/utils'
 
 /** 分组方式的实际目录形态，光看名字不知道会建几层 */
 const LAYOUT_SAMPLE: Record<CopyLayout, string> = {
@@ -92,39 +92,36 @@ const NumberRow = ({
     }
 
     const next = Math.min(range.max, Math.max(range.min, parsed))
-
     setDraft(String(next))
 
     if (next !== value) onChange(next)
   }
 
   return (
-    <div className="flex items-center justify-between gap-4 py-2">
-      <div className="min-w-0">
-        <p className="text-sm">{label}</p>
-        <p className="text-xs text-muted-foreground">
+    <Flex align="center" justify="between" gap="4" py="3">
+      <Box style={{ minWidth: 0, flex: 1 }}>
+        <Text size="2" weight="medium" as="p">
+          {label}
+        </Text>
+        <Text size="1" color="gray" as="p" mt="1">
           {overridden ? (
             <>
-              已由环境变量{' '}
-              <code className="rounded bg-muted px-1 font-mono text-[11px]">
-                {envName}
-              </code>{' '}
-              接管，此处不生效
+              已由环境变量 <Code size="1">{envName}</Code> 接管，此处不生效
             </>
           ) : (
             <>
               {hint}
-              <span className="ml-1.5 text-[11px] opacity-75">
+              <Text size="1" color="gray" ml="2" style={{ opacity: 0.75 }}>
                 [范围: {range.min} ~ {range.max}]
-              </span>
+              </Text>
             </>
           )}
-        </p>
-      </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <Input
+        </Text>
+      </Box>
+      <Flex align="center" gap="2" style={{ flexShrink: 0 }}>
+        <TextField.Root
+          size="2"
           type="number"
-          inputMode="numeric"
           min={range.min}
           max={range.max}
           step={range.step}
@@ -135,11 +132,20 @@ const NumberRow = ({
           onKeyDown={(event) => {
             if (event.key === 'Enter') event.currentTarget.blur()
           }}
-          className="h-8 w-16 text-right tabular-nums"
-        />
-        <span className="w-4 text-xs text-muted-foreground">{unit}</span>
-      </div>
-    </div>
+          style={{
+            width: 90,
+            textAlign: 'right',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          <TextField.Slot side="right">
+            <Text size="1" color="gray">
+              {unit}
+            </Text>
+          </TextField.Slot>
+        </TextField.Root>
+      </Flex>
+    </Flex>
   )
 }
 
@@ -158,98 +164,111 @@ const SettingsPage = () => {
     envOverrides.includes(key) ? PREFERENCE_ENV[key] : undefined
 
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
+    <Flex direction="column" gap="5" style={{ maxWidth: 760 }}>
       {error && (
-        <Alert variant="destructive">
-          <CircleAlert />
-          <AlertTitle>保存失败</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <Callout.Root color="red" role="alert">
+          <Callout.Icon>
+            <ExclamationTriangleIcon width={16} height={16} />
+          </Callout.Icon>
+          <Callout.Text>
+            <Text weight="medium">保存失败</Text>: {error}
+          </Callout.Text>
+        </Callout.Root>
       )}
 
-      <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium">复制到本地</h2>
+      {/* 复制到本地 */}
+      <Flex direction="column" gap="3">
+        <Heading size="3">复制到本地</Heading>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>分组方式</CardTitle>
-            <CardDescription>目标目录下建几层文件夹</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              value={preferences.copyLayout}
-              onValueChange={(value) =>
-                value && patch({ copyLayout: value as CopyLayout })
-              }
-              className="grid w-full gap-2 sm:grid-cols-2"
-            >
-              {LAYOUTS.map((value) => (
-                <ToggleGroupItem
-                  key={value}
-                  value={value}
-                  className={cn(
-                    'flex h-auto w-full flex-col items-start gap-0.5 py-2 transition-all',
-                    'data-[state=on]:border-primary data-[state=on]:bg-primary/5 data-[state=on]:text-primary',
-                  )}
-                >
-                  <span className="text-sm font-medium">
+        <Card size="2">
+          <Flex direction="column" gap="1" mb="3">
+            <Heading size="2">分组方式</Heading>
+            <Text size="1" color="gray">
+              目标目录下建几层文件夹
+            </Text>
+          </Flex>
+
+          <RadioCards.Root
+            columns={{ initial: '1', sm: '2' }}
+            value={preferences.copyLayout}
+            onValueChange={(value) =>
+              value && patch({ copyLayout: value as CopyLayout })
+            }
+          >
+            {LAYOUTS.map((value) => (
+              <RadioCards.Item key={value} value={value}>
+                <Flex direction="column" gap="1" style={{ width: '100%' }}>
+                  <Text size="2" weight="medium">
                     {COPY_LAYOUT_LABEL[value]}
-                  </span>
-                  <span className="truncate font-mono text-[11px] text-muted-foreground">
+                  </Text>
+                  <Text
+                    size="1"
+                    color="gray"
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
                     {LAYOUT_SAMPLE[value]}
-                  </span>
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </CardContent>
+                  </Text>
+                </Flex>
+              </RadioCards.Item>
+            ))}
+          </RadioCards.Root>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>重名文件</CardTitle>
-            <CardDescription>目标里已有同名文件时</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              value={preferences.copyConflict}
-              onValueChange={(value) =>
-                value && patch({ copyConflict: value as CopyConflictPolicy })
-              }
-              className="grid w-full gap-2 sm:grid-cols-3"
-            >
-              {CONFLICTS.map((value) => (
-                <ToggleGroupItem
-                  key={value}
-                  value={value}
-                  className={cn(
-                    'flex h-auto w-full flex-col items-start gap-0.5 py-2 transition-all',
-                    value === 'overwrite'
-                      ? 'data-[state=on]:border-destructive data-[state=on]:bg-destructive/10 data-[state=on]:text-destructive'
-                      : 'data-[state=on]:border-primary data-[state=on]:bg-primary/5 data-[state=on]:text-primary',
-                  )}
-                >
-                  <span className="text-sm font-medium">
+        <Card size="2">
+          <Flex direction="column" gap="1" mb="3">
+            <Heading size="2">重名文件</Heading>
+            <Text size="1" color="gray">
+              目标里已有同名文件时
+            </Text>
+          </Flex>
+
+          <RadioCards.Root
+            columns={{ initial: '1', sm: '3' }}
+            value={preferences.copyConflict}
+            onValueChange={(value) =>
+              value && patch({ copyConflict: value as CopyConflictPolicy })
+            }
+          >
+            {CONFLICTS.map((value) => (
+              <RadioCards.Item key={value} value={value}>
+                <Flex direction="column" gap="1" style={{ width: '100%' }}>
+                  <Text
+                    size="2"
+                    weight="medium"
+                    color={value === 'overwrite' ? 'red' : undefined}
+                  >
                     {COPY_CONFLICT_LABEL[value]}
-                  </span>
-                  <span className="truncate font-mono text-[11px] text-muted-foreground">
+                  </Text>
+                  <Text
+                    size="1"
+                    color="gray"
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
                     {CONFLICT_HINT[value]}
-                  </span>
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </CardContent>
+                  </Text>
+                </Flex>
+              </RadioCards.Item>
+            ))}
+          </RadioCards.Root>
         </Card>
-      </section>
+      </Flex>
 
-      <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium">性能</h2>
+      {/* 性能 */}
+      <Flex direction="column" gap="3">
+        <Heading size="3">性能</Heading>
 
-        <Card>
-          <CardContent className="flex flex-col divide-y">
+        <Card size="2">
+          <Flex direction="column">
             <NumberRow
               label="同时读取目录"
               hint={`${PREFERENCE_RANGE.scanConcurrency.min}–${PREFERENCE_RANGE.scanConcurrency.max}，失败率过高会自动降档`}
@@ -259,6 +278,7 @@ const SettingsPage = () => {
               envName={envName('scanConcurrency')}
               onChange={(next) => patch({ scanConcurrency: next })}
             />
+            <Separator size="4" />
             <NumberRow
               label="每批扫描机台"
               hint="一批跑完再开下一批"
@@ -268,6 +288,7 @@ const SettingsPage = () => {
               envName={envName('scanBatchSize')}
               onChange={(next) => patch({ scanBatchSize: next })}
             />
+            <Separator size="4" />
             <NumberRow
               label="同时复制文件"
               hint={`${PREFERENCE_RANGE.copyConcurrency.min}–${PREFERENCE_RANGE.copyConcurrency.max}，网络盘共享冲突时调低`}
@@ -277,6 +298,7 @@ const SettingsPage = () => {
               envName={envName('copyConcurrency')}
               onChange={(next) => patch({ copyConcurrency: next })}
             />
+            <Separator size="4" />
             <NumberRow
               label="每批复制文件"
               hint="批与批之间让出一次界面刷新"
@@ -286,29 +308,30 @@ const SettingsPage = () => {
               envName={envName('copyBatchSize')}
               onChange={(next) => patch({ copyBatchSize: next })}
             />
-          </CardContent>
+          </Flex>
         </Card>
 
-        <p className="text-xs text-muted-foreground">
+        <Text size="1" color="gray">
           数值越大越快，网络盘不稳时反而更容易超时。设置只影响之后新建的任务。
-        </p>
-      </section>
+        </Text>
+      </Flex>
 
-      <Separator />
+      <Separator size="4" />
 
-      <div className="flex items-center justify-between gap-4">
-        <p className="text-xs text-muted-foreground">
+      <Flex justify="between" align="center" gap="4">
+        <Text size="1" color="gray">
           设置保存在本机，换台电脑需要重新设置。
-        </p>
+        </Text>
         <Button
-          variant="outline"
-          size="sm"
+          variant="soft"
+          color="gray"
+          size="2"
           onClick={() => patch({ ...DEFAULT_PREFERENCES })}
         >
           恢复默认
         </Button>
-      </div>
-    </div>
+      </Flex>
+    </Flex>
   )
 }
 

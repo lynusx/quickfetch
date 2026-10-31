@@ -4,63 +4,20 @@
 
 ## 先读这些
 
-| 场景                      | 该读什么                                                                            |
-| ------------------------- | ----------------------------------------------------------------------------------- |
-| 要动 UI、加组件、调整样式 | [`.agents/skills/shadcn/SKILL.md`](.agents/skills/shadcn/SKILL.md)                  |
-| 只关心某类写法对错        | 同目录 `rules/` 下对应文件（styling / forms / composition / icons / base-vs-radix） |
-| 不清楚 shadcn CLI 怎么用  | 同目录 `cli.md`、`registry.md`                                                      |
-| 整体怎么跑起来            | [`README.md`](README.md)                                                            |
+| 场景                      | 该读什么                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| 要动 UI、加组件、调整样式 | [`.agents/skills/radix-themes/SKILL.md`](.agents/skills/radix-themes/SKILL.md) |
+| 整体怎么跑起来            | [`README.md`](README.md)                                                       |
 
-## shadcn/ui 相关改动
+## Radix Themes (@radix-ui/themes) 相关改动
 
-项目用 shadcn/ui，`components.json` 在仓库根目录。**写组件前先拿项目真实配置再动手，不要凭印象拼 API**：
+项目统一使用 `@radix-ui/themes` 构建 UI，根节点由 `<Theme>` 包裹，已彻底移除 shadcn/ui 及 Tailwind CSS。
 
-```bash
-npx shadcn@latest info --json
-```
-
-返回里有两个字段最容易踩：
-
-- `base` 为 `radix`（不是 `base-ui`）。组合用法是 `asChild`，不是 `render`
-- `iconLibrary` 为 `lucide`，图标从 `lucide-react` 引入
-
-`.agents/skills/shadcn/` 是官方 skill 本体（12 个文件），装法见 `skills-lock.json`。
-它依赖项目的 `components.json` 触发，**换了目录或删了 `components.json` 就会失效**。
-
-> 注意：`.agents/skills/` 是通用约定目录，不是每个工具都会自动扫描。
-> CodeBuddy 只读 `/root/.codebuddy/skills/`；在 CodeBuddy 里需要显式去读这几个文件，
-> 而不是指望它被自动加载。
-
-### 换主题 / 加组件时 CLI 会卡在框架识别
-
-`shadcn apply` 与 `init` 在本仓库都会报 “could not detect a supported framework”——
-它只认 next / vite / react-router / astro，Electron 不在列。`add` 不受影响。
-
-要应用预设，先造一个最小 Vite 骨架再跑，别去改本仓库的 `package.json` 骗检测：
-
-```bash
-mkdir -p /tmp/probe/src && cd /tmp/probe
-# 需要 package.json(含 vite+react+tailwindcss)、vite.config.ts、tsconfig.json(paths: @/*)、
-# index.html、src/index.css(@import "tailwindcss";)
-npx shadcn@latest init --preset <code> --base radix --yes --no-reinstall --cwd /tmp/probe
-```
-
-然后把 `/tmp/probe/src/index.css` 的变量块搬回 `src/renderer/index.css`，
-`components.json` 的 `style` / `baseColor` / `menuColor` 一并对齐。
-**预设的 `style` 会改变组件源码**（luma 的按钮是 `rounded-4xl` 胶囊形），
-光换 CSS 变量只能换配色，形状不会变。
-
-### 类别选择统一用勾选列表，不要用 ToggleGroup
-
-扫描页的「厂区 / 机台 / 班次 / 时段 / 等级 / 类型」都是多选或单选的选项集合，
-统一用 `components/ChoiceList` 里的 `ChoiceList`（多选）和 `ChoiceRadio`（互斥）。
-
-原因不是审美：Luma 主题里 ToggleGroupItem 的选中态是 `bg-muted`，与页面白底
-只有 **1.11:1** 的对比度，hover 还是同一个色，现场根本看不出哪些被选上了。
-勾选框的选中态是 `bg-primary` 实心填充（6.8:1）。
-
-加新的类别时按数据形态给列数：长名字（类型、机台）1–2 列，纯数字（时段）3 列，
-超过十几条再开 `scroll`。
+- 样式文件：`@radix-ui/themes/styles.css`
+- 组件统一从 `@radix-ui/themes` 导入（如 `Button`, `Flex`, `Grid`, `Box`, `Text`, `Heading`, `Card`, `Badge`, `Dialog`, `Callout`, `Progress`, `Table` 等）
+- 图标统一使用 `@radix-ui/react-icons`
+- 禁止混用其他组件库与全局 CSS reset；自定义颜色使用 Radix 设计令牌（如 `var(--accent-9)`、`var(--gray-3)`）
+- 类别勾选统一使用基于 Radix Themes 原生组件的 `ChoiceList`（多选）与 `ChoiceRadio`（单选）
 
 ## 这个项目的几条硬约束
 

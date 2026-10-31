@@ -1,36 +1,15 @@
 import { NavLink, useLocation } from 'react-router'
 import {
-  Copy,
-  FileSpreadsheet,
-  FolderSearch,
-  ScanLine,
-  ScanSearch,
-  Settings,
-} from 'lucide-react'
-
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarRail,
-} from '@/components/ui/sidebar'
+  CopyIcon,
+  DashboardIcon,
+  GearIcon,
+  MagnifyingGlassIcon,
+  TableIcon,
+  TargetIcon,
+} from '@radix-ui/react-icons'
+import { Box, Flex, Text, Heading, Button, Separator } from '@radix-ui/themes'
 import { getAppVersion } from '@/utils/common'
 
-/**
- * 侧边栏菜单。
- *
- * 「一键找图」下按扫描类别分三项：EL、力禧特、利珀的路径来源、机台构成、
- * 所在网络都完全不同，各自是独立页面，任务状态互不干扰。
- * 分组只用一个静态小标题，不做折叠 —— 为藏几个入口多点一次不值，
- * 折叠成图标模式时标题自动隐藏，图标并排显示。
- */
 const NAV_GROUPS = [
   {
     label: '一键找图',
@@ -39,19 +18,19 @@ const NAV_GROUPS = [
         label: 'EL',
         description: '扫描 DC 共享盘并批量拷贝',
         to: '/image-copy',
-        icon: Copy,
+        icon: CopyIcon,
       },
       {
         label: '力禧特',
         description: '按快捷方式识别机台并扫描',
         to: '/lxt',
-        icon: FolderSearch,
+        icon: MagnifyingGlassIcon,
       },
       {
         label: '利珀',
         description: '按快捷方式识别机台并扫描',
         to: '/pl',
-        icon: ScanSearch,
+        icon: TargetIcon,
       },
     ],
   },
@@ -62,7 +41,7 @@ const NAV_GROUPS = [
         label: 'Excel 解析',
         description: '筛选与导出缺陷数据',
         to: '/excel-parse',
-        icon: FileSpreadsheet,
+        icon: TableIcon,
       },
     ],
   },
@@ -74,70 +53,117 @@ export const AppSidebar = () => {
   const { pathname } = useLocation()
 
   return (
-    <Sidebar variant="inset" collapsible="icon">
-      <SidebarHeader>
-        <div className="flex items-center gap-2 px-1 py-1.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-            <ScanLine className="size-4" />
-          </div>
-          <div className="flex min-w-0 flex-col leading-tight group-data-[collapsible=icon]:hidden">
-            <span className="truncate text-sm font-semibold">SHX Tools</span>
-            <span className="truncate text-xs text-muted-foreground">
+    <Flex
+      direction="column"
+      justify="between"
+      style={{
+        width: 240,
+        minWidth: 240,
+        height: '100vh',
+        backgroundColor: 'var(--gray-2)',
+        borderRight: '1px solid var(--gray-6)',
+        padding: 'var(--space-3)',
+      }}
+    >
+      <Flex direction="column" gap="4">
+        {/* Header */}
+        <Flex align="center" gap="2" px="2" py="1">
+          <Flex
+            align="center"
+            justify="center"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 'var(--radius-3)',
+              backgroundColor: 'var(--accent-9)',
+              color: 'var(--accent-contrast)',
+            }}
+          >
+            <DashboardIcon width={18} height={18} />
+          </Flex>
+          <Box>
+            <Heading size="3" weight="bold" style={{ lineHeight: 1.2 }}>
+              SHX Tools
+            </Heading>
+            <Text size="1" color="gray">
               产线检验工具
-            </span>
-          </div>
-        </div>
-      </SidebarHeader>
+            </Text>
+          </Box>
+        </Flex>
 
-      <SidebarContent>
-        {NAV_GROUPS.map((group) => (
-          <SidebarGroup key={group.label}>
-            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {group.items.map((item) => (
-                  <SidebarMenuItem key={item.to}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={pathname === item.to}
-                      tooltip={item.label}
-                    >
-                      <NavLink to={item.to}>
-                        <item.icon />
-                        <span>{item.label}</span>
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
-      </SidebarContent>
+        <Separator size="4" />
 
-      <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              isActive={pathname === SETTINGS_PATH}
-              tooltip="设置"
+        {/* Groups */}
+        <Flex direction="column" gap="3">
+          {NAV_GROUPS.map((group) => (
+            <Flex direction="column" gap="1" key={group.label}>
+              <Box px="2" py="1">
+                <Text size="1" weight="medium" color="gray">
+                  {group.label}
+                </Text>
+              </Box>
+              {group.items.map((item) => {
+                const isActive = pathname === item.to
+                return (
+                  <Button
+                    key={item.to}
+                    asChild
+                    variant={isActive ? 'soft' : 'ghost'}
+                    color={isActive ? 'indigo' : 'gray'}
+                    size="3"
+                    style={{
+                      justifyContent: 'flex-start',
+                      width: '100%',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <NavLink to={item.to}>
+                      <item.icon width={16} height={16} />
+                      <Text size="2" weight={isActive ? 'bold' : 'regular'}>
+                        {item.label}
+                      </Text>
+                    </NavLink>
+                  </Button>
+                )
+              })}
+            </Flex>
+          ))}
+        </Flex>
+      </Flex>
+
+      {/* Footer */}
+      <Flex direction="column" gap="2">
+        <Separator size="4" />
+        <Button
+          asChild
+          variant={pathname === SETTINGS_PATH ? 'soft' : 'ghost'}
+          color={pathname === SETTINGS_PATH ? 'indigo' : 'gray'}
+          size="3"
+          style={{
+            justifyContent: 'flex-start',
+            width: '100%',
+            textAlign: 'left',
+          }}
+        >
+          <NavLink to={SETTINGS_PATH}>
+            <GearIcon width={16} height={16} />
+            <Text
+              size="2"
+              weight={pathname === SETTINGS_PATH ? 'bold' : 'regular'}
             >
-              <NavLink to={SETTINGS_PATH}>
-                <Settings />
-                <span>设置</span>
-              </NavLink>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-
-        <div className="flex items-center justify-between gap-2 px-1 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-          <span>版本 {getAppVersion()}</span>
-          <span>Windows</span>
-        </div>
-      </SidebarFooter>
-
-      <SidebarRail />
-    </Sidebar>
+              设置
+            </Text>
+          </NavLink>
+        </Button>
+        <Flex justify="between" px="2" py="1">
+          <Text size="1" color="gray">
+            版本 {getAppVersion()}
+          </Text>
+          <Text size="1" color="gray">
+            Windows
+          </Text>
+        </Flex>
+      </Flex>
+    </Flex>
   )
 }

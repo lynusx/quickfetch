@@ -85,11 +85,10 @@ src/
 
 ## UI 约定
 
-- 组件库：**shadcn/ui**（radix base，vega 预设），配置见 `components.json`
-- 样式：**Tailwind CSS v4**，通过 `@tailwindcss/vite` 接入；设计令牌集中在 `src/renderer/index.css`
+- 组件库：**Radix Themes**（`@radix-ui/themes`），根节点由 `<Theme>` 包裹
+- 样式：`@radix-ui/themes/styles.css`，使用 Radix 设计令牌
 - 别名：`@/*` → `src/renderer/*`（`tsconfig*.json` 与 `electron.vite.config.ts` 同步配置）
-- 图标：`lucide-react`；提示：`sonner`；`cn()` 由 `cn` 包提供
-- 新增组件：`npx shadcn@latest add <component>`（`init` 需要根目录有 `vite.config.ts` 才能通过框架探测，`add` 不需要）
+- 图标：`@radix-ui/react-icons`；提示：`sonner`；`cn()` 为内部纯逻辑实现
 
 ## 架构约定
 

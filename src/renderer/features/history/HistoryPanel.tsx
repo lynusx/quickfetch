@@ -1,56 +1,51 @@
-import { History, Loader2, Trash2 } from 'lucide-react'
+import { CounterClockwiseClockIcon, TrashIcon } from '@radix-ui/react-icons'
 import { useCallback, useEffect, useState } from 'react'
-
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
+  Badge,
+  Box,
+  Button,
   Card,
-  CardAction,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
-import { Input } from '@/components/ui/input'
+  Flex,
+  Heading,
+  IconButton,
+  ScrollArea,
+  Spinner,
+  Text,
+  TextField,
+} from '@radix-ui/themes'
+
 import { useHistoryStore } from './historyStore'
 import type { ScanCategory, ScanHistoryItem, ScanTaskStatus } from '@shared/ipc'
 import { formatDuration } from '@/utils/common'
 import { toErrorMessage } from '@/utils/error'
-import { cn } from '@/lib/utils'
 
 const STATUS_META: Record<
   ScanTaskStatus,
   {
     label: string
-    variant: 'default' | 'secondary' | 'destructive' | 'outline'
+    color: 'gray' | 'blue' | 'amber' | 'green' | 'orange' | 'red'
+    variant: 'soft' | 'surface' | 'outline'
   }
 > = {
-  pending: { label: '待开始', variant: 'outline' },
-  running: { label: '进行中', variant: 'secondary' },
-  paused: { label: '已暂停', variant: 'outline' },
-  completed: { label: '已完成', variant: 'default' },
-  canceled: { label: '已取消', variant: 'outline' },
-  interrupted: { label: '已中断', variant: 'outline' },
-  failed: { label: '失败', variant: 'destructive' },
+  pending: { label: '待开始', color: 'gray', variant: 'surface' },
+  running: { label: '进行中', color: 'blue', variant: 'soft' },
+  paused: { label: '已暂停', color: 'amber', variant: 'soft' },
+  completed: { label: '已完成', color: 'green', variant: 'soft' },
+  canceled: { label: '已取消', color: 'gray', variant: 'outline' },
+  interrupted: { label: '已中断', color: 'orange', variant: 'soft' },
+  failed: { label: '失败', color: 'red', variant: 'soft' },
 }
 
 /** 历史列表只关心「什么时候扫的、扫了什么、结果多少」，时间精确到分钟就够 */
 const formatTime = (timestamp: number): string => {
   const date = new Date(timestamp)
-
   const pad = (value: number): string => String(value).padStart(2, '0')
-
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 /** 参数摘要：机台数量 + 日期/班次 + 时段/类型数量 */
 const summarize = (item: ScanHistoryItem): string => {
   const { machines, date, shift, slots, types } = item.params
-
   const day =
     date.length === 8
       ? `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6)}`
@@ -172,144 +167,218 @@ const HistoryPanel = ({
   }
 
   return (
-    <Card>
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <History className="size-4" />
-            历史记录
-            {refreshing && (
-              <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-            )}
-          </CardTitle>
-          <CardAction className="flex items-center gap-2">
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {visible.length} / {limit}
-            </span>
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm">
-                {open ? '收起' : '展开'}
+    <Card size="2">
+      <Flex justify="between" align="center">
+        <Flex align="center" gap="2">
+          <CounterClockwiseClockIcon
+            width={16}
+            height={16}
+            style={{ color: 'var(--accent-11)' }}
+          />
+          <Heading size="3">历史记录</Heading>
+          {refreshing && <Spinner size="1" />}
+        </Flex>
+        <Flex align="center" gap="3">
+          <Text
+            size="1"
+            color="gray"
+            style={{ fontVariantNumeric: 'tabular-nums' }}
+          >
+            {visible.length} / {limit}
+          </Text>
+          <Button
+            variant="soft"
+            color="gray"
+            size="1"
+            onClick={() => setOpen(!open)}
+          >
+            {open ? '收起' : '展开'}
+          </Button>
+        </Flex>
+      </Flex>
+
+      {open && (
+        <Flex direction="column" gap="3" mt="3">
+          <Flex align="end" gap="3">
+            <Flex direction="column" gap="1">
+              <Text as="label" size="1" color="gray">
+                保留条数
+              </Text>
+              <TextField.Root
+                size="1"
+                style={{ width: 80 }}
+                value={draftLimit}
+                inputMode="numeric"
+                onChange={(event) => setDraftLimit(event.target.value)}
+                onBlur={commitLimit}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') event.currentTarget.blur()
+                }}
+              />
+            </Flex>
+            <Text
+              size="1"
+              color="gray"
+              style={{ flex: 1, paddingBottom: 2, lineHeight: 1.5 }}
+            >
+              每次扫描结束后自动保存结果，含全部图片路径，可恢复查看或再次复制。
+              超出条数的旧记录会被自动删除。
+            </Text>
+            {visible.length > 0 && (
+              <Button variant="soft" color="red" size="1" onClick={handleClear}>
+                <TrashIcon width={14} height={14} />
+                清空
               </Button>
-            </CollapsibleTrigger>
-          </CardAction>
-        </CardHeader>
+            )}
+          </Flex>
 
-        <CollapsibleContent>
-          <CardContent className="flex flex-col gap-3">
-            <div className="flex items-end gap-2">
-              <label
-                htmlFor="history-limit"
-                className="flex flex-col gap-1 text-xs"
-              >
-                <span className="text-muted-foreground">保留条数</span>
-                <Input
-                  id="history-limit"
-                  className="h-8 w-20"
-                  inputMode="numeric"
-                  value={draftLimit}
-                  onChange={(event) => setDraftLimit(event.target.value)}
-                  onBlur={commitLimit}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') event.currentTarget.blur()
-                  }}
-                />
-              </label>
-              <p className="flex-1 pb-1 text-[11px] leading-relaxed text-muted-foreground">
-                每次扫描结束后自动保存结果，含全部图片路径，可恢复查看或再次复制。
-                超出条数的旧记录会被自动删除。
-              </p>
-              {visible.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground"
-                  onClick={handleClear}
-                >
-                  <Trash2 data-icon="inline-start" />
-                  清空
-                </Button>
-              )}
-            </div>
+          {error && (
+            <Text size="1" color="red">
+              {error}
+            </Text>
+          )}
 
-            {error && <p className="text-xs text-destructive">{error}</p>}
-
-            {loading && (
-              <p className="py-4 text-center text-xs text-muted-foreground">
+          {loading && (
+            <Box py="4">
+              <Text align="center" size="1" color="gray" as="p">
                 正在读取历史记录…
-              </p>
-            )}
+              </Text>
+            </Box>
+          )}
 
-            {!loading && visible.length === 0 && (
-              <p className="py-4 text-center text-xs text-muted-foreground">
+          {!loading && visible.length === 0 && (
+            <Box py="4">
+              <Text align="center" size="1" color="gray" as="p">
                 还没有历史记录，完成一次扫描后会自动出现在这里
-              </p>
-            )}
+              </Text>
+            </Box>
+          )}
 
-            {!loading && visible.length > 0 && (
-              <div className="flex max-h-72 flex-col overflow-y-auto rounded-lg border">
-                {visible.map((item) => {
-                  const meta = STATUS_META[item.status]
-                  const busy = loadingTaskId === item.id
+          {!loading && visible.length > 0 && (
+            <Card
+              size="1"
+              variant="surface"
+              style={{ padding: 0, overflow: 'hidden' }}
+            >
+              <ScrollArea
+                type="auto"
+                scrollbars="vertical"
+                style={{ maxHeight: 280 }}
+              >
+                <Flex direction="column">
+                  {visible.map((item, index) => {
+                    const meta = STATUS_META[item.status]
+                    const busy = loadingTaskId === item.id
+                    const isActive = item.id === activeId
 
-                  return (
-                    <div
-                      key={item.id}
-                      className={cn(
-                        'group flex items-center gap-3 border-b px-3 py-2 text-xs last:border-b-0',
-                        item.id === activeId && 'bg-muted/60',
-                      )}
-                    >
-                      {/* 两行布局：卡片只有 500px 宽，时间和徽章占掉一半后
-                          摘要只剩百来像素，单行必然截断成「2 台机台 · 2026…」 */}
-                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="shrink-0 tabular-nums text-muted-foreground">
-                            {formatTime(item.createdAt)}
-                          </span>
-                          <Badge variant={meta.variant} className="shrink-0">
-                            {meta.label}
-                          </Badge>
-                        </div>
-                        <button
-                          type="button"
-                          className="truncate text-left hover:underline"
-                          title={`${item.params.machines.join('、')}\n${summarize(item)}`}
-                          onClick={() => handleRestore(item)}
-                        >
-                          {summarize(item)}
-                        </button>
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-0.5 whitespace-nowrap tabular-nums text-muted-foreground">
-                        <span
-                          title={`命中 ${item.totalImages} 张，${item.hitMachines}/${item.machineCount} 台有结果`}
-                        >
-                          {item.totalImages} 张 · {item.hitMachines}/
-                          {item.machineCount} 台
-                        </span>
-                        <span>{formatDuration(item.elapsedMs)}</span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-                        disabled={busy}
-                        onClick={() => void remove(item.id)}
-                        title="删除这条记录"
+                    return (
+                      <Flex
+                        key={item.id}
+                        align="center"
+                        justify="between"
+                        gap="3"
+                        px="3"
+                        py="2"
+                        style={{
+                          borderBottom:
+                            index === visible.length - 1
+                              ? 'none'
+                              : '1px solid var(--gray-4)',
+                          backgroundColor: isActive
+                            ? 'var(--accent-a3)'
+                            : undefined,
+                          transition: 'background-color 0.15s ease',
+                        }}
                       >
-                        {busy ? (
-                          <Loader2 className="size-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="size-3.5" />
-                        )}
-                      </Button>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </CardContent>
-        </CollapsibleContent>
-      </Collapsible>
+                        <Flex
+                          direction="column"
+                          gap="1"
+                          style={{ minWidth: 0, flex: 1 }}
+                        >
+                          <Flex align="center" gap="2">
+                            <Text
+                              size="1"
+                              color="gray"
+                              style={{
+                                flexShrink: 0,
+                                fontVariantNumeric: 'tabular-nums',
+                              }}
+                            >
+                              {formatTime(item.createdAt)}
+                            </Text>
+                            <Badge
+                              color={meta.color}
+                              variant={meta.variant}
+                              size="1"
+                            >
+                              {meta.label}
+                            </Badge>
+                          </Flex>
+                          <button
+                            type="button"
+                            style={{
+                              all: 'unset',
+                              cursor: 'pointer',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              fontSize: 'var(--font-size-1)',
+                              color: 'var(--accent-11)',
+                              fontWeight: 500,
+                              textAlign: 'left',
+                            }}
+                            title={`${item.params.machines.join('、')}\n${summarize(item)}`}
+                            onClick={() => handleRestore(item)}
+                          >
+                            {summarize(item)}
+                          </button>
+                        </Flex>
+
+                        <Flex
+                          direction="column"
+                          align="end"
+                          gap="1"
+                          style={{
+                            flexShrink: 0,
+                            fontVariantNumeric: 'tabular-nums',
+                          }}
+                        >
+                          <Text
+                            size="1"
+                            color="gray"
+                            title={`命中 ${item.totalImages} 张，${item.hitMachines}/${item.machineCount} 台有结果`}
+                          >
+                            {item.totalImages} 张 · {item.hitMachines}/
+                            {item.machineCount} 台
+                          </Text>
+                          <Text size="1" color="gray">
+                            {formatDuration(item.elapsedMs)}
+                          </Text>
+                        </Flex>
+
+                        <IconButton
+                          variant="ghost"
+                          color="gray"
+                          size="1"
+                          disabled={busy}
+                          onClick={() => void remove(item.id)}
+                          title="删除这条记录"
+                        >
+                          {busy ? (
+                            <Spinner size="1" />
+                          ) : (
+                            <TrashIcon width={14} height={14} />
+                          )}
+                        </IconButton>
+                      </Flex>
+                    )
+                  })}
+                </Flex>
+              </ScrollArea>
+            </Card>
+          )}
+        </Flex>
+      )}
     </Card>
   )
 }

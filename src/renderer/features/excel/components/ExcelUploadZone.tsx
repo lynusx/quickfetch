@@ -1,19 +1,10 @@
 import { useRef } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
-import { FileSpreadsheet, Loader2, Upload } from 'lucide-react'
+import { TableIcon, UploadIcon } from '@radix-ui/react-icons'
+import { Box, Button, Flex, Heading, Spinner, Text } from '@radix-ui/themes'
 
-import { Button } from '@/components/ui/button'
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/components/ui/empty'
 import { useExcelUpload } from '../hooks/useExcelUpload'
 import { useExcelStore } from '../stores/excelStore'
-import { cn } from '@/lib/utils'
 
 const ExcelUploadZone = () => {
   const { isDrag, isProcess, setIsDrag, uploadFile } = useExcelUpload()
@@ -71,7 +62,7 @@ const ExcelUploadZone = () => {
   }
 
   return (
-    <div
+    <Box
       role="button"
       tabIndex={isProcess ? -1 : 0}
       aria-disabled={isProcess}
@@ -86,50 +77,69 @@ const ExcelUploadZone = () => {
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className={cn(
-        'rounded-xl border border-dashed bg-card transition-colors outline-none',
-        'focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
-        isDrag && 'border-primary bg-primary/5',
-        isProcess
-          ? 'cursor-not-allowed opacity-80'
-          : 'cursor-pointer hover:bg-muted/40',
-      )}
+      style={{
+        borderRadius: 'var(--radius-4)',
+        border: `1px dashed ${isDrag ? 'var(--accent-9)' : 'var(--gray-7)'}`,
+        backgroundColor: isDrag
+          ? 'var(--accent-a2)'
+          : isProcess
+            ? 'var(--gray-a2)'
+            : 'var(--color-panel-solid)',
+        cursor: isProcess ? 'not-allowed' : 'pointer',
+        transition: 'all 0.15s ease',
+        outline: 'none',
+      }}
     >
-      <Empty className={cn('border-0', file ? 'py-6' : 'py-10')}>
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            {isProcess ? (
-              <Loader2 className="animate-spin" />
-            ) : (
-              <FileSpreadsheet />
-            )}
-          </EmptyMedia>
-          <EmptyTitle>{getStatusText()}</EmptyTitle>
-          {!file && (
-            <EmptyDescription>
-              支持 .xlsx、.xls 格式，单次仅处理 1 个文件，最大 50MB
-            </EmptyDescription>
+      <Flex
+        direction="column"
+        align="center"
+        justify="center"
+        gap="3"
+        py={file ? '6' : '8'}
+        px="4"
+        style={{ textAlign: 'center' }}
+      >
+        <Box
+          style={{
+            padding: 12,
+            borderRadius: 'var(--radius-full)',
+            backgroundColor: 'var(--gray-3)',
+            color: 'var(--accent-9)',
+          }}
+        >
+          {isProcess ? (
+            <Spinner size="3" />
+          ) : (
+            <TableIcon width={28} height={28} />
           )}
-        </EmptyHeader>
+        </Box>
+
+        <Flex direction="column" gap="1" align="center">
+          <Heading size="3">{getStatusText()}</Heading>
+          {!file && (
+            <Text size="1" color="gray">
+              支持 .xlsx、.xls 格式，单次仅处理 1 个文件，最大 50MB
+            </Text>
+          )}
+        </Flex>
+
         {!isProcess && (
-          <EmptyContent>
-            <Button variant="outline">
-              <Upload data-icon="inline-start" />
-              {file ? '选择新文件' : '选择 Excel 文件'}
-            </Button>
-          </EmptyContent>
+          <Button variant="surface" color="gray" size="2">
+            <UploadIcon width={14} height={14} />
+            {file ? '选择新文件' : '选择 Excel 文件'}
+          </Button>
         )}
-      </Empty>
+      </Flex>
 
       <input
         ref={fileInputRef}
         type="file"
         accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-        className="hidden"
+        style={{ display: 'none' }}
         onChange={handleFileInputChange}
         disabled={isProcess}
       />
-    </div>
+    </Box>
   )
 }
 

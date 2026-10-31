@@ -1,19 +1,6 @@
 import { Outlet, useLocation } from 'react-router'
-
+import { Box, Flex, Heading, Text } from '@radix-ui/themes'
 import { AppSidebar } from './AppSidebar'
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb'
-import { Separator } from '@/components/ui/separator'
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from '@/components/ui/sidebar'
 
 const PAGE_TITLES: Record<string, string> = {
   '/image-copy': 'EL 图片扫描',
@@ -28,36 +15,47 @@ const LayoutPage = () => {
   const currentTitle = PAGE_TITLES[pathname] ?? '工作台'
 
   return (
-    <SidebarProvider>
+    <Flex style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}>
       <AppSidebar />
 
-      <SidebarInset>
-        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-          <SidebarTrigger className="-ml-1" />
-          <Separator
-            orientation="vertical"
-            className="mr-1 data-[orientation=vertical]:h-4"
-          />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem className="hidden sm:block">
-                <span className="text-muted-foreground">工具</span>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden sm:block" />
-              <BreadcrumbItem>
-                <BreadcrumbPage>{currentTitle}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </header>
+      <Flex
+        direction="column"
+        style={{ flex: 1, minWidth: 0, height: '100vh' }}
+      >
+        <Flex
+          align="center"
+          gap="2"
+          px="4"
+          style={{
+            height: 52,
+            minHeight: 52,
+            backgroundColor: 'var(--color-background)',
+            borderBottom: '1px solid var(--gray-6)',
+          }}
+        >
+          <Text size="2" color="gray">
+            工具
+          </Text>
+          <Text size="2" color="gray">
+            /
+          </Text>
+          <Heading size="3">{currentTitle}</Heading>
+        </Flex>
 
-        <div className="flex-1">
-          <div className="mx-auto w-full max-w-[1400px] px-6 py-6">
+        <Box
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: 'var(--space-5)',
+            backgroundColor: 'var(--gray-1)',
+          }}
+        >
+          <Box style={{ maxWidth: 1400, margin: '0 auto' }}>
             <Outlet />
-          </div>
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+          </Box>
+        </Box>
+      </Flex>
+    </Flex>
   )
 }
 

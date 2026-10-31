@@ -1,10 +1,9 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router'
-import { Loader2 } from 'lucide-react'
+import { Theme, Flex, Spinner } from '@radix-ui/themes'
 
 import LayoutPage from './layouts/AppLayout'
-import { Toaster } from '@/components/ui/sonner'
-import { TooltipProvider } from '@/components/ui/tooltip'
+import { Toaster } from '@/components/Toaster'
 
 const ROUTES = {
   IMAGE_COPY: '/image-copy',
@@ -28,14 +27,20 @@ const NotFoundRedirect = ({ defaultPath }: { defaultPath: string }) => (
 )
 
 const PageLoader = () => (
-  <div className="flex min-h-80 items-center justify-center">
-    <Loader2 className="size-5 animate-spin text-muted-foreground" />
-  </div>
+  <Flex minHeight="320px" align="center" justify="center">
+    <Spinner size="3" />
+  </Flex>
 )
 
 function App() {
   return (
-    <TooltipProvider delayDuration={300}>
+    <Theme
+      appearance="light"
+      accentColor="indigo"
+      grayColor="slate"
+      radius="medium"
+      scaling="100%"
+    >
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<LayoutPage />}>
@@ -57,8 +62,8 @@ function App() {
           </Route>
         </Routes>
       </Suspense>
-      <Toaster position="bottom-right" richColors closeButton />
-    </TooltipProvider>
+      <Toaster />
+    </Theme>
   )
 }
 

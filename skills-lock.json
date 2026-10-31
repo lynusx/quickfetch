@@ -31,23 +31,11 @@
       "skillPath": "skills/engineering/improve-codebase-architecture/SKILL.md",
       "computedHash": "f4ea6a9281ce9c36e85501b4ca9083d330a570c682ffd5e157f6a0d24ba29a86"
     },
-    "migrate-radix-to-base": {
-      "source": "shadcn/ui",
-      "sourceType": "github",
-      "skillPath": "skills/migrate-radix-to-base/SKILL.md",
-      "computedHash": "4fdc31bf287f674ba6bf91a648120f7b34cd7ef370f998f2cc116fed067789c5"
-    },
     "setup-pre-commit": {
       "source": "vinvcn/mattpocock-skills-zh-CN",
       "sourceType": "github",
       "skillPath": "skills/misc/setup-pre-commit/SKILL.md",
       "computedHash": "df6d499db34d73e199e8f759e8ebc3c543ffb32821ae857bc983bd6dd26fcfe9"
-    },
-    "shadcn": {
-      "source": "shadcn/ui",
-      "sourceType": "github",
-      "skillPath": "skills/shadcn/SKILL.md",
-      "computedHash": "7859e9a064940a1a0010c992b63e4633c4f5f39ed367a23c16f24029816b1703"
     },
     "tdd": {
       "source": "vinvcn/mattpocock-skills-zh-CN",
