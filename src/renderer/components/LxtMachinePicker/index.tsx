@@ -189,48 +189,15 @@ const LxtMachinePicker = ({ machines, onChanged }: LxtMachinePickerProps) => {
       )}
 
       {configured && active.length > 0 ? (
-        <Field>
-          <div className="flex items-center justify-between gap-2">
-            <FieldLabel className="mb-0">
-              机台
+        <>
+          {/* 厂区：独立的单选类别，与机台平级；选中厂区联动过滤下面的机台列表 */}
+          <Field>
+            <FieldLabel>
+              厂区
               <span className="font-normal text-muted-foreground tabular-nums">
-                {selectedMachines.length}/{active.length}
+                {plant ? plantLabel(plant) : '未选择'}
               </span>
             </FieldLabel>
-            <div className="flex items-center gap-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                onClick={() => setSelectedMachines([])}
-                disabled={!selectedMachines.length}
-              >
-                清空
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                onClick={toggleAll}
-              >
-                {visible.every((item) => selectedMachines.includes(item.key))
-                  ? '取消本区'
-                  : '全选本区'}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                aria-label="重新识别入口"
-                disabled={saving}
-                onClick={async () => announce(await refreshLxt())}
-              >
-                <RefreshCw />
-              </Button>
-            </div>
-          </div>
-
-          {plants.length > 1 && (
             <ToggleGroup
               type="single"
               variant="outline"
@@ -242,47 +209,92 @@ const LxtMachinePicker = ({ machines, onChanged }: LxtMachinePickerProps) => {
               {plants.map((name) => (
                 <ToggleGroupItem key={name} value={name} className="flex-1">
                   {plantLabel(name)}{' '}
-                  {active.filter((item) => item.plant === name).length}
+                  <span className="tabular-nums text-muted-foreground">
+                    {active.filter((item) => item.plant === name).length}
+                  </span>
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
-          )}
+          </Field>
 
-          <InputGroup>
-            <InputGroupInput
-              value={keyword}
-              placeholder="搜索机台，如 7 或 LX"
-              spellCheck={false}
-              onChange={(event) => setKeyword(event.target.value)}
-            />
-          </InputGroup>
-
-          {visible.length ? (
-            <ToggleGroup
-              type="multiple"
-              variant="outline"
-              size="sm"
-              value={selectedMachines}
-              onValueChange={setSelectedMachines}
-              className="grid max-h-56 w-full grid-cols-3 gap-1.5 overflow-y-auto pr-1"
-            >
-              {visible.map((machine) => (
-                <ToggleGroupItem
-                  key={machine.key}
-                  value={machine.key}
-                  className="h-8 w-full font-mono text-xs"
-                  title={`${machine.host}${machine.share ? ` · ${machine.share}` : ''}`}
+          {/* 机台：与厂区联动的多选列表，只显示当前厂区的机台 */}
+          <Field>
+            <div className="flex items-center justify-between gap-2">
+              <FieldLabel className="mb-0">
+                机台
+                <span className="font-normal text-muted-foreground tabular-nums">
+                  {selectedMachines.length}/{visible.length}
+                </span>
+              </FieldLabel>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => setSelectedMachines([])}
+                  disabled={!selectedMachines.length}
                 >
-                  {machine.name}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              没有匹配「{keyword}」的机台
-            </p>
-          )}
-        </Field>
+                  清空
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={toggleAll}
+                >
+                  {visible.every((item) => selectedMachines.includes(item.key))
+                    ? '取消本区'
+                    : '全选本区'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label="重新识别入口"
+                  disabled={saving}
+                  onClick={async () => announce(await refreshLxt())}
+                >
+                  <RefreshCw />
+                </Button>
+              </div>
+            </div>
+
+            <InputGroup>
+              <InputGroupInput
+                value={keyword}
+                placeholder="搜索机台，如 7 或 LX"
+                spellCheck={false}
+                onChange={(event) => setKeyword(event.target.value)}
+              />
+            </InputGroup>
+
+            {visible.length ? (
+              <ToggleGroup
+                type="multiple"
+                variant="outline"
+                size="sm"
+                value={selectedMachines}
+                onValueChange={setSelectedMachines}
+                className="grid max-h-56 w-full grid-cols-3 gap-1.5 overflow-y-auto pr-1"
+              >
+                {visible.map((machine) => (
+                  <ToggleGroupItem
+                    key={machine.key}
+                    value={machine.key}
+                    className="h-8 w-full font-mono text-xs"
+                    title={`${machine.host}${machine.share ? ` · ${machine.share}` : ''}`}
+                  >
+                    {machine.name}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                没有匹配「{keyword}」的机台
+              </p>
+            )}
+          </Field>
+        </>
       ) : (
         <p className="text-xs text-muted-foreground">
           {configured
