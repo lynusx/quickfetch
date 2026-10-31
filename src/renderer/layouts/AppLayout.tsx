@@ -18,6 +18,7 @@ import {
 const PAGE_TITLES: Record<string, string> = {
   '/image-copy': 'EL 图片扫描',
   '/lxt': '力禧特图片扫描',
+  '/pl': '利珀图片扫描',
   '/excel-parse': 'Excel 解析',
   '/settings': '设置',
 }

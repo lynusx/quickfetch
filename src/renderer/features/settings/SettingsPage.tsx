@@ -112,7 +112,12 @@ const NumberRow = ({
               接管，此处不生效
             </>
           ) : (
-            hint
+            <>
+              {hint}
+              <span className="ml-1.5 text-[11px] opacity-75">
+                [范围: {range.min} ~ {range.max}]
+              </span>
+            </>
           )}
         </p>
       </div>
@@ -184,7 +189,10 @@ const SettingsPage = () => {
                 <ToggleGroupItem
                   key={value}
                   value={value}
-                  className="flex h-auto w-full flex-col items-start gap-0.5 py-2"
+                  className={cn(
+                    'flex h-auto w-full flex-col items-start gap-0.5 py-2 transition-all',
+                    'data-[state=on]:border-primary data-[state=on]:bg-primary/5 data-[state=on]:text-primary',
+                  )}
                 >
                   <span className="text-sm font-medium">
                     {COPY_LAYOUT_LABEL[value]}
@@ -218,10 +226,10 @@ const SettingsPage = () => {
                   key={value}
                   value={value}
                   className={cn(
-                    'flex h-auto w-full flex-col items-start gap-0.5 py-2',
-                    value === 'overwrite' &&
-                      preferences.copyConflict === value &&
-                      'bg-destructive/5 text-destructive data-[state=on]:bg-destructive/5',
+                    'flex h-auto w-full flex-col items-start gap-0.5 py-2 transition-all',
+                    value === 'overwrite'
+                      ? 'data-[state=on]:border-destructive data-[state=on]:bg-destructive/10 data-[state=on]:text-destructive'
+                      : 'data-[state=on]:border-primary data-[state=on]:bg-primary/5 data-[state=on]:text-primary',
                   )}
                 >
                   <span className="text-sm font-medium">

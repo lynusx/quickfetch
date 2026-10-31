@@ -25,7 +25,8 @@ interface SheetTablePreviewProps {
   maxHeight?: string
 }
 
-const MAX_ROWS = 20
+const MAX_ORIGINAL_ROWS = 20
+const MAX_RESULT_ROWS = 100
 const MAX_COLS = 10
 
 const SheetTablePreview = ({
@@ -50,16 +51,24 @@ const SheetTablePreview = ({
   let displayData = sheet.data
   let showRowTruncation = false
   let showColTruncation = false
+  let hiddenRowsCount = 0
 
   if (mode === 'original') {
-    if (sheet.rowCount > MAX_ROWS) {
-      displayData = displayData.slice(0, MAX_ROWS)
+    if (sheet.rowCount > MAX_ORIGINAL_ROWS) {
+      displayData = displayData.slice(0, MAX_ORIGINAL_ROWS + 1)
       showRowTruncation = true
+      hiddenRowsCount = sheet.rowCount - MAX_ORIGINAL_ROWS
     }
 
     if (sheet.colCount > MAX_COLS) {
       displayData = displayData.map((row) => row.slice(0, MAX_COLS))
       showColTruncation = true
+    }
+  } else if (mode === 'result') {
+    if (sheet.rowCount > MAX_RESULT_ROWS) {
+      displayData = displayData.slice(0, MAX_RESULT_ROWS + 1)
+      showRowTruncation = true
+      hiddenRowsCount = sheet.rowCount - MAX_RESULT_ROWS
     }
   }
 
@@ -104,7 +113,8 @@ const SheetTablePreview = ({
 
       {showRowTruncation && (
         <p className="border-t px-3 py-2 text-center text-xs text-muted-foreground tabular-nums">
-          还有 {sheet.rowCount - MAX_ROWS} 行数据未显示
+          还有 {hiddenRowsCount} 行数据未在预览中显示
+          {mode === 'result' ? '（复制或导出时包含全量数据）' : ''}
         </p>
       )}
     </ScrollArea>

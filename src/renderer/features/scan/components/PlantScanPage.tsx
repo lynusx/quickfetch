@@ -241,7 +241,7 @@ const PlantScanPage = ({
                     ) : (
                       <Wand2 data-icon="inline-start" />
                     )}
-                    开始扫描
+                    {task ? '重新扫描' : '开始扫描'}
                   </Button>
                 ) : (
                   <>
@@ -266,14 +266,6 @@ const PlantScanPage = ({
                     </Button>
                   </>
                 )}
-                <Button
-                  variant="outline"
-                  onClick={() => void start()}
-                  disabled={!canStart || busy}
-                >
-                  <Wand2 data-icon="inline-start" />
-                  重扫一遍
-                </Button>
                 {task && !busy && (
                   <Button variant="ghost" onClick={clearResult}>
                     清除结果
@@ -359,7 +351,9 @@ const PlantScanPage = ({
                               'min-w-0 flex-1 truncate',
                               branch.status === 'hit'
                                 ? 'text-muted-foreground'
-                                : 'text-muted-foreground/80',
+                                : branch.unreachableReason === 'network'
+                                  ? 'font-medium text-destructive'
+                                  : 'text-muted-foreground/80',
                             )}
                             title={branchText(branch)}
                           >
@@ -369,7 +363,7 @@ const PlantScanPage = ({
                             className={cn(
                               'shrink-0 tabular-nums',
                               branch.status === 'hit'
-                                ? 'text-foreground'
+                                ? 'font-medium text-foreground'
                                 : 'text-muted-foreground',
                             )}
                           >

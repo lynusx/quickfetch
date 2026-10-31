@@ -1,7 +1,7 @@
 {
   "name": "shx-tools",
   "private": true,
-  "version": "1.13.0",
+  "version": "1.13.1",
   "description": "RCA EL 图片拷贝与 Excel 解析桌面工具",
   "author": "lynusx",
   "type": "module",

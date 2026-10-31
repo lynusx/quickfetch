@@ -263,6 +263,7 @@ const PlantMachinePicker = ({
                   variant="ghost"
                   size="xs"
                   onClick={toggleAll}
+                  disabled={!visible.length}
                 >
                   {visible.every((item) => selectedMachines.includes(item.key))
                     ? '取消本区'

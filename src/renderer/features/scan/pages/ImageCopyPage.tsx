@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import {
   CircleAlert,
   Download,
@@ -104,6 +105,10 @@ const ImageCopyPage = () => {
 
   // 三类扫描共用同一套「回填参数 + 载入快照」动作，EL 的厂区推导也在里面
   const restoreHistory = useHistoryRestore('el')
+
+  const clearResult = useCallback(() => {
+    useElScanStore.getState().setTask(null)
+  }, [])
 
   const status = task ? STATUS_META[task.status] : null
   const configured = Boolean(settings?.rootPath)
@@ -237,7 +242,7 @@ const ImageCopyPage = () => {
                     ) : (
                       <Wand2 data-icon="inline-start" />
                     )}
-                    开始扫描
+                    {task ? '重新扫描' : '开始扫描'}
                   </Button>
                 ) : (
                   <>
@@ -262,14 +267,11 @@ const ImageCopyPage = () => {
                     </Button>
                   </>
                 )}
-                <Button
-                  variant="outline"
-                  onClick={() => void start()}
-                  disabled={!canStart || !configured || busy}
-                >
-                  <Wand2 data-icon="inline-start" />
-                  重扫一遍
-                </Button>
+                {task && !busy && (
+                  <Button variant="ghost" onClick={clearResult}>
+                    清除结果
+                  </Button>
+                )}
               </div>
 
               {!ready && !busy && missing.length ? (
@@ -342,7 +344,9 @@ const ImageCopyPage = () => {
                               'min-w-0 flex-1 truncate',
                               branch.status === 'hit'
                                 ? 'text-muted-foreground'
-                                : 'text-muted-foreground/80',
+                                : branch.unreachableReason === 'network'
+                                  ? 'font-medium text-destructive'
+                                  : 'text-muted-foreground/80',
                             )}
                             title={branchText(branch)}
                           >
@@ -352,7 +356,7 @@ const ImageCopyPage = () => {
                             className={cn(
                               'shrink-0 tabular-nums',
                               branch.status === 'hit'
-                                ? 'text-foreground'
+                                ? 'font-medium text-foreground'
                                 : 'text-muted-foreground',
                             )}
                           >
