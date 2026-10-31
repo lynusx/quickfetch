@@ -4,6 +4,7 @@
     "shadcn": {
       "source": "shadcn/ui",
       "path": "skills/shadcn",
+      "installDir": ".agents/skills/shadcn",
       "ref": "main",
       "installedAt": "2026-10-31T02:35:00.000Z",
       "note": "沙箱内 github.com 不可达，文件经 raw.githubusercontent.com / jsDelivr / gh-proxy 镜像获取；建议在可直连环境执行 pnpm dlx skills@latest add shadcn/ui 对齐 lock"
