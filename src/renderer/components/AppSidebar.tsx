@@ -4,6 +4,7 @@ import {
   FileSpreadsheet,
   FolderSearch,
   ScanLine,
+  ScanSearch,
   Settings,
 } from 'lucide-react'
 
@@ -25,10 +26,10 @@ import { getAppVersion } from '@/utils/common'
 /**
  * 侧边栏菜单。
  *
- * 「一键找图」下按扫描类别分两项：EL 与力禧特的路径来源、机台构成、
+ * 「一键找图」下按扫描类别分三项：EL、力禧特、利珀的路径来源、机台构成、
  * 所在网络都完全不同，各自是独立页面，任务状态互不干扰。
- * 分组只用一个静态小标题，不做折叠 —— 为藏两个入口多点一次不值，
- * 折叠成图标模式时标题自动隐藏，两个图标并排显示。
+ * 分组只用一个静态小标题，不做折叠 —— 为藏几个入口多点一次不值，
+ * 折叠成图标模式时标题自动隐藏，图标并排显示。
  */
 const NAV_GROUPS = [
   {
@@ -45,6 +46,12 @@ const NAV_GROUPS = [
         description: '按快捷方式识别机台并扫描',
         to: '/lxt',
         icon: FolderSearch,
+      },
+      {
+        label: '利珀',
+        description: '按快捷方式识别机台并扫描',
+        to: '/pl',
+        icon: ScanSearch,
       },
     ],
   },

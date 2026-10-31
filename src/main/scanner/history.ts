@@ -61,31 +61,45 @@ const isRecord = (value: unknown): value is HistoryRecord => {
   )
 }
 
+/** 任务已经跑完的三种终态，其余状态都算「中途」 */
+const isSettled = (status: ScanTaskStatus): boolean =>
+  status === 'completed' || status === 'canceled' || status === 'failed'
+
 /**
  * 落盘一次扫描结果。
  *
- * 只保存已结束的任务，且必须扫到过图片或已有明确诊断结论 ——
+ * 默认只保存已结束的任务，且必须扫到过图片或已有明确诊断结论 ——
  * 中途取消且一张没扫到、也没有诊断信息的任务存下来只是噪音，
  * 用户点进去看到空列表，反而以为历史坏了。
+ *
+ * `interrupted` 是程序退出时的抢救路径：任务还没跑完也要留一条，
+ * 哪怕一张没扫到（用户至少知道「那次扫到哪儿了」），否则关掉软件
+ * 就等于这件事没发生过。这类记录的 status 统一记成 interrupted，
+ * 与用户主动点的「取消」区分开。
  */
 export const saveRecord = async (
   task: ScanTask,
   images: ScannedImage[],
+  options?: { interrupted?: boolean },
 ): Promise<void> => {
-  if (task.status === 'pending' || task.status === 'running') return
-  if (task.status === 'paused') return
+  const interrupted = options?.interrupted === true && !isSettled(task.status)
+
+  if (!interrupted) {
+    if (task.status === 'pending' || task.status === 'running') return
+    if (task.status === 'paused') return
+  }
 
   // 「有诊断」只认真正读过目录的分支：断链会给 missing/unreachable，
   // 读到了内容会给 empty/hit。仍是 skipped 说明这个机台根本没轮到，
   // 不能算作有效结论，否则取消瞬间的空任务也会被当成有信息存下来。
   const diagnosed = task.branches.some((branch) => branch.status !== 'skipped')
 
-  if (!images.length && !diagnosed) return
+  if (!images.length && !diagnosed && !interrupted) return
 
   const record: HistoryRecord = {
     version: RECORD_VERSION,
     id: task.id,
-    status: task.status,
+    status: interrupted ? 'interrupted' : task.status,
     params: task.params,
     branches: task.branches,
     // 必须存全量：历史任务的再次复制要能读到每一张图，
@@ -98,7 +112,9 @@ export const saveRecord = async (
     progress: task.progress,
     createdAt: task.createdAt,
     startedAt: task.startedAt,
-    finishedAt: task.finishedAt,
+    // 中断的任务没有结束时间，用落盘这一刻补齐：
+    // 恢复后的「耗时」显示的是从开跑到关软件实际花了多久
+    finishedAt: task.finishedAt ?? (interrupted ? Date.now() : null),
   }
 
   await ensureDir()

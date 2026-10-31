@@ -22,6 +22,10 @@ const api: ElectronAPI = {
 
   refreshLxtMachines: () => ipcRenderer.invoke('lxt:refresh'),
 
+  setupPlRoot: (entryRoot) => ipcRenderer.invoke('pl:setup-root', entryRoot),
+
+  refreshPlMachines: () => ipcRenderer.invoke('pl:refresh'),
+
   createScanTask: (params) => ipcRenderer.invoke('scan:create', params),
 
   startScanTask: (taskId) => ipcRenderer.invoke('scan:start', taskId),

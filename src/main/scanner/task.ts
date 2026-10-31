@@ -10,13 +10,14 @@ import type {
   ScannedImage,
 } from '../../shared/ipc'
 
+import { PL_LEVELS } from '../../shared/ipc'
 import { timeoutForConcurrency, createAdaptiveGate } from '../adaptive'
 import type { AdaptiveGate } from '../adaptive'
 import { isNetworkError, readDirSafe } from './fsx'
 import type { DirReadResult } from './fsx'
 import { createLimiter } from './limiter'
 import type { Limiter } from './limiter'
-import type { MachineResolver } from './resolver'
+import type { MachineResolver, PathShape } from './resolver'
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif'])
 
@@ -198,6 +199,13 @@ export class ScanTaskRunner {
   private detailTotal = 0
   private detailDone = 0
 
+  /** 前缀之后的层级差异（日期格式、机台名层、Fail/等级层），由解析器声明 */
+  private readonly shape: PathShape
+  /** 等级层实际参与扫描的取值；没有等级层时是 ['']，让叶子数计算统一 */
+  private readonly levels: string[]
+  /** 单个机台分支的叶子数：时段 × 等级 × 类型 */
+  private readonly leavesPerBranch: number
+
   constructor(
     params: ScanTaskParams,
     context: TaskContext,
@@ -212,6 +220,16 @@ export class ScanTaskRunner {
       this.markSettled = resolve
     })
 
+    // 层级差异全部来自解析器：EL / 力禧特是标准三层，利珀多机台名层与等级层
+    this.shape = context.resolver.shape ?? {}
+    this.levels = this.shape.hasLevel
+      ? params.levels?.length
+        ? params.levels
+        : [...PL_LEVELS]
+      : ['']
+    this.leavesPerBranch =
+      params.slots.length * this.levels.length * params.types.length
+
     // 分支顺序与机台选择顺序一致，并发完成时也不会乱序
     this.branches = params.machines.map((machine) => ({
       machine,
@@ -220,8 +238,7 @@ export class ScanTaskRunner {
       images: 0,
     }))
 
-    this.totalLeaves =
-      params.machines.length * params.slots.length * params.types.length
+    this.totalLeaves = params.machines.length * this.leavesPerBranch
 
     // 现场机器为 8G 内存，并发按保守档起步，必要时再按失败率下调
     this.readConcurrency = clamp(
@@ -443,42 +460,62 @@ export class ScanTaskRunner {
       return
     }
 
-    // 第 2 层：共享名 / EL → 日期
-    const entryRead = baseRead
+    // 第 2 层：前缀 → 日期。目录名由解析器决定（利珀是 2026.10.28）
+    const dateName = this.shape.dateDir?.(this.params.date) ?? this.params.date
 
-    if (!entryRead.dirs.includes(this.params.date)) {
+    if (!baseRead.dirs.includes(dateName)) {
       this.markBroken(
         branch,
         { status: 'missing', dirs: [], files: [], elapsedMs: 0 },
         '日期',
         base,
-        { expected: this.params.date, actual: entryRead.dirs },
+        { expected: dateName, actual: baseRead.dirs },
       )
       return
     }
 
-    // 第 3 层：日期 → 班次
-    const dateDir = join(base, this.params.date)
-    const dateRead = await this.read(dateDir)
+    const dateDir = join(base, dateName)
 
-    if (dateRead.status !== 'ok') {
-      this.markBroken(branch, dateRead, '班次', `${base}/${this.params.date}`)
-      return
+    // 第 3 层：日期与班次之间可能还有固定层（利珀的「机台名」大写）。
+    // 没有这一层时，班次目录直接挂在日期下面。
+    const afterDate = this.shape.betweenDateAndShift?.(machine) ?? []
+    const shiftBase = afterDate.length ? join(dateDir, ...afterDate) : dateDir
+
+    let shiftBaseDirs: string[]
+
+    if (afterDate.length) {
+      const midRead = await this.read(shiftBase)
+
+      if (midRead.status !== 'ok') {
+        this.markBroken(branch, midRead, '机台名', `${base}/${dateName}`)
+        return
+      }
+
+      shiftBaseDirs = midRead.dirs
+    } else {
+      const dateRead = await this.read(dateDir)
+
+      if (dateRead.status !== 'ok') {
+        this.markBroken(branch, dateRead, '班次', `${base}/${dateName}`)
+        return
+      }
+
+      shiftBaseDirs = dateRead.dirs
     }
 
-    if (!dateRead.dirs.includes(this.params.shift)) {
+    // 第 4 层：班次
+    if (!shiftBaseDirs.includes(this.params.shift)) {
       this.markBroken(
         branch,
         { status: 'missing', dirs: [], files: [], elapsedMs: 0 },
         '班次',
-        `${base}/${this.params.date}`,
-        { expected: this.params.shift, actual: dateRead.dirs },
+        shiftBase,
+        { expected: this.params.shift, actual: shiftBaseDirs },
       )
       return
     }
 
-    // 第 4 层：班次 → 实际存在的时段
-    const shiftDir = join(dateDir, this.params.shift)
+    const shiftDir = join(shiftBase, this.params.shift)
     const shiftRead = await this.read(shiftDir)
 
     if (shiftRead.status !== 'ok') {
@@ -486,7 +523,7 @@ export class ScanTaskRunner {
         branch,
         shiftRead,
         '时段',
-        `${base}/${this.params.date}/${this.params.shift}`,
+        `${shiftBase}/${this.params.shift}`,
       )
       return
     }
@@ -501,9 +538,10 @@ export class ScanTaskRunner {
       (slot) => !shiftRead.dirs.includes(slot),
     )
 
-    // 父级缺失的时段：其下所有类型目录一并记为跳过，不再发请求
+    // 父级缺失的时段：其下所有等级 × 类型目录一并记为跳过，不再发请求
     if (missedSlots.length) {
-      const skipped = missedSlots.length * this.params.types.length
+      const skipped =
+        missedSlots.length * this.levels.length * this.params.types.length
       this.doneLeaves += skipped
       this.progress.dirsSkipped += skipped
     }
@@ -531,33 +569,87 @@ export class ScanTaskRunner {
     // 用户看到「已取消」但目录数还在涨。改成逐项申请、逐项处理，
     // 每次申请前先过 checkpoint，取消后就地停下。
     for (const slot of hitSlots) {
+      const slotDir = join(shiftDir, slot)
       const slotRead = await limiter(async () => {
         await this.checkpoint()
-        return this.read(join(shiftDir, slot))
+        return this.read(slotDir)
       })
-
-      const slotDir = join(shiftDir, slot)
 
       if (slotRead.status !== 'ok') {
         // 时段目录在列举后被删、或恰好无权限：按跳过处理，不阻断整次任务
-        const skipped = this.params.types.length
-        this.doneLeaves += skipped
-        this.progress.dirsSkipped += skipped
+        this.doneLeaves += this.levels.length * this.params.types.length
+        this.progress.dirsSkipped +=
+          this.levels.length * this.params.types.length
         continue
       }
 
-      for (const type of slotRead.dirs) typeSeen.add(type)
+      // 第 6 层：时段与类型之间的固定层（利珀的 Fail），没有就是时段本身
+      const beforeType = this.shape.betweenSlotAndType ?? []
+      const typeRoot = beforeType.length
+        ? join(slotDir, ...beforeType)
+        : slotDir
+      let typeRootDirs = slotRead.dirs
 
-      for (const type of this.params.types) {
-        this.doneLeaves += 1
+      if (beforeType.length) {
+        const failRead = await limiter(async () => {
+          await this.checkpoint()
+          return this.read(typeRoot)
+        })
 
-        if (!slotRead.dirs.includes(type)) {
-          this.progress.dirsSkipped += 1
+        if (failRead.status !== 'ok') {
+          this.doneLeaves += this.levels.length * this.params.types.length
+          this.progress.dirsSkipped +=
+            this.levels.length * this.params.types.length
           continue
         }
 
-        this.pendingDetails.push({ dir: join(slotDir, type), machine })
-        this.detailTotal += 1
+        typeRootDirs = failRead.dirs
+      }
+
+      // 第 7 层：等级（利珀的 A/B/C）。没有等级层时只有一个空占位，
+      // 保证下面的循环对三类扫描是同一条代码。
+      const levelDirs: { dir: string; dirs: string[] }[] = []
+
+      if (this.shape.hasLevel) {
+        for (const level of this.levels) {
+          if (!typeRootDirs.includes(level)) {
+            this.doneLeaves += this.params.types.length
+            this.progress.dirsSkipped += this.params.types.length
+            continue
+          }
+
+          const levelDir = join(typeRoot, level)
+          const levelRead = await limiter(async () => {
+            await this.checkpoint()
+            return this.read(levelDir)
+          })
+
+          if (levelRead.status !== 'ok') {
+            this.doneLeaves += this.params.types.length
+            this.progress.dirsSkipped += this.params.types.length
+            continue
+          }
+
+          levelDirs.push({ dir: levelDir, dirs: levelRead.dirs })
+        }
+      } else {
+        levelDirs.push({ dir: slotDir, dirs: typeRootDirs })
+      }
+
+      for (const level of levelDirs) {
+        for (const type of level.dirs) typeSeen.add(type)
+
+        for (const type of this.params.types) {
+          this.doneLeaves += 1
+
+          if (!level.dirs.includes(type)) {
+            this.progress.dirsSkipped += 1
+            continue
+          }
+
+          this.pendingDetails.push({ dir: join(level.dir, type), machine })
+          this.detailTotal += 1
+        }
       }
 
       this.touch(slotDir)
@@ -675,6 +767,8 @@ export class ScanTaskRunner {
         path: [...segments, name].join('/'),
         absolutePath: join(item.dir, name),
         name,
+        // 复制按机台筛选/分组时用这个字段，路径第 0 段对力禧特、利珀是厂区
+        machine: item.machine,
       })
     }
 
@@ -724,7 +818,7 @@ export class ScanTaskRunner {
     where: string,
     detail?: BrokenDetail,
   ): void {
-    const skipped = this.params.slots.length * this.params.types.length
+    const skipped = this.leavesPerBranch
     this.doneLeaves += skipped
     this.progress.dirsSkipped += skipped
 
@@ -732,13 +826,19 @@ export class ScanTaskRunner {
     branch.status = result.status === 'unreachable' ? 'unreachable' : 'missing'
 
     if (result.status === 'unreachable') {
-      branch.message = `「${where}」不可达，请检查网络连接`
+      // 带上原始错误码：现场报「明明能打开」时，ETIMEDOUT 和 EHOSTUNREACH
+      // 的处理方向完全不同，少了这行只能靠猜
+      branch.message = `「${where}」不可达，请检查网络连接${
+        result.code ? `（${result.code}）` : ''
+      }`
     } else if (result.status === 'denied') {
       branch.message = `没有读取「${where}」的权限`
     } else if (detail) {
       branch.message = `「${where}」下没有「${detail.expected}」，实际存在：${summarize(detail.actual)}`
     } else {
-      branch.message = `「${where}」不可访问`
+      branch.message = `「${where}」不可访问${
+        result.code ? `（${result.code}）` : ''
+      }`
     }
 
     this.probedMachines += 1
@@ -759,7 +859,7 @@ export class ScanTaskRunner {
       unreachable?: ScanBranch['unreachableReason']
     },
   ): void {
-    const skipped = this.params.slots.length * this.params.types.length
+    const skipped = this.leavesPerBranch
     this.doneLeaves += skipped
     this.progress.dirsSkipped += skipped
 

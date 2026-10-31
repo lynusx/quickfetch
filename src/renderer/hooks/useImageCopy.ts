@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 
-import type { CopyTask } from '../../shared/ipc'
-import { useCopyStore } from '../stores/copyStore'
-import { useScanStore } from '../stores/scanStore'
+import type { CopyTask, ScanCategory } from '../../shared/ipc'
+import { copyStoreOf } from '../stores/copyStore'
+import { scanStoreOf } from '../stores/scanStore'
 import { selectPreferences, useSettingsStore } from '../stores/settingsStore'
 import { toErrorMessage } from '../utils/error'
 
 interface UseImageCopyProps {
+  category: ScanCategory
   showToast: (
     title: string,
     message: string,
@@ -22,29 +23,37 @@ const isFinal = (status: CopyTask['status'] | undefined): boolean =>
  *
  * 顺序是刻意固定的：先勾机台与分组 → 预检查给出规模 → 再让用户选目录 → 最后启动。
  * 反过来的话（先选目录再发现只复制 3 张）用户会觉得流程很蠢。
+ *
+ * 目标目录是硬前置：没选之前「开始复制」保持禁用，不再由 start 内部弹框兜底。
+ *
+ * 复制源来自对应类别的扫描结果：EL 面板复制 EL 扫到的图，力禧特面板复制
+ * 力禧特扫到的图，两边的 scan/copy store 各自独立。
  */
-export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
-  const task = useScanStore((state) => state.task)
-  const copying = useCopyStore((state) => state.task)
-  const machines = useCopyStore((state) => state.machines)
+export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
+  const scanStore = scanStoreOf(category)
+  const copyStore = copyStoreOf(category)
+
+  const task = scanStore((state) => state.task)
+  const copying = copyStore((state) => state.task)
+  const machines = copyStore((state) => state.machines)
   // 分组方式与重名策略来自设置页，主进程与本进程读的是同一份持久化配置
   const preferences = useSettingsStore(selectPreferences)
   const layout = preferences.copyLayout
   const conflict = preferences.copyConflict
-  const targetDir = useCopyStore((state) => state.targetDir)
-  const targetName = useCopyStore((state) => state.targetName)
-  const preview = useCopyStore((state) => state.preview)
-  const previewing = useCopyStore((state) => state.previewing)
-  const busy = useCopyStore((state) => state.busy)
-  const error = useCopyStore((state) => state.error)
+  const targetDir = copyStore((state) => state.targetDir)
+  const targetName = copyStore((state) => state.targetName)
+  const preview = copyStore((state) => state.preview)
+  const previewing = copyStore((state) => state.previewing)
+  const busy = copyStore((state) => state.busy)
+  const error = copyStore((state) => state.error)
 
-  const setTask = useCopyStore((state) => state.setTask)
-  const patchTask = useCopyStore((state) => state.patchTask)
-  const setPreview = useCopyStore((state) => state.setPreview)
-  const setPreviewing = useCopyStore((state) => state.setPreviewing)
-  const setBusy = useCopyStore((state) => state.setBusy)
-  const setError = useCopyStore((state) => state.setError)
-  const setTarget = useCopyStore((state) => state.setTarget)
+  const setTask = copyStore((state) => state.setTask)
+  const patchTask = copyStore((state) => state.patchTask)
+  const setPreview = copyStore((state) => state.setPreview)
+  const setPreviewing = copyStore((state) => state.setPreviewing)
+  const setBusy = copyStore((state) => state.setBusy)
+  const setError = copyStore((state) => state.setError)
+  const setTarget = copyStore((state) => state.setTarget)
 
   /**
    * 已经弹过终态提示的「任务 id + 终态 + 完成时间」。
@@ -174,7 +183,12 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
     return picked.path
   }, [setTarget, setError])
 
-  /** 开始复制：目录没选就先弹选择框，选完直接启动，不必再点一次 */
+  /**
+   * 开始复制。
+   *
+   * 目标目录必须已经选好 —— 界面上的按钮在这之前是禁用的，这里再拦一道
+   * 并给出明确提示，避免有人从别的入口（比如覆盖确认弹窗）绕过。
+   */
   const handleStart = useCallback(async () => {
     if (!task) {
       showToast('没有可复制的图片', '请先完成一次扫描', 'info')
@@ -185,14 +199,11 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
       return
     }
 
-    let dir = targetDir
+    const dir = targetDir || copying?.progress.targetDir
 
     if (!dir) {
-      const picked = await handlePickTarget()
-
-      if (!picked) return
-
-      dir = picked
+      showToast('还没选目标目录', '请先点「选择目录」指定保存位置', 'info')
+      return
     }
 
     setBusy(true)
@@ -216,10 +227,10 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
     task,
     pickedCount,
     targetDir,
+    copying,
     machines,
     layout,
     conflict,
-    handlePickTarget,
     setBusy,
     setError,
     setTask,
@@ -314,11 +325,24 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
     return Math.round(((copied + failed + skipped) / total) * 100)
   }, [copying])
 
-  // 扫描没结束、或一张图都没有时不能复制
+  /**
+   * 当前生效的目标目录：优先取已开始任务的落盘目录，其次取这次选的。
+   * 复制完成后 targetDir 仍保留，所以「重新复制」不必再选一次。
+   */
+  const activeTargetDir = copying?.progress.targetDir || targetDir
+
+  /**
+   * 扫描没结束、没有图片、没选目标目录时都不能复制。
+   *
+   * 目标目录是硬前置：以前这里漏了它，按钮在未选目录时照样可点，
+   * 点下去才弹选择框 —— 用户会以为是「点开始复制就会自己问」，
+   * 实际上先把目录选好再去点，意图更清楚。
+   */
   const canCopy =
     Boolean(task) &&
     (task?.status === 'completed' || task?.status === 'canceled') &&
     (task?.totalImages ?? 0) > 0 &&
+    Boolean(activeTargetDir) &&
     !busy
 
   const running = copying?.status === 'running' || copying?.status === 'pending'

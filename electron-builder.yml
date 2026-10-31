@@ -32,6 +32,11 @@ files:
 
 asar: true
 
+# 只保留简体中文语言包：Electron 默认带 55 个 locales/*.pak（约 49MB），
+# 本应用只面向中文现场，其余语言一律剔除，缩小免安装包体积。
+electronLanguages:
+  - zh-CN
+
 # 免安装压缩包：解压即用，文件名不带 setup，避免被误当成安装程序
 win:
   target:

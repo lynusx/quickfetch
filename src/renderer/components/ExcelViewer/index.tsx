@@ -5,6 +5,7 @@ import {
   Download,
   FileSpreadsheet,
   Loader2,
+  Table2,
   X,
 } from 'lucide-react'
 
@@ -21,6 +22,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty'
 import { useExcelViewer } from '@/hooks/useExcelViewer'
 import { useExcelStore } from '@/stores/excelStore'
 import { useSheetFilterStore } from '@/stores/sheetFilterStore'
@@ -195,9 +203,15 @@ const ExcelViewer = () => {
                 {sheet ? (
                   <SheetTablePreview sheet={sheet} mode="result" />
                 ) : (
-                  <div className="py-16 text-center text-sm text-muted-foreground">
-                    暂无可显示的数据
-                  </div>
+                  <Empty className="min-h-60">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <Table2 />
+                      </EmptyMedia>
+                      <EmptyTitle>暂无可显示的数据</EmptyTitle>
+                      <EmptyDescription>调整筛选条件后再试</EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
                 )}
               </div>
             </CardContent>

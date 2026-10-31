@@ -13,6 +13,8 @@ export interface DirReadResult {
   /** 文件名，仅收图时使用 */
   files: string[]
   error?: string
+  /** 原始错误码，界面诊断用；miss 时为 ENOENT 这类 */
+  code?: string
   /** 本次读取耗时，供调用方做自适应并发判断 */
   elapsedMs: number
 }
@@ -23,14 +25,66 @@ export const DEFAULT_TIMEOUT_MS = 20_000
 /** 超时后延迟这么久才真正放弃，给底层请求自然结束的机会 */
 const ABANDON_GRACE_MS = 1_500
 
+/**
+ * 明确的网络层错误码。
+ *
+ * 只把这类算「不可达」—— 断网熔断全靠它，宁可漏报也别误报：
+ * 早先把所有非 ENOENT/EACCES 都当成网络问题，结果 Windows 访问
+ * `\\IP`（只有主机、没有共享名）时返回的 EINVAL 被算成断网，
+ * 现场就出现「路径明明能打开，却提示没接专用内网」。
+ */
+const NETWORK_CODES = new Set([
+  'ETIMEDOUT',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ECONNABORTED',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'ENETDOWN',
+  'EHOSTDOWN',
+  'ENETRESET',
+  'ENOTCONN',
+  'ENONET',
+  'EADDRNOTAVAIL',
+  'EPIPE',
+  'EIO',
+  'ESTALE',
+  'ENODEV',
+  'ENXIO',
+  'EAI_AGAIN',
+])
+
+/** 路径本身就是坏的（共享名写错、把文件当目录读），跟网络无关 */
+const PATH_CODES = new Set([
+  'ENOENT',
+  'ENOTDIR',
+  'EINVAL',
+  'ENAMETOOLONG',
+  'EISDIR',
+  'EBADF',
+  'EBUSY',
+])
+
+/** 从异常里取错误码，统一给状态判定和界面诊断用 */
+const codeOf = (error: unknown): string | undefined =>
+  (error as NodeJS.ErrnoException | undefined)?.code
+
+/**
+ * 错误码 → 状态。
+ *
+ * 只有明确列出的网络错误才算「不可达」。其余一律当「这个目录用不了」：
+ * 断网的表现里，能让人误判成「路径不对」的极少，反过来把路径问题
+ * 当成断网的却很常见（UNC 根不可枚举的 EINVAL 就是典型），
+ * 一误判就会熔断整个任务并提示「请接专用内网」，比漏报难查得多。
+ */
 const toStatus = (error: unknown): DirReadStatus => {
-  const code = (error as NodeJS.ErrnoException | undefined)?.code
+  const code = codeOf(error)
 
-  if (code === 'ENOENT') return 'missing'
+  if (code && PATH_CODES.has(code)) return 'missing'
   if (code === 'EACCES' || code === 'EPERM') return 'denied'
+  if (code && NETWORK_CODES.has(code)) return 'unreachable'
 
-  // 网络盘断开时的典型错误：超时、主机不可达、连接被重置、I/O 错误
-  return 'unreachable'
+  return 'missing'
 }
 
 /** 判断是否为「网络链路问题」而非「目录本身不存在」，用于断连熔断 */
@@ -44,7 +98,8 @@ const emptyResult = (
   status: DirReadStatus,
   elapsedMs: number,
   error?: string,
-): DirReadResult => ({ status, dirs: [], files: [], error, elapsedMs })
+  code?: string,
+): DirReadResult => ({ status, dirs: [], files: [], error, code, elapsedMs })
 
 export interface ReadOptions {
   /** 单次读取超时，默认 20 秒 */
@@ -119,7 +174,12 @@ export const readDirSafe = async (
       ])
     }
 
-    return emptyResult(status, elapsedMs, (error as Error)?.message)
+    return emptyResult(
+      status,
+      elapsedMs,
+      (error as Error)?.message,
+      codeOf(error),
+    )
   } finally {
     if (timer) clearTimeout(timer)
   }

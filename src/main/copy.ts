@@ -99,14 +99,16 @@ const segmentsOf = (image: ScannedImage): string[] =>
   image.path.split('/').filter(Boolean)
 
 /**
- * 从图片的相对路径里取出机台与类型。
+ * 从图片上取机台与类型。
  *
- * 结构是「机台/EL/日期/班次/时段/类型/文件名」，所以机台取第 0 段、
- * 类型取倒数第 2 段。路径分隔符统一为 /（扫描时就写入的），
- * 历史记录里的旧数据也是这个格式。
+ * 机台优先用扫描时写进去的 machine 字段 —— 力禧特、利珀的 path 第 0 段是厂区，
+ * 直接按段切会把整个厂区当成一台机器。老历史记录没有这个字段，退回第 0 段
+ * （那时的记录全是 EL 的，第 0 段就是机台目录名）。
+ *
+ * 类型取倒数第 2 段，三类扫描都一样。
  */
 export const machineOf = (image: ScannedImage): string =>
-  segmentsOf(image)[0] ?? ''
+  image.machine ?? segmentsOf(image)[0] ?? ''
 
 export const typeOf = (image: ScannedImage): string => {
   const segments = segmentsOf(image)

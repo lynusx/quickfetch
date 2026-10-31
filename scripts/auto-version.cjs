@@ -116,6 +116,13 @@ if (isRewrite(message)) {
   process.exit(0)
 }
 
+// 手工指定过版本号（比如打包前先提到 1.13.0），提交时用它跳过递增，
+// 否则这批改动提交后又会被加一级，跟已发出的包对不上。
+if (process.env.SKIP_VERSION === '1') {
+  console.log(`版本号保持 ${current}（SKIP_VERSION=1）`)
+  process.exit(0)
+}
+
 const [header = ''] = message.split('\n')
 const typeMatch = /^([a-z]+)(?:\([^)]*\))?(!)?:/.exec(header.trim())
 const type = typeMatch?.[1] ?? ''

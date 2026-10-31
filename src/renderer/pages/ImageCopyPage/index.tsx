@@ -1,4 +1,3 @@
-import { useCallback } from 'react'
 import {
   CircleAlert,
   Download,
@@ -16,22 +15,24 @@ import ScanSetupPanel from '@/components/ScanSetupPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
+import { useHistoryRestore } from '@/hooks/useHistoryRestore'
 import { useScanTask } from '@/hooks/useScanTask'
 import { useToast } from '@/hooks/useToast'
-import { useCopyStore } from '@/stores/copyStore'
 import { useImageFilterStore } from '@/stores/imageFilterStore'
-import { useScanStore } from '@/stores/scanStore'
+import { useElScanStore } from '@/stores/scanStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import type {
-  ScanBranch,
-  ScanHistoryItem,
-  ScanTaskStatus,
-} from '../../../shared/ipc'
+import { useUserPreferencesStore } from '@/stores/userPreferencesStore'
+import type { ScanBranch, ScanTaskStatus } from '../../../shared/ipc'
 import { formatDuration, formatEta } from '@/utils/common'
-import { toErrorMessage } from '@/utils/error'
 import { DEFAULT_HISTORY_LIMIT } from '../../../shared/historyLimit'
 import { cn } from '@/lib/utils'
 
@@ -47,6 +48,7 @@ const STATUS_META: Record<
   paused: { label: '已暂停', variant: 'outline' },
   completed: { label: '已完成', variant: 'default' },
   canceled: { label: '已取消', variant: 'outline' },
+  interrupted: { label: '已中断', variant: 'outline' },
   failed: { label: '失败', variant: 'destructive' },
 }
 
@@ -98,79 +100,36 @@ const ImageCopyPage = () => {
   const settingsError = useSettingsStore((state) => state.error)
   const settings = useSettingsStore((state) => state.settings)
   const saveHistoryLimit = useSettingsStore((state) => state.saveHistoryLimit)
-  const scanError = useScanStore((state) => state.error)
+  const scanError = useElScanStore((state) => state.error)
   const historyLimit = settings?.historyLimit ?? DEFAULT_HISTORY_LIMIT
 
-  /**
-   * 载入历史任务：把参数回填到筛选面板，再替换当前任务快照。
-   *
-   * 参数必须回填 —— 否则界面上显示的是「今天 / 白班」，结果却是上周的，
-   * 用户点「开始扫描」时很容易按错误参数重跑。
-   */
-  const restoreHistory = useCallback(
-    async (item: ScanHistoryItem) => {
-      try {
-        const loaded = await window.electronAPI.loadScanHistory(item.id)
-
-        if (!loaded) {
-          showToast(
-            '记录已失效',
-            '该历史记录的结果文件已不存在，请重新扫描',
-            'error',
-          )
-          return
-        }
-
-        const filters = useImageFilterStore.getState()
-
-        // 厂区跟着历史里的机台走：否则机台已选中却不在当前厂区的列表里，
-        // 用户只看到「机台 3/10」却找不到高亮的那几个
-        const plants = new Set(
-          item.params.machines
-            .map(
-              (name) =>
-                settings?.machines.find((machine) => machine.name === name)
-                  ?.plant,
-            )
-            .filter(Boolean),
-        )
-
-        if (plants.size === 1) filters.setPlant([...plants][0] as string)
-
-        filters.setSelectedMachines(item.params.machines)
-        filters.setDate(item.params.date)
-        filters.setShift(item.params.shift)
-        filters.setSlots(item.params.slots)
-        filters.setTypes(item.params.types)
-
-        useCopyStore.getState().reset()
-        useScanStore.getState().setTask(loaded)
-        showToast(
-          '已载入历史记录',
-          `${item.totalImages} 张图片，可直接查看或复制`,
-          'info',
-        )
-      } catch (cause) {
-        showToast(
-          '载入失败',
-          toErrorMessage(cause, '载入历史记录失败'),
-          'error',
-        )
-      }
-    },
-    [showToast, settings],
-  )
+  // 三类扫描共用同一套「回填参数 + 载入快照」动作，EL 的厂区推导也在里面
+  const restoreHistory = useHistoryRestore('el')
 
   const status = task ? STATUS_META[task.status] : null
   const configured = Boolean(settings?.rootPath)
   // 参数齐了才让点：机台/时段/类型任一为空都会让主进程直接报错
   const filters = useImageFilterStore()
+  const ngTypes = useUserPreferencesStore((state) => state.ngTypes)
   const ready =
     filters.selectedMachines.length > 0 &&
     filters.slots.length > 0 &&
     filters.types.length > 0 &&
     Boolean(filters.date)
   const canStart = !busy && !creating && ready && !other
+  // 类型默认是空的，缺它时要说清楚是「还没添加」还是「添加了没勾」
+  const missing = configured
+    ? [
+        filters.selectedMachines.length ? '' : '机台',
+        filters.date ? '' : '日期',
+        filters.slots.length ? '' : '时段',
+        filters.types.length
+          ? ''
+          : ngTypes.length
+            ? '类型'
+            : '类型（点「编辑」添加）',
+      ].filter(Boolean)
+    : []
   const progressValue = task?.progress.percent ?? 0
   const branches = task?.branches ?? []
   const abnormal = branches.filter(
@@ -202,15 +161,23 @@ const ImageCopyPage = () => {
 
         <div className="flex flex-col gap-6">
           <Card>
+            <CardHeader>
+              <CardTitle>扫描进度</CardTitle>
+              <CardDescription>
+                {task
+                  ? task.status === 'interrupted'
+                    ? '上次退出时保存，点「开始扫描」可按原参数重扫'
+                    : task.progress.phase === 'done'
+                      ? STATUS_META[task.status].label
+                      : PHASE_LABEL[task.progress.phase]
+                  : '尚未开始扫描'}
+              </CardDescription>
+            </CardHeader>
             <CardContent className="flex flex-col gap-5">
               <div className="flex flex-col gap-2">
                 <div className="flex items-baseline justify-between text-sm">
-                  <span className="font-medium">
-                    {task
-                      ? task.progress.phase === 'done'
-                        ? STATUS_META[task.status].label
-                        : PHASE_LABEL[task.progress.phase]
-                      : '未开始'}
+                  <span className="font-medium text-muted-foreground">
+                    完成进度
                   </span>
                   <span className="tabular-nums text-muted-foreground">
                     {progressValue}%
@@ -305,6 +272,12 @@ const ImageCopyPage = () => {
                   重扫一遍
                 </Button>
               </div>
+
+              {!ready && !busy && missing.length ? (
+                <p className="text-xs text-muted-foreground">
+                  还需要选择{missing.join('、')}，选齐后才能开始扫描
+                </p>
+              ) : null}
 
               {other && otherLabel && (
                 <Alert>
@@ -403,11 +376,12 @@ const ImageCopyPage = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <CopyPanel showToast={showToast} />
+              <CopyPanel category="el" showToast={showToast} />
             </CardContent>
           </Card>
 
           <HistoryPanel
+            category="el"
             onRestore={(item) => void restoreHistory(item)}
             showToast={showToast}
             activeId={task?.id ?? null}

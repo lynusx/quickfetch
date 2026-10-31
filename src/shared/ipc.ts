@@ -34,18 +34,29 @@ export interface MachineInfo {
  *
  * - el：单一根目录 + 固定工序层 EL，机台是根目录下的子目录
  * - lxt：每台机器一个 IP，入口是一堆 .lnk 快捷方式，第二层是 el / SaveImages
+ * - pl：同样每台机器一个 IP、同样从 .lnk 取地址，但第二层是「机台标识」目录
+ *   （名字不固定，按线别名探测），再往下多出机台名与 Fail/等级两层
  */
-export type ScanCategory = 'el' | 'lxt'
+export type ScanCategory = 'el' | 'lxt' | 'pl'
 
 export const SCAN_CATEGORY_LABEL: Record<ScanCategory, string> = {
   el: 'EL',
   lxt: '力禧特',
+  pl: '利珀',
 }
 
 /** 力禧特第二层的两个候选共享名，探测顺序即优先级 */
 export const LXT_SHARES = ['el', 'SaveImages'] as const
 
 export type LxtShare = (typeof LXT_SHARES)[number]
+
+/** 利珀路径里两段固定目录名，写死在协议里，只有拼路径的地方用得到 */
+export const PL_FIXED = { matting: 'Matting', fail: 'Fail' } as const
+
+/** 利珀的缺陷等级，全部可选 */
+export const PL_LEVELS = ['A', 'B', 'C'] as const
+
+export type PlLevel = (typeof PL_LEVELS)[number]
 
 /** 偏好里能调数值的四项，用来标注「被环境变量接管」 */
 export type PreferenceKey =
@@ -84,6 +95,8 @@ export interface AppSettings {
   preferences: AppPreferences
   /** 力禧特配置；未配置过时为默认空值 */
   lxt: LxtSettings
+  /** 利珀配置；未配置过时为默认空值 */
+  pl: PlSettings
   /**
    * 被环境变量接管的偏好项。
    *
@@ -136,7 +149,7 @@ export interface LxtSettings {
 }
 
 /** 识别入口后回给界面的结果，顺带带上完整配置 */
-export interface LxtSetupResult {
+export interface EntrySetupResult {
   settings: AppSettings
   /** 新增的机台数 */
   added: number
@@ -144,6 +157,44 @@ export interface LxtSetupResult {
   removed: number
   /** 目标地址变化、share 缓存被清掉的机台数 */
   relocated: number
+}
+
+export type LxtSetupResult = EntrySetupResult
+export type PlSetupResult = EntrySetupResult
+
+/**
+ * 利珀的一台机台：入口里的一个 .lnk 解析出来的结果。
+ *
+ * 与力禧特的差别只在第二层的含义：力禧特是固定的 el / SaveImages 二选一，
+ * 利珀是「机台标识」目录，名字不固定（pl-6a、东区pl-10b、pl-03c），
+ * 只能拿线别名去探测，探到之后缓存进配置。
+ */
+export interface PlMachine {
+  /** 厂区标签，取自入口目录下的子文件夹名，如 东区 */
+  plant: Plant
+  /** .lnk 文件名（去扩展名），如 6B、LX2 */
+  name: string
+  /** 复合键「厂区/机台」；东西区都有同名线别，必须带厂区才唯一 */
+  key: string
+  /** .lnk 解析出的目标，形如 \\10.108.9.153 */
+  host: string
+  /**
+   * 该机台实际使用的标识目录名，第一次扫描时按线别名探测并缓存。
+   * 为 null 表示还没探过，下次扫描该机台时补探。
+   */
+  share: string | null
+  /** 入口里已找不到这个 .lnk；不删除是因为历史记录与复制分组还引用着它 */
+  stale: boolean
+}
+
+export interface PlSettings {
+  /** 利珀入口根目录，其下每个含 .lnk 的子文件夹算一个厂区 */
+  entryRoot: string | null
+  machines: PlMachine[]
+  /** 最近一次识别时被跳过的 .lnk 清单，供界面展示 */
+  skipped: LxtSkippedLink[]
+  /** 最近一次识别时间，ISO 字符串 */
+  updatedAt: string | null
 }
 
 export interface ScanTaskParams {
@@ -161,30 +212,51 @@ export interface ScanTaskParams {
   slots: string[]
   /** 不良类型目录名，如 NG_脏污_B */
   types: string[]
+  /**
+   * 缺陷等级，仅利珀使用（路径里的 A/B/C 层）。
+   * 其余类别的路径没有这一层，留空即可。
+   */
+  levels?: string[]
 }
 
 export interface ScannedImage {
   /**
    * 结果路径，统一使用 / 分隔（用于 source.txt 与日志）。
    *
-   * - EL：相对 DC 根目录，形如 A03-B/EL/20261030/白班/8/NG_脏污_B/x.jpg，
-   *   复制分组取第 0 段当机台
+   * - EL：相对 DC 根目录，形如 A03-B/EL/20261030/白班/8/NG_脏污_B/x.jpg
    * - 力禧特：每台机器一个 IP，没有共同根，所以按「厂区/机台/日期/…」
-   *   拼成展示路径，第 0 段是厂区、第 1 段是机台
+   *   拼成展示路径
+   * - 利珀：同理按「厂区/机台/日期/机台名/班次/时段/等级/类型」拼
    */
   path: string
   /** 真实绝对路径，仅用于主进程复制，不展示 */
   absolutePath: string
   name: string
+  /**
+   * 机台标识，与 ScanBranch.machine 完全一致。
+   *
+   * 复制时要按机台筛选/分组，而 path 的第 0 段对力禧特、利珀来说是厂区，
+   * 直接从 path 里切会切错；老历史记录没有这个字段，读出来时回落到第 0 段。
+   */
+  machine?: string
 }
 
 /** 单个机台分支的执行结果，界面诊断面板的数据来源 */
 export interface ScanBranch {
-  /** 机台标识。EL 是机台目录名；力禧特是「厂区/机台」复合键 */
+  /** 机台标识。EL 是机台目录名；力禧特、利珀是「厂区/机台」复合键 */
   machine: string
   status: 'hit' | 'empty' | 'missing' | 'unreachable' | 'skipped'
   /** 断链发生在哪一层，用于精确提示 */
-  brokenAt?: 'EL' | '共享名' | '日期' | '班次' | '时段' | '类型'
+  brokenAt?:
+    | 'EL'
+    | '共享名'
+    | '机台标识'
+    | '日期'
+    | '机台名'
+    | '班次'
+    | '时段'
+    | '等级'
+    | '类型'
   /**
    * 不可达的具体原因。仅 unreachable 时有值，界面按它给出不同提示：
    * 接入专用内网、共享名变了、还是没权限。
@@ -207,6 +279,13 @@ export type ScanTaskStatus =
   | 'completed'
   | 'canceled'
   | 'failed'
+  /**
+   * 程序退出时任务还没跑完，主进程在退出前把当前结果抢救下来。
+   *
+   * 与 canceled 区分开：那个是用户主动点的「取消」，这个是「被关掉了」。
+   * 只出现在历史记录里，运行中的任务不会进入这个状态。
+   */
+  | 'interrupted'
 
 export type ScanPhase = 'probe' | 'collect' | 'done'
 
@@ -315,7 +394,7 @@ export interface AppPreferences {
   /** 每批复制的文件数 */
   copyBatchSize: number
   /**
-   * 力禧特单独一组：45 台机器各走一个 IP、又在另一张专用内网，
+   * 力禧特、利珀单独一组：每台机器一个 IP、又都在另一张专用内网，
    * 跟 EL 共用一套档位时总有一边在将就。
    */
   lxtScanConcurrency: number
@@ -467,6 +546,14 @@ export interface ElectronAPI {
   setupLxtRoot: (entryRoot: string) => Promise<LxtSetupResult>
   /** 按当前入口重新识别，与已有配置增量合并 */
   refreshLxtMachines: () => Promise<LxtSetupResult>
+
+  /**
+   * 设置利珀入口根目录并解析其中的 .lnk。
+   * 与力禧特一样只读入口目录，不碰机台网络 —— 标识目录留到扫描时再探。
+   */
+  setupPlRoot: (entryRoot: string) => Promise<PlSetupResult>
+  /** 按当前入口重新识别利珀机台 */
+  refreshPlMachines: () => Promise<PlSetupResult>
 
   /** 创建扫描任务（状态 pending），创建瞬间即可拿到进度快照 */
   createScanTask: (params: ScanTaskParams) => Promise<ScanTask>

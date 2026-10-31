@@ -40,24 +40,27 @@ const pick = (env: keyof typeof PREFERENCE_ENV, fallback: number): number =>
 /**
  * 按类别取扫描档位。
  *
- * 力禧特 45 台机器各走一个 IP、又在另一张专用内网上，跟 EL 的十台
- * 共享一个根完全不是一回事，所以并发与批量各存一份；复制档位两类共用。
+ * 力禧特、利珀都是「每台机器一个 IP、走另一张专用内网」，跟 EL 的十台
+ * 共享一个根完全不是一回事，所以它们共用一组更激进的档位；
+ * 复制档位各类共用。
  */
 export const loadFrom = (
   preferences: AppPreferences,
   category: ScanCategory = 'el',
-): LoadProfile => ({
-  readConcurrency:
-    category === 'lxt'
+): LoadProfile => {
+  const perIp = category !== 'el'
+
+  return {
+    readConcurrency: perIp
       ? pick('lxtScanConcurrency', preferences.lxtScanConcurrency)
       : pick('scanConcurrency', preferences.scanConcurrency),
-  machineBatchSize:
-    category === 'lxt'
+    machineBatchSize: perIp
       ? pick('lxtScanBatchSize', preferences.lxtScanBatchSize)
       : pick('scanBatchSize', preferences.scanBatchSize),
-  copyConcurrency: pick('copyConcurrency', preferences.copyConcurrency),
-  copyBatchSize: pick('copyBatchSize', preferences.copyBatchSize),
-})
+    copyConcurrency: pick('copyConcurrency', preferences.copyConcurrency),
+    copyBatchSize: pick('copyBatchSize', preferences.copyBatchSize),
+  }
+}
 
 /** 没有配置时的兜底档位，与 DEFAULT_PREFERENCES 一致 */
 export const defaultLoad = (): LoadProfile =>

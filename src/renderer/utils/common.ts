@@ -86,6 +86,26 @@ export const getAllAvailableTimes = (shift: '白班' | '夜班') => {
   }
 }
 
+/**
+ * 补零版时段：利珀的时段目录是 08、09、00 这种两位写法。
+ *
+ * 只影响展示和请求用的取值，不动 getShiftInfo 那套跨天判断 ——
+ * 那里要拿真实时刻做比较，补零反而容易出错。
+ */
+const padHour = (hour: number): string => String(hour).padStart(2, '0')
+
+export const getAllPaddedTimes = (shift: '白班' | '夜班') => {
+  const hours =
+    shift === '白班'
+      ? Array.from({ length: 12 }, (_, i) => 8 + i)
+      : [
+          ...Array.from({ length: 4 }, (_, i) => 20 + i),
+          ...Array.from({ length: 8 }, (_, i) => i),
+        ]
+
+  return hours.map(padHour)
+}
+
 export const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 Bytes'
   const k = 1024

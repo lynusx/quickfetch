@@ -7,6 +7,8 @@ import type {
   AppSettings,
   LxtSettings,
   LxtSetupResult,
+  PlSettings,
+  PlSetupResult,
   PreferenceKey,
 } from '../../shared/ipc'
 import { toErrorMessage } from '../utils/error'
@@ -30,6 +32,10 @@ interface SettingsAction {
   setupLxt: (entryRoot: string) => Promise<LxtSetupResult | null>
   /** 按当前入口重新识别，与已有配置增量合并 */
   refreshLxt: () => Promise<LxtSetupResult | null>
+  /** 设置利珀入口并解析其中的 .lnk */
+  setupPl: (entryRoot: string) => Promise<PlSetupResult | null>
+  /** 按当前入口重新识别利珀机台 */
+  refreshPl: () => Promise<PlSetupResult | null>
   clearError: () => void
 }
 
@@ -43,6 +49,15 @@ export const selectLxt = (state: {
   settings: AppSettings | null
 }): LxtSettings =>
   state.settings?.lxt ?? {
+    entryRoot: null,
+    machines: [],
+    skipped: [],
+    updatedAt: null,
+  }
+
+/** 利珀配置，未读回配置时给空值 */
+export const selectPl = (state: { settings: AppSettings | null }): PlSettings =>
+  state.settings?.pl ?? {
     entryRoot: null,
     machines: [],
     skipped: [],
@@ -150,6 +165,34 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
       set({ saving: true, error: null })
       try {
         const result = await window.electronAPI.refreshLxtMachines()
+        set({ settings: result.settings })
+        return result
+      } catch (error) {
+        set({ error: toErrorMessage(error, '重新识别入口失败') })
+        return null
+      } finally {
+        set({ saving: false })
+      }
+    },
+
+    setupPl: async (entryRoot) => {
+      set({ saving: true, error: null })
+      try {
+        const result = await window.electronAPI.setupPlRoot(entryRoot)
+        set({ settings: result.settings })
+        return result
+      } catch (error) {
+        set({ error: toErrorMessage(error, '识别利珀入口失败') })
+        return null
+      } finally {
+        set({ saving: false })
+      }
+    },
+
+    refreshPl: async () => {
+      set({ saving: true, error: null })
+      try {
+        const result = await window.electronAPI.refreshPlMachines()
         set({ settings: result.settings })
         return result
       } catch (error) {

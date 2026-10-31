@@ -3,9 +3,16 @@ import { CircleAlert } from 'lucide-react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   selectEnvOverrides,
   selectPreferences,
@@ -42,39 +49,6 @@ const CONFLICT_HINT: Record<CopyConflictPolicy, string> = {
 
 const LAYOUTS: CopyLayout[] = ['flat', 'machine', 'type', 'machine-type']
 const CONFLICTS: CopyConflictPolicy[] = ['rename', 'skip', 'overwrite']
-
-/** 选项卡片：选中态只靠边框和底色，不用额外的勾选图标 */
-const OptionCard = ({
-  active,
-  danger,
-  title,
-  hint,
-  onClick,
-}: {
-  active: boolean
-  danger?: boolean
-  title: string
-  hint: string
-  onClick: () => void
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className={cn(
-      'flex flex-col gap-0.5 rounded-lg border px-3 py-2 text-left transition-colors',
-      active
-        ? danger
-          ? 'border-destructive bg-destructive/5'
-          : 'border-primary bg-primary/5'
-        : 'hover:bg-muted/60',
-    )}
-  >
-    <span className="text-sm font-medium">{title}</span>
-    <span className="truncate font-mono text-[11px] text-muted-foreground">
-      {hint}
-    </span>
-  </button>
-)
 
 interface NumberRowProps {
   label: string
@@ -192,47 +166,73 @@ const SettingsPage = () => {
         <h2 className="text-sm font-medium">复制到本地</h2>
 
         <Card>
-          <CardContent className="flex flex-col gap-2">
-            <div className="flex items-baseline justify-between">
-              <span className="text-sm">分组方式</span>
-              <span className="text-xs text-muted-foreground">
-                目标目录下建几层文件夹
-              </span>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
+          <CardHeader>
+            <CardTitle>分组方式</CardTitle>
+            <CardDescription>目标目录下建几层文件夹</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              value={preferences.copyLayout}
+              onValueChange={(value) =>
+                value && patch({ copyLayout: value as CopyLayout })
+              }
+              className="grid w-full gap-2 sm:grid-cols-2"
+            >
               {LAYOUTS.map((value) => (
-                <OptionCard
+                <ToggleGroupItem
                   key={value}
-                  active={preferences.copyLayout === value}
-                  title={COPY_LAYOUT_LABEL[value]}
-                  hint={LAYOUT_SAMPLE[value]}
-                  onClick={() => patch({ copyLayout: value })}
-                />
+                  value={value}
+                  className="flex h-auto w-full flex-col items-start gap-0.5 py-2"
+                >
+                  <span className="text-sm font-medium">
+                    {COPY_LAYOUT_LABEL[value]}
+                  </span>
+                  <span className="truncate font-mono text-[11px] text-muted-foreground">
+                    {LAYOUT_SAMPLE[value]}
+                  </span>
+                </ToggleGroupItem>
               ))}
-            </div>
+            </ToggleGroup>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="flex flex-col gap-2">
-            <div className="flex items-baseline justify-between">
-              <span className="text-sm">重名文件</span>
-              <span className="text-xs text-muted-foreground">
-                目标里已有同名文件时
-              </span>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-3">
+          <CardHeader>
+            <CardTitle>重名文件</CardTitle>
+            <CardDescription>目标里已有同名文件时</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              value={preferences.copyConflict}
+              onValueChange={(value) =>
+                value && patch({ copyConflict: value as CopyConflictPolicy })
+              }
+              className="grid w-full gap-2 sm:grid-cols-3"
+            >
               {CONFLICTS.map((value) => (
-                <OptionCard
+                <ToggleGroupItem
                   key={value}
-                  active={preferences.copyConflict === value}
-                  danger={value === 'overwrite'}
-                  title={COPY_CONFLICT_LABEL[value]}
-                  hint={CONFLICT_HINT[value]}
-                  onClick={() => patch({ copyConflict: value })}
-                />
+                  value={value}
+                  className={cn(
+                    'flex h-auto w-full flex-col items-start gap-0.5 py-2',
+                    value === 'overwrite' &&
+                      preferences.copyConflict === value &&
+                      'bg-destructive/5 text-destructive data-[state=on]:bg-destructive/5',
+                  )}
+                >
+                  <span className="text-sm font-medium">
+                    {COPY_CONFLICT_LABEL[value]}
+                  </span>
+                  <span className="truncate font-mono text-[11px] text-muted-foreground">
+                    {CONFLICT_HINT[value]}
+                  </span>
+                </ToggleGroupItem>
               ))}
-            </div>
+            </ToggleGroup>
           </CardContent>
         </Card>
       </section>

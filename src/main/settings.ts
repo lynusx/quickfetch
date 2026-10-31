@@ -9,6 +9,8 @@ import type {
   LxtSettings,
   MachineInfo,
   Plant,
+  PlMachine,
+  PlSettings,
 } from '../shared/ipc'
 
 import {
@@ -22,6 +24,7 @@ import {
 } from '../shared/historyLimit'
 import { envOverriddenKeys } from './load'
 import { lxtKey } from './lxt'
+import { plKey } from './pl'
 import { toFsPath } from './pathx'
 
 const SETTINGS_VERSION = 1 as const
@@ -39,6 +42,7 @@ const defaultSettings = (): AppSettings => ({
   historyLimit: DEFAULT_HISTORY_LIMIT,
   preferences: { ...DEFAULT_PREFERENCES },
   lxt: { entryRoot: null, machines: [], skipped: [], updatedAt: null },
+  pl: { entryRoot: null, machines: [], skipped: [], updatedAt: null },
   envOverrides: [],
 })
 
@@ -181,6 +185,64 @@ export const normalizeLxt = (raw: unknown): LxtSettings => {
   }
 }
 
+/**
+ * 归一化利珀配置。
+ *
+ * 与力禧特一样按「厂区/机台」重算 key；share 是探测出来的标识目录名，
+ * 没有固定候选，这里只做字符串校验，认不出就当没探过。
+ */
+export const normalizePl = (raw: unknown): PlSettings => {
+  if (!isRecord(raw)) {
+    return { entryRoot: null, machines: [], skipped: [], updatedAt: null }
+  }
+
+  const machines: PlMachine[] = []
+  const seen = new Set<string>()
+
+  for (const item of Array.isArray(raw.machines) ? raw.machines : []) {
+    if (!isRecord(item)) continue
+
+    const plant = typeof item.plant === 'string' ? item.plant : ''
+    const name = typeof item.name === 'string' ? item.name : ''
+    const host = typeof item.host === 'string' ? item.host : ''
+
+    if (!plant || !name || !host) continue
+
+    const key = plKey(plant, name)
+    if (seen.has(key)) continue
+
+    seen.add(key)
+    machines.push({
+      plant,
+      name,
+      key,
+      host,
+      share:
+        typeof item.share === 'string' && item.share.trim() ? item.share : null,
+      stale: item.stale === true,
+    })
+  }
+
+  const skipped = (Array.isArray(raw.skipped) ? raw.skipped : [])
+    .filter(isRecord)
+    .map((item) => ({
+      plant: typeof item.plant === 'string' ? item.plant : '',
+      file: typeof item.file === 'string' ? item.file : '',
+      reason: typeof item.reason === 'string' ? item.reason : '',
+    }))
+    .filter((item) => item.file)
+
+  return {
+    entryRoot:
+      typeof raw.entryRoot === 'string' && raw.entryRoot.trim()
+        ? raw.entryRoot
+        : null,
+    machines,
+    skipped,
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : null,
+  }
+}
+
 /** 机台目录名首字母决定厂区：A 为东区、B 为西区 */
 const plantOf = (name: string): Plant | null => {
   const head = name[0]?.toUpperCase()
@@ -264,6 +326,7 @@ export const readSettings = async (): Promise<AppSettings> => {
       // 同理：1.10.x 及更早的配置没有 preferences
       preferences: normalizePreferences(parsed.preferences),
       lxt: normalizeLxt(parsed.lxt),
+      pl: normalizePl(parsed.pl),
       // 运行期字段，不落盘，每次读的时候按当前环境算
       envOverrides: envOverriddenKeys(),
     }
@@ -303,6 +366,7 @@ export const saveRootPath = async (rootPath: string): Promise<AppSettings> => {
     historyLimit: current.historyLimit,
     preferences: current.preferences,
     lxt: current.lxt,
+    pl: current.pl,
     envOverrides: current.envOverrides,
   }
 
@@ -402,5 +466,50 @@ export const rememberLxtShare = async (
     await saveLxt({ ...current.lxt, machines })
   } catch (error) {
     console.error('保存共享名探测结果失败:', error)
+  }
+}
+
+/** 只替换利珀那段配置，其余字段原样保留 */
+export const savePl = async (pl: PlSettings): Promise<AppSettings> => {
+  const current = await readSettings()
+  const settings: AppSettings = {
+    ...current,
+    pl: normalizePl(pl),
+    updatedAt: new Date().toISOString(),
+  }
+
+  await writeSettings(settings)
+
+  return settings
+}
+
+/**
+ * 回写单台利珀机台探测到的标识目录。
+ *
+ * 与力禧特同理：边扫边写，中途崩了不该把已探测的结果全丢掉；
+ * 写失败只记日志，探测缓存丢失只是下次多探一次。
+ */
+export const rememberPlShare = async (
+  key: string,
+  share: string,
+  host: string,
+): Promise<void> => {
+  try {
+    const current = await readSettings()
+    const index = current.pl.machines.findIndex((item) => item.key === key)
+
+    if (index < 0) return
+
+    const machine = current.pl.machines[index]
+
+    // 期间入口被重新识别、IP 变了，这次探测结果已经过期，不能写回去
+    if (machine.host !== host || machine.share === share) return
+
+    const machines = [...current.pl.machines]
+    machines[index] = { ...machine, share }
+
+    await savePl({ ...current.pl, machines })
+  } catch (error) {
+    console.error('保存利珀标识目录探测结果失败:', error)
   }
 }

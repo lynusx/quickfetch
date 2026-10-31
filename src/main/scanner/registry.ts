@@ -26,7 +26,10 @@ const broadcast = (task: ScanTask): void => {
 }
 
 const isFinished = (status: string): boolean =>
-  status === 'completed' || status === 'canceled' || status === 'failed'
+  status === 'completed' ||
+  status === 'canceled' ||
+  status === 'failed' ||
+  status === 'interrupted'
 
 /**
  * 任务结束时把结果写入历史。
@@ -100,3 +103,39 @@ export const getTask = (id: string): ScanTask | null =>
 
 export const getRunner = (id: string): ScanTaskRunner | null =>
   tasks.get(id) ?? null
+
+/**
+ * 退出前抢救还没跑完的任务。
+ *
+ * 现场扫描动辄几分钟，用户很容易中途关掉软件（下班、断网等），
+ * 不救的话这一次的结果等于没发生过 —— 已经读到的几千张图凭空消失。
+ * 这里把当前快照按 interrupted 落盘，重启后在历史里能看到「扫到哪儿了」，
+ * 参数也一并保留，点一下就能接着扫。
+ *
+ * 不写 persisted 集合：任务如果还来得及跑完，persistWhenSettled 会
+ * 用正常终态覆盖同一条记录，比这里的中途快照更准。
+ */
+export const persistUnfinished = async (): Promise<void> => {
+  const pending = [...tasks.values()].filter((runner) => {
+    const status = runner.getStatus()
+
+    // 待开始的任务一个目录都没读过，存下来只是一条空记录
+    return status !== 'pending' && !isFinished(status)
+  })
+
+  if (!pending.length) return
+
+  const limit = (await readSettings().catch(() => null))?.historyLimit
+
+  for (const runner of pending) {
+    try {
+      await saveRecord(runner.snapshot(), runner.getImages(), {
+        interrupted: true,
+      })
+    } catch (error) {
+      console.error(`保存中断的扫描任务失败(${runner.id}):`, error)
+    }
+  }
+
+  if (limit) await trimRecords(limit).catch(() => undefined)
+}

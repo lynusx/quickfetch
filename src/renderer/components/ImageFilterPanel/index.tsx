@@ -9,6 +9,7 @@ import {
   X,
 } from 'lucide-react'
 
+import { ChoiceList, ChoiceRadio } from '@/components/ChoiceList'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -34,7 +35,6 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from '@/components/ui/input-group'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useImageFilterStore } from '@/stores/imageFilterStore'
 import { useUserPreferencesStore } from '@/stores/userPreferencesStore'
 import { getAllAvailableTimes, getShiftInfo } from '@/utils/common'
@@ -46,8 +46,17 @@ const toDateInputValue = (date: string) => {
 }
 
 const ImageFilterPanel = () => {
-  const { date, shift, slots, types, setDate, setShift, setSlots, setTypes } =
-    useImageFilterStore()
+  const {
+    date,
+    shift,
+    slots,
+    types,
+    setDate,
+    setShift,
+    setSlots,
+    setTypes,
+    removeType,
+  } = useImageFilterStore()
   const { ngTypes, addNgType, removeNgType } = useUserPreferencesStore()
 
   const [newType, setNewType] = useState('')
@@ -69,6 +78,16 @@ const ImageFilterPanel = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // 勾选的类型是从 localStorage 恢复的，清单里已经没有的要剔掉，
+  // 否则会停在「已选 1 / 共 0」这种点不动的状态
+  useEffect(() => {
+    if (!types.length) return
+
+    const alive = types.filter((type) => ngTypes.includes(type))
+
+    if (alive.length !== types.length) setTypes(alive)
+  }, [ngTypes, types, setTypes])
+
   const handleShiftChange = (value: string) => {
     if (!value) return
 
@@ -83,7 +102,14 @@ const ImageFilterPanel = () => {
     if (!value || ngTypes.includes(value)) return
 
     addNgType(value)
+    // 新加的类型直接勾上，省得关掉弹窗再找一遍
+    setTypes([...types, value])
     setNewType('')
+  }
+
+  const handleRemoveType = (type: string) => {
+    removeNgType(type)
+    removeType(type)
   }
 
   return (
@@ -104,20 +130,15 @@ const ImageFilterPanel = () => {
 
       <Field>
         <FieldLabel>班次</FieldLabel>
-        <ToggleGroup
-          type="single"
-          variant="outline"
+        <ChoiceRadio
+          columns={2}
           value={shift}
           onValueChange={handleShiftChange}
-          className="w-full"
-        >
-          <ToggleGroupItem value="白班" className="flex-1">
-            白班
-          </ToggleGroupItem>
-          <ToggleGroupItem value="夜班" className="flex-1">
-            夜班
-          </ToggleGroupItem>
-        </ToggleGroup>
+          options={[
+            { value: '白班', label: '白班' },
+            { value: '夜班', label: '夜班' },
+          ]}
+        />
       </Field>
 
       <Field>
@@ -151,24 +172,15 @@ const ImageFilterPanel = () => {
           </div>
         </div>
         <FieldContent>
-          <ToggleGroup
-            type="multiple"
-            variant="outline"
-            size="sm"
+          <ChoiceList
+            columns={3}
             value={slots}
             onValueChange={setSlots}
-            className="grid grid-cols-6 gap-1.5"
-          >
-            {availableSlots.map((slot) => (
-              <ToggleGroupItem
-                key={slot}
-                value={slot}
-                className="h-8 w-full tabular-nums"
-              >
-                {slot}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
+            options={availableSlots.map((slot) => ({
+              value: slot,
+              label: <span className="tabular-nums">{slot}</span>,
+            }))}
+          />
         </FieldContent>
       </Field>
 
@@ -195,6 +207,7 @@ const ImageFilterPanel = () => {
               type="button"
               variant="ghost"
               size="xs"
+              disabled={!ngTypes.length}
               onClick={() => setTypes(ngTypes)}
             >
               <CheckCheck data-icon="inline-start" />
@@ -216,23 +229,29 @@ const ImageFilterPanel = () => {
                 </DialogHeader>
 
                 <div className="flex flex-wrap gap-1.5">
-                  {ngTypes.map((type) => (
-                    <Badge
-                      key={type}
-                      variant="secondary"
-                      className="gap-1 pr-1"
-                    >
-                      {type}
-                      <button
-                        type="button"
-                        onClick={() => removeNgType(type)}
-                        aria-label={`删除 ${type}`}
-                        className="rounded-sm text-muted-foreground transition-colors hover:text-destructive"
+                  {ngTypes.length ? (
+                    ngTypes.map((type) => (
+                      <Badge
+                        key={type}
+                        variant="secondary"
+                        className="gap-1 pr-1"
                       >
-                        <X className="size-3" />
-                      </button>
-                    </Badge>
-                  ))}
+                        {type}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveType(type)}
+                          aria-label={`删除 ${type}`}
+                          className="rounded-sm text-muted-foreground transition-colors hover:text-destructive"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </Badge>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      还没有类型，在下面输入后回车添加
+                    </p>
+                  )}
                 </div>
 
                 <InputGroup>
@@ -273,20 +292,13 @@ const ImageFilterPanel = () => {
           </div>
         </div>
         <FieldContent>
-          <ToggleGroup
-            type="multiple"
-            variant="outline"
-            size="sm"
+          <ChoiceList
+            columns={1}
             value={types}
             onValueChange={setTypes}
-            className="flex flex-wrap gap-1.5"
-          >
-            {ngTypes.map((type) => (
-              <ToggleGroupItem key={type} value={type} className="h-8">
-                {type}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
+            options={ngTypes.map((type) => ({ value: type, label: type }))}
+            empty="还没有类型，点击「编辑」添加（如 NG_脏污_B）"
+          />
         </FieldContent>
       </Field>
     </FieldGroup>

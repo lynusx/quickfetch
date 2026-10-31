@@ -2,15 +2,19 @@ import { join } from 'node:path'
 
 import type { LxtShare, ScanCategory } from '../../shared/ipc'
 
-import { LXT_SHARES } from '../../shared/ipc'
+import { LXT_SHARES, PL_FIXED } from '../../shared/ipc'
+import { pickPlShare } from '../pl'
+import { splitMachine } from '../shortcuts'
 import { readDirSafe } from './fsx'
+import type { DirReadResult } from './fsx'
 
 /**
  * 机台 → 绝对路径前缀。
  *
- * 两类扫描的差别只在这一步：EL 是「根目录 / 机台 / EL」，
- * 力禧特是「\\IP / 探测出的共享名 / A-01-B」。之后的日期、班次、
- * 时段、类型四层完全一致，所以后面的探测、并发、分批、暂停恢复都能共用。
+ * 各类扫描的差别只在前缀这一段：EL 是「根目录 / 机台 / EL」，
+ * 力禧特是「\\IP / 探测出的共享名 / A-01-B」，利珀是「\\IP / 探测出的标识目录 / Matting」。
+ * 之后的日期、班次、时段、类型三层完全一致，所以探测、并发、分批、
+ * 暂停恢复都能共用一套执行器。
  */
 export interface ResolveResult {
   ok: boolean
@@ -19,7 +23,7 @@ export interface ResolveResult {
   /** 失败原因；ok 为 true 时为空串 */
   reason: string
   /** 断链发生在哪一层，用于界面精确提示 */
-  brokenAt?: 'EL' | '共享名'
+  brokenAt?: 'EL' | '共享名' | '机台标识'
   /**
    * 网络层面的不可达原因：
    * - network：主机不通，多半是没接专用内网
@@ -29,8 +33,28 @@ export interface ResolveResult {
   unreachable?: 'network' | 'share' | 'denied'
 }
 
+/**
+ * 前缀之后的层级差异，用声明式描述交给执行器。
+ *
+ * 默认（EL / 力禧特）是「日期 → 班次 → 时段 → 类型」，利珀在中间和末尾
+ * 多了两层固定目录。把这些差异集中在解析器里，执行器只按描述走，
+ * 不必为每类扫描各写一份分支。
+ */
+export interface PathShape {
+  /** 日期层目录名；默认就是参数里的 YYYYMMDD，利珀是 YYYY.MM.DD */
+  dateDir?: (date: string) => string
+  /** 日期层与班次层之间的固定层；利珀是「机台名大写」 */
+  betweenDateAndShift?: (machine: string) => string[]
+  /** 时段层与类型层之间的固定层；利珀是 Fail */
+  betweenSlotAndType?: string[]
+  /** 类型层之上是否还有等级层（利珀的 A/B/C），等级取值来自参数 */
+  hasLevel?: boolean
+}
+
 export interface MachineResolver {
   readonly category: ScanCategory
+  /** 前缀之后的层级描述；不填就是标准的三层 */
+  readonly shape?: PathShape
   /** 未配置或配置不完整时给出可读原因，避免扫到一半才发现参数不对 */
   validate: () => string | null
   resolve: (machine: string) => Promise<ResolveResult>
@@ -38,20 +62,11 @@ export interface MachineResolver {
    * 把类型目录的绝对路径拆成结果里展示的层级。
    *
    * EL 是「机台/EL/日期/班次/时段/类型」，取相对根目录的部分；
-   * 力禧特的各机台没有共同根，只能按「厂区/机台/日期/…」拼 ——
-   * 复制分组里的「机台」取的是第 0 段，两类的层级长短不一样，
-   * 所以交给解析器自己决定，不在复制模块里做特判。
+   * 力禧特、利珀的各机台没有共同根，只能按「厂区/机台/日期/…」拼 ——
+   * 复制分组里的「机台」取的是图片自带的 machine 字段，
+   * 所以交给解析器自己决定层级，不在复制模块里做特判。
    */
   segments: (machine: string, dir: string) => string[]
-}
-
-/** 机台标识里带厂区时拆开，用于生成展示路径 */
-const splitMachine = (machine: string): [string, string] => {
-  const slash = machine.indexOf('/')
-
-  return slash < 0
-    ? ['', machine]
-    : [machine.slice(0, slash), machine.slice(slash + 1)]
 }
 
 /** 取绝对路径相对某个前缀的层级，分隔符统一成 / */
@@ -195,5 +210,335 @@ export const createLxtResolver = (
     const base = host && share ? join(host, share, LXT_FIXED_DIR) : ''
 
     return [plant, name, ...(base ? tailOf(base, dir) : [])].filter(Boolean)
+  },
+})
+
+export interface PlResolverOptions {
+  /** 机台复合键 → 入口里解析出的目标主机 */
+  hosts: Map<string, string>
+  /** 已缓存的标识目录名；探到新值时通过 onShare 回写配置 */
+  shares: Map<string, string | null>
+  onShare: (machine: string, share: string, host: string) => void
+}
+
+/**
+ * 探测超时。比扫描阶段的 20 秒短：逐台探标识目录时，每台卡 20 秒
+ * 会让「接错网」和「有几台没开机」看起来一模一样。
+ */
+const PROBE_TIMEOUT_MS = 8_000
+
+/**
+ * 探测专用读取：网络闪断时再试一次。
+ *
+ * 首次连某台机器的共享要先做 SMB 会话协商，慢起来十几秒很常见；
+ * 一次超时就判「没接专用内网」会把整批机台带偏，所以重试一次再下结论。
+ */
+const probeRead = async (path: string): Promise<DirReadResult> => {
+  const first = await readDirSafe(path, { timeoutMs: PROBE_TIMEOUT_MS })
+
+  if (first.status !== 'unreachable') return first
+
+  await new Promise((resolve) => setTimeout(resolve, 600))
+
+  return readDirSafe(path, { timeoutMs: PROBE_TIMEOUT_MS })
+}
+
+/**
+ * 首选形态：`pl-机台名`，机台名原样小写。
+ *
+ * 现场绝大多数机器就是这个命名（6A → pl-6a），优先级最高：
+ * 命中时只花一次读取，不用再去猜补零、厂区前缀这些变体。
+ */
+const plPrimaryShare = (machineName: string): string | null => {
+  const alias = machineName.trim().toLowerCase()
+
+  return alias ? `pl-${alias}` : null
+}
+
+/**
+ * 精确名 `pl-机台名` 不存在的兜底候选，由线别名按已知命名习惯推出来：
+ *   3C  → pl-03c    （个位数字被补了 0）
+ *   10B → 东区pl-10b（厂区名做前缀）
+ * 这些属于「正则规则能覆盖到的变形」，排在一次命中之后依次试。
+ */
+const plShareCandidates = (machineName: string, plant: string): string[] => {
+  const alias = machineName.trim().toLowerCase()
+
+  if (!alias) return []
+
+  const aliases = /^\d[a-z]$/.test(alias) ? [alias, `0${alias}`] : [alias]
+
+  // pl 前缀的两种写法先试完，再试带厂区前缀的：
+  // 补零（pl-03c）比「厂区 + 原样名」常见得多，先试能少一次无效读取
+  const names = aliases.map((item) => `pl-${item}`)
+
+  if (plant) names.push(...aliases.map((item) => `${plant}pl-${item}`))
+
+  return [...new Set(names)]
+}
+
+/**
+ * 探测一台利珀机器用的是哪个标识目录。
+ *
+ * 不能像 EL 那样直接列 `\\IP` —— 只有主机名、没有共享名的 UNC 根，
+ * Windows 的目录枚举会返回 EINVAL/ERROR_BAD_NETPATH，看起来跟「主机不通」
+ * 一模一样，现场就变成「路径明明能打开，却提示没接专用内网」。
+ *
+ * 所以按优先级从小到大试，每次都是一次正常的共享内读取，可达与否按真实
+ * 错误码区分：
+ *   1. `pl-机台名` 原样命中 —— 最常见，读 `pl-6a\Matting` 一次就能定下来；
+ *   2. 正则规则推出的变形（`pl-06a`、`西区pl-6a`）；
+ *   3. 都不中才列主机根目录，用边界正则挑最像的那个（兼容改过名的现场）。
+ */
+const probePlShare = async (
+  host: string,
+  machineName: string,
+  plant: string,
+): Promise<{
+  share: string | null
+  /** 命中的目录是否已经验证过 Matting 层 */
+  verified: boolean
+  unreachable?: 'network' | 'denied'
+  dirs: string[]
+  tried: string[]
+}> => {
+  const primary = plPrimaryShare(machineName)
+  const tried: string[] = primary ? [primary] : []
+  const candidates = plShareCandidates(machineName, plant).filter(
+    (item) => item !== primary,
+  )
+  let denied = false
+
+  // 一级：精确名优先。读不到（目录不存在）就往下走，先不下结论
+  if (primary) {
+    const result = await probeRead(join(host, primary, PL_FIXED.matting))
+
+    if (result.status === 'ok') {
+      return { share: primary, verified: true, dirs: [], tried }
+    }
+
+    if (result.status === 'denied') denied = true
+
+    // 主机层面不通，剩下的候选只会一个个等超时
+    if (result.status === 'unreachable') {
+      return {
+        share: null,
+        verified: false,
+        dirs: [],
+        tried,
+        unreachable: 'network',
+      }
+    }
+  }
+
+  // 二级：正则规则推出的变体
+  for (const candidate of candidates) {
+    tried.push(candidate)
+
+    const result = await probeRead(join(host, candidate, PL_FIXED.matting))
+
+    if (result.status === 'ok') {
+      return { share: candidate, verified: true, dirs: [], tried }
+    }
+
+    if (result.status === 'denied') {
+      // 共享存在但没权限，说明主机是通的
+      denied = true
+      continue
+    }
+
+    if (result.status === 'unreachable') {
+      return {
+        share: null,
+        verified: false,
+        dirs: [],
+        tried,
+        unreachable: 'network',
+      }
+    }
+  }
+
+  // 三级：名字都猜不中，才去列主机根目录，用边界正则挑
+  const listing = await probeRead(host)
+
+  if (listing.status === 'ok') {
+    return {
+      share: pickPlShare(listing.dirs, machineName),
+      verified: false,
+      dirs: listing.dirs,
+      tried,
+      ...(denied ? { unreachable: 'denied' as const } : {}),
+    }
+  }
+
+  if (denied || listing.status === 'denied') {
+    return {
+      share: null,
+      verified: false,
+      dirs: [],
+      tried,
+      unreachable: 'denied',
+    }
+  }
+
+  return {
+    share: null,
+    verified: false,
+    dirs: [],
+    tried,
+    unreachable: listing.status === 'unreachable' ? 'network' : undefined,
+  }
+}
+
+/** 利珀：每台机器一个 IP，第二层标识目录逐台探测 */
+export const createPlResolver = (
+  options: PlResolverOptions,
+): MachineResolver => ({
+  category: 'pl',
+  // {地址}\{标识}\Matting\{日期}\{机台名}\{班次}\{时段}\Fail\{等级}\{类型}
+  shape: {
+    // 现场日期目录是 2026.10.28，参数里传的是 YYYYMMDD
+    dateDir: (date) =>
+      `${date.slice(0, 4)}.${date.slice(4, 6)}.${date.slice(6, 8)}`,
+    // 日期下面还有一层机台名，是线别名的大写形式
+    betweenDateAndShift: (machine) => [splitMachine(machine)[1].toUpperCase()],
+    betweenSlotAndType: [PL_FIXED.fail],
+    hasLevel: true,
+  },
+  validate: () =>
+    options.hosts.size ? null : '尚未识别利珀入口，请先选择并识别入口目录',
+  resolve: async (machine) => {
+    const host = options.hosts.get(machine)
+
+    if (!host) {
+      return {
+        ok: false,
+        base: '',
+        reason: '该机台已不在入口目录中，请重新识别入口',
+        brokenAt: '机台标识',
+      }
+    }
+
+    const [plant, name] = splitMachine(machine)
+    const cached = options.shares.get(machine) ?? null
+
+    /**
+     * 探一轮标识目录：猜名字 → 命中 → 校验 Matting 层。
+     * 校验不过的目录不能写进缓存，否则这台机器之后每次都停在「路径不存在」。
+     */
+    const discover = async (): Promise<
+      { share: string } | { failure: ResolveResult }
+    > => {
+      const probed = await probePlShare(host, name, plant)
+      const unreachable = probed.unreachable
+
+      if (!probed.share) {
+        const tried = probed.tried.length
+          ? `已试：${probed.tried.join('、')}；`
+          : ''
+
+        return {
+          failure: {
+            ok: false,
+            base: '',
+            reason:
+              unreachable === 'network'
+                ? `${host} 不可达，需要接入利珀专用内网`
+                : unreachable === 'denied'
+                  ? `没有读取 ${host} 的权限`
+                  : `${host} 上没有找到与「${name}」匹配的标识目录（${tried}实际存在：${
+                      probed.dirs.slice(0, 6).join('、') || '（未列出）'
+                    }）`,
+            brokenAt: '机台标识',
+            unreachable: unreachable ?? 'share',
+          },
+        }
+      }
+
+      if (!probed.verified) {
+        const matting = await probeRead(
+          join(host, probed.share, PL_FIXED.matting),
+        )
+
+        if (matting.status !== 'ok') {
+          return {
+            failure: {
+              ok: false,
+              base: '',
+              reason: `「${host}\\${probed.share}」下没有 ${PL_FIXED.matting} 目录，标识目录可能已改名`,
+              brokenAt: '机台标识',
+              unreachable:
+                matting.status === 'denied'
+                  ? 'denied'
+                  : matting.status === 'unreachable'
+                    ? 'network'
+                    : undefined,
+            },
+          }
+        }
+      }
+
+      return { share: probed.share }
+    }
+
+    let share = cached
+
+    // 缓存里的标识目录是早先探测的结果，可能是记错的（旧版本按「包含别名」
+    // 匹配会记成 pl-19a 这种）。先验一次 Matting，过不了就清掉重探，
+    // 别让一台机器一直错到用户手动改配置为止。
+    if (share) {
+      const matting = await probeRead(join(host, share, PL_FIXED.matting))
+
+      if (matting.status === 'ok') {
+        return {
+          ok: true,
+          base: join(host, share, PL_FIXED.matting),
+          reason: '',
+        }
+      }
+
+      if (matting.status === 'unreachable') {
+        return {
+          ok: false,
+          base: '',
+          reason: `${host} 不可达，需要接入利珀专用内网`,
+          brokenAt: '机台标识',
+          unreachable: 'network',
+        }
+      }
+
+      options.shares.set(machine, null)
+      share = null
+    }
+
+    const found = await discover()
+
+    if ('failure' in found) return found.failure
+
+    if (found.share !== cached) {
+      // 探到了就记下来，下次不用再探
+      options.shares.set(machine, found.share)
+      options.onShare(machine, found.share, host)
+    }
+
+    return {
+      ok: true,
+      base: join(host, found.share, PL_FIXED.matting),
+      reason: '',
+    }
+  },
+  // 厂区/机台/日期/机台名/班次/时段/等级/类型/x.jpg
+  // base 是 \\IP\{标识}\Matting，路径上带不了厂区，只能从机台复合键里补；
+  // 中间那层 Fail 是所有机台共有的固定层，展示时省略
+  segments: (machine, dir) => {
+    const [plant, name] = splitMachine(machine)
+    const host = options.hosts.get(machine) ?? ''
+    const share = options.shares.get(machine) ?? ''
+    const base = host && share ? join(host, share, PL_FIXED.matting) : ''
+    const tail = base
+      ? tailOf(base, dir).filter((segment) => segment !== PL_FIXED.fail)
+      : []
+
+    return [plant, name, ...tail].filter(Boolean)
   },
 })

@@ -17,7 +17,11 @@ import {
 } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { useHistoryStore } from '@/stores/historyStore'
-import type { ScanHistoryItem, ScanTaskStatus } from '../../../shared/ipc'
+import type {
+  ScanCategory,
+  ScanHistoryItem,
+  ScanTaskStatus,
+} from '../../../shared/ipc'
 import { formatDuration } from '@/utils/common'
 import { toErrorMessage } from '@/utils/error'
 import { cn } from '@/lib/utils'
@@ -34,6 +38,7 @@ const STATUS_META: Record<
   paused: { label: '已暂停', variant: 'outline' },
   completed: { label: '已完成', variant: 'default' },
   canceled: { label: '已取消', variant: 'outline' },
+  interrupted: { label: '已中断', variant: 'outline' },
   failed: { label: '失败', variant: 'destructive' },
 }
 
@@ -59,6 +64,8 @@ const summarize = (item: ScanHistoryItem): string => {
 }
 
 interface HistoryPanelProps {
+  /** 只列出这个类别的历史；三类扫描的结果互不混排 */
+  category: ScanCategory
   /** 载入某次历史任务，由页面负责把快照塞进 scanStore */
   onRestore: (item: ScanHistoryItem) => void
   showToast: (
@@ -76,6 +83,7 @@ interface HistoryPanelProps {
 }
 
 const HistoryPanel = ({
+  category,
   onRestore,
   showToast,
   activeId,
@@ -96,13 +104,20 @@ const HistoryPanel = ({
   } = useHistoryStore()
 
   /**
-   * 隐藏「一张图都没有」的记录。
+   * 只留本类别、且扫到过图片的记录。
    *
    * 老版本会把取消时什么都没扫到的任务也存下来，点进去是个空列表，
    * 用户会以为功能坏了。新版本不再写这类记录，这里再兜一层，
    * 让已经存在磁盘上的旧条目也不出现在列表里。
+   *
+   * 中断的记录是例外：一张没扫到也要露出来 —— 至少能告诉用户
+   * 「上次跑到这台机器就关掉了」，而不是让人以为程序没记住任何东西。
    */
-  const visible = items.filter((item) => item.totalImages > 0)
+  const visible = items.filter(
+    (item) =>
+      (item.totalImages > 0 || item.status === 'interrupted') &&
+      item.category === category,
+  )
 
   const [open, setOpen] = useState(false)
   const [draftLimit, setDraftLimit] = useState(String(limit))

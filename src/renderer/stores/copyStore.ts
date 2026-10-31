@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 
-import type { CopyPlanPreview, CopyTask } from '../../shared/ipc'
+import type { CopyPlanPreview, CopyTask, ScanCategory } from '../../shared/ipc'
 
 /**
  * 复制任务的界面状态。
@@ -62,40 +62,58 @@ const initial = {
   showFailures: false,
 }
 
-export const useCopyStore = create<CopyState & CopyAction>()(
-  devtools((set) => ({
-    ...initial,
+export type CopyStore = ReturnType<typeof createCopyStore>
 
-    setTask: (task) => set({ task }),
-    patchTask: (task) =>
-      set((state) => (state.task?.id === task.id ? { task } : state)),
-    setMachines: (machines) => set({ machines }),
-    toggleMachine: (machine) =>
-      set((state) => ({
-        machines: state.machines.includes(machine)
-          ? state.machines.filter((item) => item !== machine)
-          : [...state.machines, machine],
-      })),
-    setTarget: (dir, name) => set({ targetDir: dir, targetName: name }),
-    clearTarget: () => set({ targetDir: '', targetName: '' }),
-    setPreview: (preview) => set({ preview }),
-    setPreviewing: (previewing) => set({ previewing }),
-    setBusy: (busy) => set({ busy }),
-    setError: (error) => set({ error }),
-    setShowFailures: (show) => set({ showFailures: show }),
-
-    /**
-     * 换任务时重置。
-     *
-     * 目标目录保留：用户连续复制几个任务到同一个盘是常态，每次都重选很烦。
-     * 机台勾选必须清空：上一个任务勾的机台在新任务里可能一张图都没有，
-     * 留着会让「已选 3/6 台 · 0 张」这种看不懂的状态出现。
-     */
-    reset: () =>
-      set((state) => ({
+const createCopyStore = (category: ScanCategory) =>
+  create<CopyState & CopyAction>()(
+    devtools(
+      (set) => ({
         ...initial,
-        targetDir: state.targetDir,
-        targetName: state.targetName,
-      })),
-  })),
-)
+
+        setTask: (task) => set({ task }),
+        patchTask: (task) =>
+          set((state) => (state.task?.id === task.id ? { task } : state)),
+        setMachines: (machines) => set({ machines }),
+        toggleMachine: (machine) =>
+          set((state) => ({
+            machines: state.machines.includes(machine)
+              ? state.machines.filter((item) => item !== machine)
+              : [...state.machines, machine],
+          })),
+        setTarget: (dir, name) => set({ targetDir: dir, targetName: name }),
+        clearTarget: () => set({ targetDir: '', targetName: '' }),
+        setPreview: (preview) => set({ preview }),
+        setPreviewing: (previewing) => set({ previewing }),
+        setBusy: (busy) => set({ busy }),
+        setError: (error) => set({ error }),
+        setShowFailures: (show) => set({ showFailures: show }),
+
+        /**
+         * 换任务时重置。
+         *
+         * 目标目录保留：用户连续复制几个任务到同一个盘是常态，每次都重选很烦。
+         * 机台勾选必须清空：上一个任务勾的机台在新任务里可能一张图都没有，
+         * 留着会让「已选 3/6 台 · 0 张」这种看不懂的状态出现。
+         */
+        reset: () =>
+          set((state) => ({
+            ...initial,
+            targetDir: state.targetDir,
+            targetName: state.targetName,
+          })),
+      }),
+      { name: `copy:${category}` },
+    ),
+  )
+
+export const useElCopyStore = createCopyStore('el')
+export const useLxtCopyStore = createCopyStore('lxt')
+export const usePlCopyStore = createCopyStore('pl')
+
+/** 按类别取对应的复制 store；未知类别一律按 EL 兜底 */
+export const copyStoreOf = (category: ScanCategory): CopyStore => {
+  if (category === 'lxt') return useLxtCopyStore
+  if (category === 'pl') return usePlCopyStore
+
+  return useElCopyStore
+}

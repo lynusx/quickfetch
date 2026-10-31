@@ -1,14 +1,13 @@
 import { create } from 'zustand'
-import { devtools } from 'zustand/middleware'
+import { devtools, persist } from 'zustand/middleware'
 
 import type { Plant } from '../../shared/ipc'
-import { useUserPreferencesStore } from './userPreferencesStore'
-
-const defaultTypes = useUserPreferencesStore.getState().ngTypes
 
 interface ImageFilterState {
   /** 当前查看的厂区，只影响机台列表的展示，不参与路径拼接 */
   plant: Plant
+  /** 机台名过滤词，只做前端筛显，不参与路径拼接 */
+  keyword: string
   /** 选中的机台目录名，可跨厂区多选 */
   selectedMachines: string[]
   date: string
@@ -19,6 +18,7 @@ interface ImageFilterState {
 
 interface ImageFilterAction {
   setPlant: (plant: Plant) => void
+  setKeyword: (keyword: string) => void
   setSelectedMachines: (machines: string[]) => void
   toggleMachine: (machine: string) => void
   setDate: (date: string) => void
@@ -31,33 +31,51 @@ interface ImageFilterAction {
 export const useImageFilterStore = create<
   ImageFilterState & ImageFilterAction
 >()(
-  devtools((set) => ({
-    plant: 'east',
-    selectedMachines: [],
-    types: defaultTypes,
-    date: '',
-    shift: '白班',
-    slots: [],
+  devtools(
+    persist<
+      ImageFilterState & ImageFilterAction,
+      [],
+      [],
+      Pick<ImageFilterState, 'types'>
+    >(
+      (set) => ({
+        plant: 'east',
+        keyword: '',
+        selectedMachines: [],
+        // 类型不预设：现场命名差异大，猜错的成本比手输一次高
+        types: [],
+        date: '',
+        shift: '白班',
+        slots: [],
 
-    setPlant: (plant) => set({ plant }),
+        setPlant: (plant) => set({ plant }),
 
-    setSelectedMachines: (selectedMachines) => set({ selectedMachines }),
+        setKeyword: (keyword) => set({ keyword }),
 
-    toggleMachine: (machine) =>
-      set((state) => ({
-        selectedMachines: state.selectedMachines.includes(machine)
-          ? state.selectedMachines.filter((item) => item !== machine)
-          : [...state.selectedMachines, machine],
-      })),
+        setSelectedMachines: (selectedMachines) => set({ selectedMachines }),
 
-    setDate: (date) => set({ date }),
-    setShift: (shift) => set({ shift }),
-    setSlots: (slots) => set({ slots }),
-    setTypes: (types) => set({ types }),
+        toggleMachine: (machine) =>
+          set((state) => ({
+            selectedMachines: state.selectedMachines.includes(machine)
+              ? state.selectedMachines.filter((item) => item !== machine)
+              : [...state.selectedMachines, machine],
+          })),
 
-    removeType: (type) =>
-      set((state) => ({
-        types: state.types.filter((item) => item !== type),
-      })),
-  })),
+        setDate: (date) => set({ date }),
+        setShift: (shift) => set({ shift }),
+        setSlots: (slots) => set({ slots }),
+        setTypes: (types) => set({ types }),
+
+        removeType: (type) =>
+          set((state) => ({
+            types: state.types.filter((item) => item !== type),
+          })),
+      }),
+      {
+        // 只记勾选过的类型，日期/班次/时段每次进页面都按当前时间重新带出
+        name: 'filter-types:el',
+        partialize: (state) => ({ types: state.types }),
+      },
+    ),
+  ),
 )

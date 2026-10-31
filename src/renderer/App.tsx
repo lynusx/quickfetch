@@ -9,6 +9,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 const ROUTES = {
   IMAGE_COPY: '/image-copy',
   LXT_SCAN: '/lxt',
+  PL_SCAN: '/pl',
   EXCEL_PARSE: '/excel-parse',
   SETTINGS: '/settings',
   DEFAULT: '/image-copy',
@@ -17,6 +18,7 @@ const ROUTES = {
 // 懒加载页面
 const ImageCopyPage = lazy(() => import('./pages/ImageCopyPage'))
 const LxtScanPage = lazy(() => import('./pages/LxtScanPage'))
+const PlScanPage = lazy(() => import('./pages/PlScanPage'))
 const ExcelParsePage = lazy(() => import('./pages/ExcelParsePage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 
@@ -44,6 +46,7 @@ function App() {
 
             <Route path={ROUTES.IMAGE_COPY} element={<ImageCopyPage />} />
             <Route path={ROUTES.LXT_SCAN} element={<LxtScanPage />} />
+            <Route path={ROUTES.PL_SCAN} element={<PlScanPage />} />
             <Route path={ROUTES.EXCEL_PARSE} element={<ExcelParsePage />} />
             <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
 

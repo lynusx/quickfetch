@@ -27,9 +27,13 @@ import {
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { useImageCopy } from '@/hooks/useImageCopy'
-import { useCopyStore } from '@/stores/copyStore'
+import { copyStoreOf } from '@/stores/copyStore'
 import { selectPreferences, useSettingsStore } from '@/stores/settingsStore'
-import type { CopyConflictPolicy, CopyStatus } from '../../../shared/ipc'
+import type {
+  CopyConflictPolicy,
+  CopyStatus,
+  ScanCategory,
+} from '../../../shared/ipc'
 import { COPY_CONFLICT_LABEL, COPY_LAYOUT_LABEL } from '../../../shared/ipc'
 import { formatDuration, formatEta } from '@/utils/common'
 import { cn } from '@/lib/utils'
@@ -57,6 +61,8 @@ const CONFLICT_VERB: Record<CopyConflictPolicy, string> = {
 }
 
 interface CopyPanelProps {
+  /** 复制源所属扫描类别：EL 面板复制 EL 结果，力禧特面板复制力禧特结果 */
+  category: ScanCategory
   showToast: (
     title: string,
     message: string,
@@ -70,7 +76,9 @@ interface CopyPanelProps {
  * 三段顺序固定：目标目录 → 勾选机台 → 分组与启动。
  * 目录放在最上面是因为它是硬前置：没选目录就不该让用户点开始。
  */
-const CopyPanel = ({ showToast }: CopyPanelProps) => {
+const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
+  const copyStore = copyStoreOf(category)
+
   const {
     machineStats,
     pickedCount,
@@ -91,20 +99,20 @@ const CopyPanel = ({ showToast }: CopyPanelProps) => {
     handleChangeTarget,
     handleReveal,
     handlePickTarget,
-  } = useImageCopy({ showToast })
+  } = useImageCopy({ category, showToast })
 
-  const machines = useCopyStore((state) => state.machines)
-  const showFailures = useCopyStore((state) => state.showFailures)
-  const toggleMachine = useCopyStore((state) => state.toggleMachine)
-  const setMachines = useCopyStore((state) => state.setMachines)
-  const setShowFailures = useCopyStore((state) => state.setShowFailures)
+  const machines = copyStore((state) => state.machines)
+  const showFailures = copyStore((state) => state.showFailures)
+  const toggleMachine = copyStore((state) => state.toggleMachine)
+  const setMachines = copyStore((state) => state.setMachines)
+  const setShowFailures = copyStore((state) => state.setShowFailures)
 
   // 分组方式与重名策略在设置页统一维护，这里只读摘要，两种状态都要能改
   const preferences = useSettingsStore(selectPreferences)
   const layout = preferences.copyLayout
   const conflict = preferences.copyConflict
 
-  const task = useCopyStore((state) => state.task)
+  const task = copyStore((state) => state.task)
 
   /** 覆盖策略下的确认弹窗；确认后才真正开始 */
   const [confirmOverwrite, setConfirmOverwrite] = useState(false)

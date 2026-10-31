@@ -4,9 +4,14 @@ import { basename, normalize, resolve } from 'node:path'
 
 import { filterByMachines, planPreview } from './copy'
 import { getCopyRunner, startCopy } from './copyRegistry'
+import { discoverPl, mergePlMachines } from './pl'
 import { loadFrom } from './load'
 import { toFsPath } from './pathx'
-import { createElResolver, createLxtResolver } from './scanner/resolver'
+import {
+  createElResolver,
+  createLxtResolver,
+  createPlResolver,
+} from './scanner/resolver'
 import {
   clearRecords,
   createTask,
@@ -23,8 +28,10 @@ import {
   readSettings,
   refreshMachines,
   rememberLxtShare,
+  rememberPlShare,
   saveHistoryLimit,
   saveLxt,
+  savePl,
   savePreferences,
   saveRootPath,
 } from './settings'
@@ -39,6 +46,7 @@ import type {
   CopyTaskParams,
   DirectoryInfo,
   LxtSetupResult,
+  PlSetupResult,
   ScanCategory,
   ScanHistoryItem,
   ScanTask,
@@ -114,6 +122,48 @@ const createLxtTask = (
       category: 'lxt',
       resolver,
       load: loadFrom(settings.preferences, 'lxt'),
+    },
+  )
+}
+
+/**
+ * 利珀任务：与力禧特同一套「入口 → 机台」过滤规则。
+ *
+ * 差别在解析器：第二层是探测出来的标识目录，再往下多出机台名与 Fail/等级两层。
+ */
+const createPlTask = (
+  settings: AppSettings,
+  params: ScanTaskParams,
+): ScanTask => {
+  const active = settings.pl.machines.filter((item) => !item.stale)
+  const known = new Set(active.map((item) => item.key))
+  const machines = params.machines.filter((key) => known.has(key))
+
+  if (!machines.length) {
+    throw new Error('所选机台已不在入口目录中，请点击「重新识别」刷新机台列表')
+  }
+
+  const hosts = new Map(active.map((item) => [item.key, item.host]))
+  const shares = new Map<string, string | null>(
+    active.map((item) => [item.key, item.share]),
+  )
+
+  const resolver: MachineResolver = createPlResolver({
+    hosts,
+    shares,
+    // 探测到的标识目录随手回写，下次扫描不必再探一次
+    onShare: (machine, share, host) => {
+      void rememberPlShare(machine, share, host)
+    },
+  })
+
+  return createTask(
+    { ...params, category: 'pl', machines },
+    {
+      category: 'pl',
+      resolver,
+      // 利珀与力禧特一样是「每台一个 IP、走专用内网」，沿用同一组档位
+      load: loadFrom(settings.preferences, 'pl'),
     },
   )
 }
@@ -203,6 +253,47 @@ export const registerIpcHandlers = (): void => {
     return setupLxt(current.lxt.entryRoot)
   })
 
+  // -------------------------------------------------------------- 利珀入口
+
+  /**
+   * 设置利珀入口并解析其中的 .lnk。
+   *
+   * 与力禧特一样只读入口、不连机台：标识目录名不固定，留到扫描时按线别名探。
+   */
+  const setupPl = async (entryRoot: string): Promise<PlSetupResult> => {
+    const current = await readSettings()
+    const { machines: discovered, skipped } = await discoverPl(entryRoot)
+    const merged = mergePlMachines(current.pl.machines, discovered)
+
+    const settings = await savePl({
+      entryRoot,
+      machines: merged.machines,
+      skipped,
+      updatedAt: new Date().toISOString(),
+    })
+
+    return {
+      settings,
+      added: merged.added,
+      removed: merged.removed,
+      relocated: merged.relocated,
+    }
+  }
+
+  ipcMain.handle('pl:setup-root', (_event, entryRoot: string) =>
+    setupPl(entryRoot.trim()),
+  )
+
+  ipcMain.handle('pl:refresh', async () => {
+    const current = await readSettings()
+
+    if (!current.pl.entryRoot) {
+      throw new Error('尚未配置利珀入口目录，请先选择入口')
+    }
+
+    return setupPl(current.pl.entryRoot)
+  })
+
   // ------------------------------------------------------------------ 扫描
 
   ipcMain.handle(
@@ -217,6 +308,10 @@ export const registerIpcHandlers = (): void => {
 
       if (category === 'lxt') {
         return createLxtTask(settings, params)
+      }
+
+      if (category === 'pl') {
+        return createPlTask(settings, params)
       }
 
       if (!settings.rootPath) {

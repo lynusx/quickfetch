@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 
-import type { ScanTask } from '../../shared/ipc'
+import type { ScanCategory, ScanTask } from '../../shared/ipc'
 
 interface ScanState {
   task: ScanTask | null
@@ -16,19 +16,39 @@ interface ScanAction {
   setError: (error: string | null) => void
 }
 
-/**
- * 当前扫描任务的快照镜像。
- * 图片全量留在主进程，这里只有统计与前 200 条预览 —— 几万条对象塞进
- * zustand 会让每次 devtools 序列化都卡住。
- */
-export const useScanStore = create<ScanState & ScanAction>()(
-  devtools((set) => ({
-    task: null,
-    creating: false,
-    error: null,
+export type ScanStore = ReturnType<typeof createScanStore>
 
-    setTask: (task) => set({ task }),
-    setCreating: (creating) => set({ creating }),
-    setError: (error) => set({ error }),
-  })),
-)
+/**
+ * 按扫描类别各建一个 store。
+ *
+ * 以前 EL 与力禧特共用一个 task 字段：在 EL 页扫完切到力禧特页，
+ * 读到的还是 EL 的任务快照，两个页面的进度与结果互相串。
+ * 拆开后每个页面只读写自己类别的任务，互不干扰；利珀同理。
+ */
+const createScanStore = (category: ScanCategory) =>
+  create<ScanState & ScanAction>()(
+    devtools(
+      (set) => ({
+        task: null,
+        creating: false,
+        error: null,
+
+        setTask: (task) => set({ task }),
+        setCreating: (creating) => set({ creating }),
+        setError: (error) => set({ error }),
+      }),
+      { name: `scan:${category}` },
+    ),
+  )
+
+export const useElScanStore = createScanStore('el')
+export const useLxtScanStore = createScanStore('lxt')
+export const usePlScanStore = createScanStore('pl')
+
+/** 按类别取对应的扫描 store；未知类别一律按 EL 兜底 */
+export const scanStoreOf = (category: ScanCategory): ScanStore => {
+  if (category === 'lxt') return useLxtScanStore
+  if (category === 'pl') return usePlScanStore
+
+  return useElScanStore
+}
