@@ -45,8 +45,8 @@ src/
 ├── main/                 # 主进程
 │   ├── index.ts          # 窗口创建、应用生命周期
 │   ├── ipc.ts            # IPC 注册（配置/任务/复制/另存 Excel）
-│   ├── settings.ts       # 根目录与机台列表的持久化（userData/settings.json）
-│   ├── load.ts           # 并发与分批档位（按现场 8G 机器调，可用环境变量覆盖）
+│   ├── settings.ts       # 根目录、机台列表与设置页偏好的持久化（userData/settings.json）
+│   ├── load.ts           # 并发与分批档位的最终取值（环境变量 > 设置页 > 默认值）
 │   ├── historyLimit.ts   # （在 shared/ 下）历史保留条数的默认值与边界收敛
 │   ├── copy.ts           # 平铺复制 + source.txt + 同名自动改名（分批推进）
 │   └── scanner/          # 扫描任务
@@ -104,8 +104,10 @@ src/
 | 复制并发 | 6 | Windows 上共享冲突高发，不宜再高 |
 | 复制分批 | 50 张 | 批之间让出事件循环，进度也可按批反馈 |
 
-改档位只动 `src/main/load.ts`；临时压降可用环境变量 `SHX_READ_CONCURRENCY`、
-`SHX_MACHINE_BATCH`、`SHX_COPY_CONCURRENCY`、`SHX_COPY_BATCH`，不必重新打包。
+改档位在应用侧边栏底部的**设置页**里调，落盘到 `settings.json`，不必重新打包。
+临时压降仍可用环境变量 `SHX_READ_CONCURRENCY`、`SHX_MACHINE_BATCH`、
+`SHX_COPY_CONCURRENCY`、`SHX_COPY_BATCH`——**环境变量优先于设置页**，
+被接管的项在设置页会标出变量名并禁用输入。
 
 三条硬约束：
 
