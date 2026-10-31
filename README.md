@@ -49,35 +49,35 @@ pnpm dist:win                 # 在 out/ 基础上打 Windows x64 NSIS 安装包
 
 ```
 src/
-├── main/                 # 主进程
+├── main/                 # 主进程（领域引擎内聚）
 │   ├── index.ts          # 窗口创建、应用生命周期
-│   ├── ipc.ts            # IPC 注册（配置/任务/复制/另存 Excel）
-│   ├── settings.ts       # 根目录、机台列表与设置页偏好的持久化（userData/settings.json）
-│   ├── load.ts           # 并发与分批档位的最终取值（环境变量 > 设置页 > 默认值）
-│   ├── historyLimit.ts   # （在 shared/ 下）历史保留条数的默认值与边界收敛
-│   ├── copy.ts           # 平铺复制 + source.txt + 同名自动改名（分批推进）
-│   └── scanner/          # 扫描任务
-│       ├── index.ts      # 对外导出
-│       ├── task.ts       # 任务执行体：前缀探测 → 展开 → 收图，含暂停/取消/进度
-│       ├── registry.ts   # 任务表、快照广播、历史淘汰
-│       ├── fsx.ts        # 带超时的 readdir，区分不存在/无权限/不可达
-│       ├── history.ts    # 历史结果落盘、裁剪、按 id 读取
-│       └── limiter.ts    # 并发闸门，支持运行时降档
+│   ├── ipc/              # 按模块划分的 IPC 注册层（scan/copy/settings/history/excel）
+│   ├── services/         # 核心服务
+│   │   ├── scanner/      # 扫描任务引擎（探测、展开、收图、自适应降档）
+│   │   ├── copy/         # 复制任务引擎（平铺复制、命名冲突策略、任务表）
+│   │   ├── discovery/    # 机台与快捷方式识别（LXT / PL / lnk / shortcuts）
+│   │   └── settings/     # 配置管理与环境覆盖持久化（userData/settings.json）
+│   └── utils/            # 通用工具（自适应并发采样、UNC 路径规范化）
 ├── preload/index.ts      # contextBridge 暴露 window.electronAPI
-├── shared/ipc.ts         # 主进程 ↔ preload ↔ 渲染层共用的 IPC 类型契约
-└── renderer/             # 渲染层（React）
+├── shared/               # 主进程 ↔ preload ↔ 渲染层共用的类型契约（ipc.ts, historyLimit.ts）
+└── renderer/             # 渲染层（Feature-First 特性优先架构）
     ├── index.html
-    ├── main.tsx          # HashRouter 挂载
-    ├── App.tsx           # 路由表 + Toaster / TooltipProvider
-    ├── pages/            # 页面（图片拷贝、Excel 解析、布局）
-    ├── components/       # 业务组件（根目录与机台选择、参数面板）
-    │   └── ui/           # shadcn/ui 组件（CLI 生成，勿手改样式约定）
-    ├── hooks/            # 业务逻辑（任务生命周期、复制）
-    ├── stores/           # zustand 状态（配置、任务快照、筛选参数）
-    ├── lib/utils.ts      # cn()
-    ├── utils/            # 通用工具
-    ├── types/            # 渲染层类型（Excel 等）
+    ├── main.tsx          # 挂载入口
+    ├── App.tsx           # 路由表 + 全局 Provider
     ├── index.css         # Tailwind 入口 + shadcn 主题变量
+    ├── layouts/          # 框架布局（AppLayout、AppSidebar）
+    ├── features/         # 业务特性模块（高内聚，页面、组件、Hook、Store 在一起）
+    │   ├── scan/         # 图片扫描（EL / 力禧特 / 利珀页面、组件与状态）
+    │   ├── copy/         # 复制管理（CopyPanel、useImageCopy、copyStore）
+    │   ├── history/      # 历史记录（HistoryPanel、historyStore）
+    │   ├── excel/        # Excel 解析（上传、解析、筛选、表格与状态）
+    │   └── settings/     # 应用设置（SettingsPage、settingsStore、userPreferencesStore）
+    ├── components/       # 全局跨模块组件
+    │   ├── ui/           # shadcn/ui 原子组件（CLI 生成）
+    │   └── ChoiceList/   # 高对比度单选/多选组件
+    ├── hooks/            # 全局 UI 辅助 Hook（useToast, use-mobile）
+    ├── lib/utils.ts      # cn()
+    ├── utils/            # 全局通用工具函数
     └── public/img/       # 静态资源
 ```
 

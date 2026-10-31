@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router'
 import { Loader2 } from 'lucide-react'
 
-import LayoutPage from './pages/LayoutPage'
+import LayoutPage from './layouts/AppLayout'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
@@ -16,11 +16,11 @@ const ROUTES = {
 } as const
 
 // 懒加载页面
-const ImageCopyPage = lazy(() => import('./pages/ImageCopyPage'))
-const LxtScanPage = lazy(() => import('./pages/LxtScanPage'))
-const PlScanPage = lazy(() => import('./pages/PlScanPage'))
-const ExcelParsePage = lazy(() => import('./pages/ExcelParsePage'))
-const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const ImageCopyPage = lazy(() => import('./features/scan/pages/ImageCopyPage'))
+const LxtScanPage = lazy(() => import('./features/scan/pages/LxtScanPage'))
+const PlScanPage = lazy(() => import('./features/scan/pages/PlScanPage'))
+const ExcelParsePage = lazy(() => import('./features/excel/ExcelParsePage'))
+const SettingsPage = lazy(() => import('./features/settings/SettingsPage'))
 
 // 404 重定向组件
 const NotFoundRedirect = ({ defaultPath }: { defaultPath: string }) => (

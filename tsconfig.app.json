@@ -14,7 +14,8 @@
     "moduleDetection": "force",
     "noEmit": true,
     "paths": {
-      "@/*": ["./src/renderer/*"]
+      "@/*": ["./src/renderer/*"],
+      "@shared/*": ["./src/shared/*"]
     },
     "jsx": "react-jsx",
 

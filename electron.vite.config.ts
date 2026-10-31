@@ -50,7 +50,10 @@ export default defineConfig({
     },
     plugins: [react(), tailwindcss()],
     resolve: {
-      alias: { '@': resolve(rootDir, 'src/renderer') },
+      alias: {
+        '@': resolve(rootDir, 'src/renderer'),
+        '@shared': resolve(rootDir, 'src/shared'),
+      },
     },
     server: {
       port: 5173,

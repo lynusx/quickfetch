@@ -2,7 +2,7 @@ import { BrowserWindow, app, shell } from 'electron'
 import { join } from 'node:path'
 
 import { registerIpcHandlers } from './ipc'
-import { persistUnfinished } from './scanner'
+import { persistUnfinished } from './services/scanner'
 
 // electron-vite 在开发模式下注入渲染层 dev server 地址
 const rendererDevUrl = process.env['ELECTRON_RENDERER_URL']
