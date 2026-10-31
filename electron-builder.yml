@@ -12,21 +12,36 @@ directories:
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/
 
-# 只打包构建产物，源码不进安装包
+# 只打包构建产物，源码不进安装包。
+# 不给 files 列 node_modules：electron-builder 会自动按 package.json 的
+# dependencies 收依赖，但会把依赖的 dependencies 一起带上（shadcn 拉进
+# @babel、@ts-morph、@modelcontextprotocol 等构建期工具），asar 从 4MB 涨到 120MB。
+# 这里显式只放运行时真正 require 的包，其余都已由 vite 打进 out/renderer。
 files:
   - out/**/*
   - package.json
+  - '!node_modules/.cache'
+  - node_modules/xlsx/**/*
+  - node_modules/adler-32/**/*
+  - node_modules/cfb/**/*
+  - node_modules/codepage/**/*
+  - node_modules/crc-32/**/*
+  - node_modules/ssf/**/*
+  - node_modules/wmf/**/*
+  - node_modules/word/**/*
 
 asar: true
 
+# 免安装压缩包：解压即用，文件名不带 setup，避免被误当成安装程序
 win:
   target:
-    - target: nsis
+    - target: zip
       arch:
         - x64
   icon: build/icon.png
-  artifactName: SHX-Tools-${version}-setup.${ext}
+  artifactName: SHX-Tools-${version}-win-x64-portable.${ext}
 
+# 安装包配置保留：换回 nsis 目标即可恢复
 nsis:
   oneClick: false
   perMachine: false
