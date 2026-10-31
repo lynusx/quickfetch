@@ -1,0 +1,13 @@
+#!/bin/sh
+# commit-msg 阶段写进 package.json 的版本号进不了本次提交 —— Git 在跑钩子之前
+# 就把 tree 定好了，钩子里的 git add 只会留在暂存区。这里补一次 amend 把它带上。
+# --no-verify 是必须的：否则 amend 会再触发一遍 commit-msg，版本又加一次。
+set -e
+
+# 版本号没有改动（amend 重放、chore 提交）就直接结束
+if git diff --quiet -- package.json; then
+  exit 0
+fi
+
+git add package.json
+git commit --amend --no-edit --no-verify --quiet
