@@ -18,6 +18,7 @@ import {
 const PAGE_TITLES: Record<string, string> = {
   '/image-copy': '图片拷贝',
   '/excel-parse': 'Excel 解析',
+  '/settings': '设置',
 }
 
 const LayoutPage = () => {

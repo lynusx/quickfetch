@@ -9,12 +9,14 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 const ROUTES = {
   IMAGE_COPY: '/image-copy',
   EXCEL_PARSE: '/excel-parse',
+  SETTINGS: '/settings',
   DEFAULT: '/image-copy',
 } as const
 
 // 懒加载页面
 const ImageCopyPage = lazy(() => import('./pages/ImageCopyPage'))
 const ExcelParsePage = lazy(() => import('./pages/ExcelParsePage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 
 // 404 重定向组件
 const NotFoundRedirect = ({ defaultPath }: { defaultPath: string }) => (
@@ -40,6 +42,7 @@ function App() {
 
             <Route path={ROUTES.IMAGE_COPY} element={<ImageCopyPage />} />
             <Route path={ROUTES.EXCEL_PARSE} element={<ExcelParsePage />} />
+            <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
 
             <Route
               path="*"

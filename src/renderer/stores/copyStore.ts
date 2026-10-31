@@ -1,19 +1,14 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 
-import type {
-  CopyConflictPolicy,
-  CopyLayout,
-  CopyPlanPreview,
-  CopyTask,
-} from '../../shared/ipc'
+import type { CopyPlanPreview, CopyTask } from '../../shared/ipc'
 
 /**
  * 复制任务的界面状态。
  *
  * 与扫描一致：任务本体留在主进程，这里只存快照。
- * 唯一的本地状态是「用户勾了哪些机台、选了哪种分组」—— 这两项在
- * 任务创建前就要用到，主进程不知道。
+ * 唯一的本地状态是「用户勾了哪些机台」—— 任务创建前就要用到，主进程不知道。
+ * 分组方式与重名策略属于偏好，统一放在 settingsStore 里持久化。
  */
 interface CopyState {
   /** 当前复制任务快照；没有复制过时为 null */
@@ -21,9 +16,6 @@ interface CopyState {
 
   /** 勾选要复制的机台；空数组表示全选 */
   machines: string[]
-  layout: CopyLayout
-  /** 目标目录已有同名文件时的处理方式 */
-  conflict: CopyConflictPolicy
 
   /** 已选目标目录，未选时为空 */
   targetDir: string
@@ -47,8 +39,6 @@ interface CopyAction {
   patchTask: (task: CopyTask) => void
   setMachines: (machines: string[]) => void
   toggleMachine: (machine: string) => void
-  setLayout: (layout: CopyLayout) => void
-  setConflict: (conflict: CopyConflictPolicy) => void
   setTarget: (dir: string, name: string) => void
   clearTarget: () => void
   setPreview: (preview: CopyPlanPreview | null) => void
@@ -63,8 +53,6 @@ interface CopyAction {
 const initial = {
   task: null,
   machines: [],
-  layout: 'machine' as CopyLayout,
-  conflict: 'rename' as CopyConflictPolicy,
   targetDir: '',
   targetName: '',
   preview: null,
@@ -88,8 +76,6 @@ export const useCopyStore = create<CopyState & CopyAction>()(
           ? state.machines.filter((item) => item !== machine)
           : [...state.machines, machine],
       })),
-    setLayout: (layout) => set({ layout }),
-    setConflict: (conflict) => set({ conflict }),
     setTarget: (dir, name) => set({ targetDir: dir, targetName: name }),
     clearTarget: () => set({ targetDir: '', targetName: '' }),
     setPreview: (preview) => set({ preview }),
@@ -110,8 +96,6 @@ export const useCopyStore = create<CopyState & CopyAction>()(
         ...initial,
         targetDir: state.targetDir,
         targetName: state.targetName,
-        layout: state.layout,
-        conflict: state.conflict,
       })),
   })),
 )

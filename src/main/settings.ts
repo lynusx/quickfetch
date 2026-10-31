@@ -2,12 +2,19 @@ import { app } from 'electron'
 import { readdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 
-import type { AppSettings, MachineInfo, Plant } from '../shared/ipc'
+import type {
+  AppPreferences,
+  AppSettings,
+  MachineInfo,
+  Plant,
+} from '../shared/ipc'
 
+import { DEFAULT_PREFERENCES, PREFERENCE_RANGE } from '../shared/ipc'
 import {
   DEFAULT_HISTORY_LIMIT,
   normalizeHistoryLimit,
 } from '../shared/historyLimit'
+import { envOverriddenKeys } from './load'
 import { toFsPath } from './pathx'
 
 const SETTINGS_VERSION = 1 as const
@@ -23,7 +30,70 @@ const defaultSettings = (): AppSettings => ({
   machines: [],
   updatedAt: null,
   historyLimit: DEFAULT_HISTORY_LIMIT,
+  preferences: { ...DEFAULT_PREFERENCES },
+  envOverrides: [],
 })
+
+const clampInt = (
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number,
+): number => {
+  const parsed = typeof value === 'number' ? value : Number(value)
+
+  if (!Number.isFinite(parsed)) return fallback
+
+  return Math.min(max, Math.max(min, Math.round(parsed)))
+}
+
+/**
+ * 归一化偏好：枚举值认不出就回落默认，数值按范围 clamp。
+ *
+ * 旧版本的 settings.json 没有 preferences 字段，这里必须能接住 ——
+ * 用户升级后不该因为缺字段被重置根目录。
+ */
+export const normalizePreferences = (
+  raw: Partial<AppPreferences> | null | undefined,
+): AppPreferences => {
+  const source = raw ?? {}
+  const merged = { ...DEFAULT_PREFERENCES, ...source }
+  const layouts = ['flat', 'machine', 'type', 'machine-type'] as const
+  const conflicts = ['rename', 'skip', 'overwrite'] as const
+
+  return {
+    copyLayout: layouts.includes(merged.copyLayout)
+      ? merged.copyLayout
+      : DEFAULT_PREFERENCES.copyLayout,
+    copyConflict: conflicts.includes(merged.copyConflict)
+      ? merged.copyConflict
+      : DEFAULT_PREFERENCES.copyConflict,
+    scanConcurrency: clampInt(
+      merged.scanConcurrency,
+      PREFERENCE_RANGE.scanConcurrency.min,
+      PREFERENCE_RANGE.scanConcurrency.max,
+      DEFAULT_PREFERENCES.scanConcurrency,
+    ),
+    scanBatchSize: clampInt(
+      merged.scanBatchSize,
+      PREFERENCE_RANGE.scanBatchSize.min,
+      PREFERENCE_RANGE.scanBatchSize.max,
+      DEFAULT_PREFERENCES.scanBatchSize,
+    ),
+    copyConcurrency: clampInt(
+      merged.copyConcurrency,
+      PREFERENCE_RANGE.copyConcurrency.min,
+      PREFERENCE_RANGE.copyConcurrency.max,
+      DEFAULT_PREFERENCES.copyConcurrency,
+    ),
+    copyBatchSize: clampInt(
+      merged.copyBatchSize,
+      PREFERENCE_RANGE.copyBatchSize.min,
+      PREFERENCE_RANGE.copyBatchSize.max,
+      DEFAULT_PREFERENCES.copyBatchSize,
+    ),
+  }
+}
 
 /** 机台目录名首字母决定厂区：A 为东区、B 为西区 */
 const plantOf = (name: string): Plant | null => {
@@ -105,9 +175,13 @@ export const readSettings = async (): Promise<AppSettings> => {
       entry: ENTRY,
       // 老版本配置文件没有该字段，回落到默认值而不是 undefined
       historyLimit: normalizeHistoryLimit(parsed.historyLimit),
+      // 同理：1.10.x 及更早的配置没有 preferences
+      preferences: normalizePreferences(parsed.preferences),
+      // 运行期字段，不落盘，每次读的时候按当前环境算
+      envOverrides: envOverriddenKeys(),
     }
   } catch {
-    return defaultSettings()
+    return { ...defaultSettings(), envOverrides: envOverriddenKeys() }
   }
 }
 
@@ -115,8 +189,10 @@ export const readSettings = async (): Promise<AppSettings> => {
 const writeSettings = async (settings: AppSettings): Promise<void> => {
   const target = settingsFile()
   const temp = `${target}.tmp`
+  // envOverrides 是运行时算出来的，写进文件没有意义
+  const { envOverrides: _runtime, ...persisted } = settings
 
-  await writeFile(temp, JSON.stringify(settings, null, 2), 'utf-8')
+  await writeFile(temp, JSON.stringify(persisted, null, 2), 'utf-8')
   await rename(temp, target)
 }
 
@@ -136,8 +212,10 @@ export const saveRootPath = async (rootPath: string): Promise<AppSettings> => {
     entry: ENTRY,
     machines,
     updatedAt: new Date().toISOString(),
-    // 换根目录不该把历史保留条数重置回默认值
+    // 换根目录不该把历史保留条数与偏好重置回默认值
     historyLimit: current.historyLimit,
+    preferences: current.preferences,
+    envOverrides: current.envOverrides,
   }
 
   await writeSettings(settings)
@@ -169,6 +247,22 @@ export const saveHistoryLimit = async (limit: number): Promise<AppSettings> => {
   const settings: AppSettings = {
     ...current,
     historyLimit: normalizeHistoryLimit(limit),
+    updatedAt: new Date().toISOString(),
+  }
+
+  await writeSettings(settings)
+
+  return settings
+}
+
+/** 局部更新偏好：只覆盖传进来的字段，其余保持原值 */
+export const savePreferences = async (
+  patch: Partial<AppPreferences>,
+): Promise<AppSettings> => {
+  const current = await readSettings()
+  const settings: AppSettings = {
+    ...current,
+    preferences: normalizePreferences({ ...current.preferences, ...patch }),
     updatedAt: new Date().toISOString(),
   }
 

@@ -4,7 +4,7 @@ import { basename, normalize, resolve } from 'node:path'
 
 import { filterByMachines, planPreview } from './copy'
 import { getCopyRunner, startCopy } from './copyRegistry'
-import { load } from './load'
+import { loadFrom } from './load'
 import { toFsPath } from './pathx'
 import {
   clearRecords,
@@ -22,10 +22,12 @@ import {
   readSettings,
   refreshMachines,
   saveHistoryLimit,
+  savePreferences,
   saveRootPath,
 } from './settings'
 
 import type {
+  AppPreferences,
   CopyPlanPreview,
   CopyTask,
   CopyTaskParams,
@@ -103,6 +105,11 @@ export const registerIpcHandlers = (): void => {
 
   ipcMain.handle('settings:refresh', () => refreshMachines())
 
+  ipcMain.handle(
+    'settings:save-preferences',
+    (_event, patch: Partial<AppPreferences>) => savePreferences(patch),
+  )
+
   // ------------------------------------------------------------------ 扫描
 
   ipcMain.handle(
@@ -128,10 +135,7 @@ export const registerIpcHandlers = (): void => {
         {
           rootPath: settings.rootPath,
           entry: settings.entry,
-          load: {
-            readConcurrency: load.readConcurrency,
-            machineBatchSize: load.machineBatchSize,
-          },
+          load: loadFrom(settings.preferences),
         },
       )
     },
@@ -298,14 +302,16 @@ export const registerIpcHandlers = (): void => {
         throw new Error('所选机台在当前任务里没有图片，请重新勾选')
       }
 
+      const profile = loadFrom((await readSettings()).preferences)
+
       return startCopy({
         scanTaskId: taskId,
         targetDir: target,
         params,
         images,
         load: {
-          concurrency: load.copyConcurrency,
-          batchSize: load.copyBatchSize,
+          concurrency: profile.copyConcurrency,
+          batchSize: profile.copyBatchSize,
         },
       })
     },

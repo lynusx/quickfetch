@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { CopyTask } from '../../shared/ipc'
 import { useCopyStore } from '../stores/copyStore'
 import { useScanStore } from '../stores/scanStore'
+import { selectPreferences, useSettingsStore } from '../stores/settingsStore'
 import { toErrorMessage } from '../utils/error'
 
 interface UseImageCopyProps {
@@ -26,8 +27,10 @@ export const useImageCopy = ({ showToast }: UseImageCopyProps) => {
   const task = useScanStore((state) => state.task)
   const copying = useCopyStore((state) => state.task)
   const machines = useCopyStore((state) => state.machines)
-  const layout = useCopyStore((state) => state.layout)
-  const conflict = useCopyStore((state) => state.conflict)
+  // 分组方式与重名策略来自设置页，主进程与本进程读的是同一份持久化配置
+  const preferences = useSettingsStore(selectPreferences)
+  const layout = preferences.copyLayout
+  const conflict = preferences.copyConflict
   const targetDir = useCopyStore((state) => state.targetDir)
   const targetName = useCopyStore((state) => state.targetName)
   const preview = useCopyStore((state) => state.preview)

@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router'
-import { Copy, FileSpreadsheet, ScanLine } from 'lucide-react'
+import { Copy, FileSpreadsheet, ScanLine, Settings } from 'lucide-react'
 
 import {
   Sidebar,
@@ -30,6 +30,8 @@ const NAV_ITEMS = [
     icon: FileSpreadsheet,
   },
 ]
+
+const SETTINGS_PATH = '/settings'
 
 export const AppSidebar = () => {
   const { pathname } = useLocation()
@@ -75,6 +77,21 @@ export const AppSidebar = () => {
       </SidebarContent>
 
       <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={pathname === SETTINGS_PATH}
+              tooltip="设置"
+            >
+              <NavLink to={SETTINGS_PATH}>
+                <Settings />
+                <span>设置</span>
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+
         <div className="flex items-center justify-between gap-2 px-1 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
           <span>版本 {getAppVersion()}</span>
           <span>Windows</span>

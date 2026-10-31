@@ -15,6 +15,21 @@ export interface MachineInfo {
   plant: Plant
 }
 
+/** 偏好里能调数值的四项，用来标注「被环境变量接管」 */
+export type PreferenceKey =
+  | 'scanConcurrency'
+  | 'scanBatchSize'
+  | 'copyConcurrency'
+  | 'copyBatchSize'
+
+/** 环境变量名 → 偏好字段，主进程解析与界面提示共用一份 */
+export const PREFERENCE_ENV: Record<PreferenceKey, string> = {
+  scanConcurrency: 'SHX_READ_CONCURRENCY',
+  scanBatchSize: 'SHX_MACHINE_BATCH',
+  copyConcurrency: 'SHX_COPY_CONCURRENCY',
+  copyBatchSize: 'SHX_COPY_BATCH',
+}
+
 /**
  * 持久化配置。根目录只存原始 UNC 路径（\\10.108.164.2\qj-dc-el\DC），
  * 不存映射盘符：盘符在别的机器上可能指向别处甚至不存在。
@@ -29,6 +44,15 @@ export interface AppSettings {
   updatedAt: string | null
   /** 历史扫描记录的保留条数，默认 10 */
   historyLimit: number
+  /** 设置页里的复制与性能偏好 */
+  preferences: AppPreferences
+  /**
+   * 被环境变量接管的偏好项。
+   *
+   * 现场临时用 SHX_* 压降时，设置页里改这几项不会有实际效果，
+   * 与其让用户猜「是不是没保存上」，不如直接标出来。
+   */
+  envOverrides: PreferenceKey[]
 }
 
 export interface ScanTaskParams {
@@ -162,6 +186,47 @@ export const COPY_CONFLICT_LABEL: Record<CopyConflictPolicy, string> = {
   overwrite: '覆盖已存在',
 }
 
+/**
+ * 设置页可调的偏好，随 settings.json 一起持久化。
+ *
+ * 这六项以前散在三处：复制面板的 store（重启就丢）、主进程的常量、
+ * 环境变量。集中到这里之后，界面只认这份值，环境变量仍可临时覆盖。
+ */
+export interface AppPreferences {
+  /** 复制到本地时按什么层级建子目录 */
+  copyLayout: CopyLayout
+  /** 目标已有同名文件时怎么处理 */
+  copyConflict: CopyConflictPolicy
+  /** 同时读取的目录数；运行中失败率过高会自动降档 */
+  scanConcurrency: number
+  /** 每批扫描的机台数 */
+  scanBatchSize: number
+  /** 同时复制的文件数 */
+  copyConcurrency: number
+  /** 每批复制的文件数 */
+  copyBatchSize: number
+}
+
+export const DEFAULT_PREFERENCES: AppPreferences = {
+  copyLayout: 'machine',
+  copyConflict: 'rename',
+  scanConcurrency: 4,
+  scanBatchSize: 2,
+  copyConcurrency: 6,
+  copyBatchSize: 50,
+}
+
+/**
+ * 每项的可调范围。主进程按它 clamp，设置页按它画滑杆，
+ * 两边共用一份，不会出现「界面允许 32、主进程悄悄压回 8」。
+ */
+export const PREFERENCE_RANGE = {
+  scanConcurrency: { min: 1, max: 8, step: 1 },
+  scanBatchSize: { min: 1, max: 4, step: 1 },
+  copyConcurrency: { min: 1, max: 16, step: 1 },
+  copyBatchSize: { min: 1, max: 500, step: 10 },
+} as const
+
 export interface CopyTaskParams {
   /** 要复制的机台目录名；为空表示全部 */
   machines: string[]
@@ -269,6 +334,8 @@ export interface ElectronAPI {
   saveRootPath: (rootPath: string) => Promise<AppSettings>
   /** 按当前根目录重新识别机台列表 */
   refreshMachines: () => Promise<AppSettings>
+  /** 局部更新复制与性能偏好，返回落盘后的完整配置 */
+  savePreferences: (patch: Partial<AppPreferences>) => Promise<AppSettings>
 
   /** 创建扫描任务（状态 pending），创建瞬间即可拿到进度快照 */
   createScanTask: (params: ScanTaskParams) => Promise<ScanTask>

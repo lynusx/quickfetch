@@ -15,6 +15,9 @@ const api: ElectronAPI = {
 
   refreshMachines: () => ipcRenderer.invoke('settings:refresh'),
 
+  savePreferences: (patch) =>
+    ipcRenderer.invoke('settings:save-preferences', patch),
+
   createScanTask: (params) => ipcRenderer.invoke('scan:create', params),
 
   startScanTask: (taskId) => ipcRenderer.invoke('scan:start', taskId),

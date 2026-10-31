@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router'
 import {
   CheckCircle2,
   CircleAlert,
@@ -27,11 +28,8 @@ import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { useImageCopy } from '@/hooks/useImageCopy'
 import { useCopyStore } from '@/stores/copyStore'
-import type {
-  CopyConflictPolicy,
-  CopyLayout,
-  CopyStatus,
-} from '../../../shared/ipc'
+import { selectPreferences, useSettingsStore } from '@/stores/settingsStore'
+import type { CopyConflictPolicy, CopyStatus } from '../../../shared/ipc'
 import { COPY_CONFLICT_LABEL, COPY_LAYOUT_LABEL } from '../../../shared/ipc'
 import { formatDuration, formatEta } from '@/utils/common'
 import { cn } from '@/lib/utils'
@@ -51,30 +49,12 @@ const STATUS_META: Record<
   failed: { label: '失败', variant: 'destructive' },
 }
 
-const LAYOUTS: CopyLayout[] = ['flat', 'machine', 'type', 'machine-type']
-
 /** 跟在「将…」后面的动词，别直接拼「跳过已存在」这种标签原文 */
 const CONFLICT_VERB: Record<CopyConflictPolicy, string> = {
   rename: '自动编号后全部复制',
   skip: '整组跳过',
   overwrite: '覆盖',
 }
-
-/** 分组方式的直观说明：光看「按机台+类型分组」不知道会建几层目录 */
-const LAYOUT_HINT: Record<CopyLayout, string> = {
-  flat: '全部直接放在目标目录下',
-  machine: '目标目录/A01-A/图片',
-  type: '目标目录/NG_脏污_B/图片',
-  'machine-type': '目标目录/A01-A/NG_脏污_B/图片',
-}
-
-const CONFLICT_HINT: Record<CopyConflictPolicy, string> = {
-  rename: '重名编号，一张不少',
-  skip: '有同名就整组不复制',
-  overwrite: '覆盖目标，不可撤销',
-}
-
-const CONFLICTS: CopyConflictPolicy[] = ['rename', 'skip', 'overwrite']
 
 interface CopyPanelProps {
   showToast: (
@@ -114,14 +94,15 @@ const CopyPanel = ({ showToast }: CopyPanelProps) => {
   } = useImageCopy({ showToast })
 
   const machines = useCopyStore((state) => state.machines)
-  const layout = useCopyStore((state) => state.layout)
-  const conflict = useCopyStore((state) => state.conflict)
   const showFailures = useCopyStore((state) => state.showFailures)
   const toggleMachine = useCopyStore((state) => state.toggleMachine)
   const setMachines = useCopyStore((state) => state.setMachines)
-  const setLayout = useCopyStore((state) => state.setLayout)
-  const setConflict = useCopyStore((state) => state.setConflict)
   const setShowFailures = useCopyStore((state) => state.setShowFailures)
+
+  // 分组方式与重名策略在设置页统一维护，这里只读摘要，两种状态都要能改
+  const preferences = useSettingsStore(selectPreferences)
+  const layout = preferences.copyLayout
+  const conflict = preferences.copyConflict
 
   const task = useCopyStore((state) => state.task)
 
@@ -145,18 +126,41 @@ const CopyPanel = ({ showToast }: CopyPanelProps) => {
   const activeDir = task?.progress.targetDir ?? targetDir
   const activeDirName = activeDir.split(/[\\/]/).filter(Boolean).pop() ?? ''
 
+  /** 一行摘要 + 去设置页的入口；空态和列表态共用 */
+  const optionSummary = (
+    <div className="flex items-center justify-between gap-2">
+      <p className="min-w-0 text-sm">
+        <span className="font-medium">{COPY_LAYOUT_LABEL[layout]}</span>
+        <span className="mx-1 text-muted-foreground">·</span>
+        <span className="text-muted-foreground">
+          {COPY_CONFLICT_LABEL[conflict]}
+        </span>
+      </p>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 shrink-0 px-2 text-xs text-muted-foreground"
+        asChild
+      >
+        <Link to="/settings">修改</Link>
+      </Button>
+    </div>
+  )
+
   if (!machineStats.length) {
     return (
-      <Alert>
-        <CircleAlert />
-        <AlertTitle>暂无可复制的图片</AlertTitle>
-        <AlertDescription>
-          完成一次扫描并命中图片后，这里会出现机台列表供勾选复制
-        </AlertDescription>
-      </Alert>
+      <div className="flex flex-col gap-4">
+        <Alert>
+          <CircleAlert />
+          <AlertTitle>暂无可复制的图片</AlertTitle>
+          <AlertDescription>
+            完成一次扫描并命中图片后，这里会出现机台列表供勾选复制
+          </AlertDescription>
+        </Alert>
+        {optionSummary}
+      </div>
     )
   }
-
   return (
     <div className="flex flex-col gap-5">
       {/* ---------------------------------------------------------- 目标目录 */}
@@ -299,37 +303,17 @@ const CopyPanel = ({ showToast }: CopyPanelProps) => {
 
       <Separator />
 
-      {/* ---------------------------------------------------------- 分组方式 */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between text-sm">
-          <span className="font-medium">分组方式</span>
-          {previewing && (
-            <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-          )}
-        </div>
+      {/* ------------------------------------------------ 复制选项（只读摘要） */}
+      {/* 分组方式与重名策略统一在设置页维护，跑任务的当口不该还能改 */}
+      <div className="flex flex-col gap-1.5">
+        {optionSummary}
 
-        <div className="grid grid-cols-2 gap-2">
-          {LAYOUTS.map((value) => (
-            <button
-              key={value}
-              type="button"
-              disabled={running || paused}
-              onClick={() => setLayout(value)}
-              className={cn(
-                'flex flex-col gap-0.5 rounded-lg border px-3 py-2 text-left text-xs transition-colors',
-                layout === value
-                  ? 'border-primary bg-primary/5'
-                  : 'hover:bg-muted/60',
-                (running || paused) && 'cursor-not-allowed opacity-60',
-              )}
-            >
-              <span className="font-medium">{COPY_LAYOUT_LABEL[value]}</span>
-              <span className="truncate font-mono text-[10px] text-muted-foreground">
-                {LAYOUT_HINT[value]}
-              </span>
-            </button>
-          ))}
-        </div>
+        {previewing && !preview && (
+          <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Loader2 className="size-3 animate-spin" />
+            正在计算复制规模
+          </span>
+        )}
 
         {preview && (
           <p className="text-[11px] text-muted-foreground">
@@ -362,38 +346,6 @@ const CopyPanel = ({ showToast }: CopyPanelProps) => {
             )}
           </p>
         )}
-      </div>
-
-      <Separator />
-
-      {/* ---------------------------------------------------------- 重名策略 */}
-      <div className="flex flex-col gap-2">
-        <span className="text-sm font-medium">重名文件</span>
-
-        <div className="grid grid-cols-3 gap-2">
-          {CONFLICTS.map((value) => (
-            <button
-              key={value}
-              type="button"
-              disabled={running || paused}
-              onClick={() => setConflict(value)}
-              className={cn(
-                'flex flex-col gap-0.5 rounded-lg border px-2 py-2 text-left text-xs transition-colors',
-                conflict === value
-                  ? value === 'overwrite'
-                    ? 'border-destructive bg-destructive/5'
-                    : 'border-primary bg-primary/5'
-                  : 'hover:bg-muted/60',
-                (running || paused) && 'cursor-not-allowed opacity-60',
-              )}
-            >
-              <span className="font-medium">{COPY_CONFLICT_LABEL[value]}</span>
-              <span className="whitespace-nowrap text-[10px] leading-tight text-muted-foreground">
-                {CONFLICT_HINT[value]}
-              </span>
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* ---------------------------------------------------------- 控制按钮 */}
