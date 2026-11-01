@@ -40,7 +40,7 @@ pnpm format:fix
 
 ```bash
 pnpm build                    # 产物输出到 out/（main、preload、renderer）
-pnpm dist:win                 # 在 out/ 基础上打 Windows x64 NSIS 安装包，输出到 release/
+pnpm dist:win                 # 在 out/ 基础上打 Windows x64 zip 免安装包，输出到 release/
 ```
 
 打包配置见 `electron-builder.yml`，应用图标为 `build/icon.png`（占位图，可替换为正式 256×256 图标）。
