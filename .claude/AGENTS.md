@@ -4,10 +4,10 @@
 
 ## 先读这些
 
-| 场景                      | 该读什么                                                                       |
-| ------------------------- | ------------------------------------------------------------------------------ |
-| 要动 UI、加组件、调整样式 | [`.agents/skills/radix-themes/SKILL.md`](.agents/skills/radix-themes/SKILL.md) |
-| 整体怎么跑起来            | [`README.md`](README.md)                                                       |
+| 场景                      | 该读什么                                                          |
+| ------------------------- | ----------------------------------------------------------------- |
+| 要动 UI、加组件、调整样式 | [`skills/radix-themes/SKILL.md`](skills/radix-themes/SKILL.md)     |
+| 整体怎么跑起来            | [`README.md`](../README.md)                                        |
 
 ## Radix Themes (@radix-ui/themes) 相关改动
 
@@ -98,5 +98,5 @@ cp release/SHX-Tools-*-portable.zip /workspace/   # 只留这一份
 rm -f /workspace/shots/*                          # 拍截图前清空
 ```
 
-`.agents/` 是第三方 skill 文档，已加进 `.prettierignore`。跑 `format:fix` 前请确认它还在忽略列表里，
+`.claude/` 是第三方 skill 文档与本文档所在位置，已加进 `.prettierignore`。跑 `format:fix` 前请确认它还在忽略列表里，
 否则会把别人的文档整篇重排，混进 diff 里。

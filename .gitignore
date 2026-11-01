@@ -30,3 +30,6 @@ release
 
 # Electron 崩溃时留下的 core dump
 core.*
+
+# Claude Code 的本地设置（skills 仍需入库，不整目录忽略）
+.claude/settings.local.json
