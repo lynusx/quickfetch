@@ -1,12 +1,14 @@
-import { CounterClockwiseClockIcon, TrashIcon } from '@radix-ui/react-icons'
+import {
+  CounterClockwiseClockIcon,
+  InfoCircledIcon,
+  TrashIcon,
+} from '@radix-ui/react-icons'
 import { useCallback, useEffect, useState } from 'react'
 import {
   Badge,
   Box,
   Button,
-  Card,
   Flex,
-  Heading,
   IconButton,
   ScrollArea,
   Spinner,
@@ -14,27 +16,13 @@ import {
   TextField,
 } from '@radix-ui/themes'
 
+import { Panel, PanelBody, PanelHeader } from '@/components/Panel'
+import { EmptyState } from '@/components/EmptyState'
 import { useHistoryStore } from './historyStore'
+import { SCAN_STATUS_META } from '../scan/components/scanStatus'
 import type { ScanCategory, ScanHistoryItem, ScanTaskStatus } from '@shared/ipc'
 import { formatDuration } from '@/utils/common'
 import { toErrorMessage } from '@/utils/error'
-
-const STATUS_META: Record<
-  ScanTaskStatus,
-  {
-    label: string
-    color: 'gray' | 'blue' | 'amber' | 'green' | 'orange' | 'red'
-    variant: 'soft' | 'surface' | 'outline'
-  }
-> = {
-  pending: { label: '待开始', color: 'gray', variant: 'surface' },
-  running: { label: '进行中', color: 'blue', variant: 'soft' },
-  paused: { label: '已暂停', color: 'amber', variant: 'soft' },
-  completed: { label: '已完成', color: 'green', variant: 'soft' },
-  canceled: { label: '已取消', color: 'gray', variant: 'outline' },
-  interrupted: { label: '已中断', color: 'orange', variant: 'soft' },
-  failed: { label: '失败', color: 'red', variant: 'soft' },
-}
 
 /** 历史列表只关心「什么时候扫的、扫了什么、结果多少」，时间精确到分钟就够 */
 const formatTime = (timestamp: number): string => {
@@ -171,143 +159,120 @@ const HistoryPanel = ({
   }
 
   return (
-    <Card size="2">
-      <Flex justify="between" align="center">
-        <Flex align="center" gap="2">
-          <CounterClockwiseClockIcon
-            width={16}
-            height={16}
-            style={{ color: 'var(--accent-11)' }}
-          />
-          <Heading size="3">历史记录</Heading>
-          {refreshing && <Spinner size="1" />}
-        </Flex>
-        <Flex align="center" gap="3">
-          <Text
-            size="1"
-            color="gray"
-            style={{ fontVariantNumeric: 'tabular-nums' }}
-          >
-            {visible.length} / {limit}
-          </Text>
-          <Button
-            variant="soft"
-            color="gray"
-            size="1"
-            onClick={() => setOpen(!open)}
-          >
-            {open ? '收起' : '展开'}
-          </Button>
-        </Flex>
-      </Flex>
-
-      {open && (
-        <Flex direction="column" gap="3" mt="3">
-          <Flex align="end" gap="3">
-            <Flex direction="column" gap="1">
-              <Text as="label" size="1" color="gray">
-                保留条数
-              </Text>
-              <TextField.Root
-                size="1"
-                style={{ width: 80 }}
-                value={draftLimit}
-                inputMode="numeric"
-                onChange={(event) => setDraftLimit(event.target.value)}
-                onBlur={commitLimit}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') event.currentTarget.blur()
-                }}
-              />
-            </Flex>
-            <Text
-              size="1"
+    <Panel>
+      <PanelHeader
+        icon={<CounterClockwiseClockIcon width={13} height={13} />}
+        title="历史记录"
+        description="每次扫描结束后自动保存，可恢复参数或再次复制"
+        actions={
+          <>
+            {refreshing ? <Spinner size="1" /> : null}
+            <Text as="span" size="1" color="gray" className="field-count">
+              {visible.length} / {limit}
+            </Text>
+            <Button
+              variant="soft"
               color="gray"
-              style={{ flex: 1, paddingBottom: 2, lineHeight: 1.5 }}
-            >
-              每次扫描结束后自动保存结果，含全部图片路径，可恢复查看或再次复制。
-              超出条数的旧记录会被自动删除。
-            </Text>
-            {visible.length > 0 && (
-              <Button variant="soft" color="red" size="1" onClick={handleClear}>
-                <TrashIcon width={14} height={14} />
-                清空
-              </Button>
-            )}
-          </Flex>
-
-          {error && (
-            <Text size="1" color="red">
-              {error}
-            </Text>
-          )}
-
-          {loading && (
-            <Box py="4">
-              <Text align="center" size="1" color="gray" as="p">
-                正在读取历史记录…
-              </Text>
-            </Box>
-          )}
-
-          {!loading && visible.length === 0 && (
-            <Box py="4">
-              <Text align="center" size="1" color="gray" as="p">
-                还没有历史记录，完成一次扫描后会自动出现在这里
-              </Text>
-            </Box>
-          )}
-
-          {!loading && visible.length > 0 && (
-            <Card
               size="1"
-              variant="surface"
-              style={{ padding: 0, overflow: 'hidden' }}
+              onClick={() => setOpen(!open)}
             >
-              <ScrollArea
-                type="auto"
-                scrollbars="vertical"
-                style={{ maxHeight: 280 }}
+              {open ? '收起' : '展开'}
+            </Button>
+          </>
+        }
+      />
+
+      {open ? (
+        <PanelBody>
+          <Flex direction="column" gap="3">
+            <Flex className="history-toolbar" align="end" gap="3">
+              <Flex direction="column" gap="1" className="history-limit-field">
+                <Text as="label" size="1" color="gray">
+                  保留条数
+                </Text>
+                <TextField.Root
+                  size="1"
+                  className="history-limit-input"
+                  value={draftLimit}
+                  inputMode="numeric"
+                  onChange={(event) => setDraftLimit(event.target.value)}
+                  onBlur={commitLimit}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') event.currentTarget.blur()
+                  }}
+                />
+              </Flex>
+              <Text
+                as="div"
+                size="1"
+                color="gray"
+                className="history-toolbar-hint"
               >
-                <Flex direction="column">
-                  {visible.map((item, index) => {
-                    const meta = STATUS_META[item.status]
+                每条记录包含全部图片路径，可恢复查看或再次复制；超出条数的旧记录会被自动删除。
+              </Text>
+              {visible.length > 0 ? (
+                <Button
+                  variant="soft"
+                  color="red"
+                  size="1"
+                  onClick={handleClear}
+                >
+                  <TrashIcon width={13} height={13} />
+                  清空
+                </Button>
+              ) : null}
+            </Flex>
+
+            {error ? (
+              <Text size="1" color="red">
+                {error}
+              </Text>
+            ) : null}
+
+            {loading ? (
+              <Flex align="center" justify="center" gap="2" py="4">
+                <Spinner size="1" />
+                <Text size="1" color="gray">
+                  正在读取历史记录…
+                </Text>
+              </Flex>
+            ) : null}
+
+            {!loading && visible.length === 0 ? (
+              <EmptyState
+                icon={<InfoCircledIcon width={18} height={18} />}
+                title="还没有历史记录"
+                description="完成一次扫描后，结果会自动出现在这里，退出前中断的任务也会被保存。"
+              />
+            ) : null}
+
+            {!loading && visible.length > 0 ? (
+              <Box className="history-list">
+                <ScrollArea
+                  type="auto"
+                  scrollbars="vertical"
+                  className="history-scroll"
+                >
+                  {visible.map((item) => {
+                    const meta = SCAN_STATUS_META[item.status]
                     const busy = loadingTaskId === item.id
                     const isActive = item.id === activeId
 
                     return (
                       <Flex
+                        className="history-row"
                         key={item.id}
                         align="center"
-                        justify="between"
                         gap="3"
-                        px="3"
-                        py="2"
-                        style={{
-                          borderBottom:
-                            index === visible.length - 1
-                              ? 'none'
-                              : '1px solid var(--gray-4)',
-                          backgroundColor: isActive
-                            ? 'var(--accent-a3)'
-                            : undefined,
-                          transition: 'background-color 0.15s ease',
-                        }}
+                        data-active={isActive || undefined}
                       >
                         <Flex
                           direction="column"
                           gap="1"
-                          style={{ minWidth: 0, flex: 1 }}
+                          className="history-main"
                         >
-                          <Flex align="center" gap="2">
-                            <Text
-                              size="1"
-                              color="gray"
-                              style={{
-                                flexShrink: 0,
-                                fontVariantNumeric: 'tabular-nums',
-                              }}
-                            >
+                          <Flex className="history-time" align="center" gap="2">
+                            <Text as="span" size="1" color="gray">
                               {formatTime(item.createdAt)}
                             </Text>
                             <Badge
@@ -320,42 +285,26 @@ const HistoryPanel = ({
                           </Flex>
                           <button
                             type="button"
-                            style={{
-                              all: 'unset',
-                              cursor: 'pointer',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              fontSize: 'var(--font-size-1)',
-                              color: 'var(--accent-11)',
-                              fontWeight: 500,
-                              textAlign: 'left',
-                            }}
+                            className="history-summary"
                             title={`${item.params.machines.join('、')}\n${summarize(item)}`}
                             onClick={() => handleRestore(item)}
                           >
-                            {summarize(item)}
+                            <Text as="span" size="1" weight="medium">
+                              {summarize(item)}
+                            </Text>
                           </button>
                         </Flex>
 
                         <Flex
                           direction="column"
                           align="end"
-                          gap="1"
-                          style={{
-                            flexShrink: 0,
-                            fontVariantNumeric: 'tabular-nums',
-                          }}
+                          className="history-stats"
                         >
-                          <Text
-                            size="1"
-                            color="gray"
-                            title={`命中 ${item.totalImages} 张，${item.hitMachines}/${item.machineCount} 台有结果`}
-                          >
+                          <Text as="div" size="1" color="gray">
                             {item.totalImages} 张 · {item.hitMachines}/
                             {item.machineCount} 台
                           </Text>
-                          <Text size="1" color="gray">
+                          <Text as="div" size="1" color="gray">
                             {formatDuration(item.elapsedMs)}
                           </Text>
                         </Flex>
@@ -377,13 +326,13 @@ const HistoryPanel = ({
                       </Flex>
                     )
                   })}
-                </Flex>
-              </ScrollArea>
-            </Card>
-          )}
-        </Flex>
-      )}
-    </Card>
+                </ScrollArea>
+              </Box>
+            ) : null}
+          </Flex>
+        </PanelBody>
+      ) : null}
+    </Panel>
   )
 }
 

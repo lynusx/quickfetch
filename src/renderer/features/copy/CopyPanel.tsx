@@ -21,12 +21,13 @@ import {
   Grid,
   Progress,
   ScrollArea,
-  Separator,
   Spinner,
   Strong,
   Text,
 } from '@radix-ui/themes'
 
+import { Field } from '@/components/Field'
+import { EmptyState } from '@/components/EmptyState'
 import { useImageCopy } from './useImageCopy'
 import { copyStoreOf } from './copyStore'
 import { selectPreferences, useSettingsStore } from '@/features/settings'
@@ -44,9 +45,9 @@ const STATUS_META: Record<
 > = {
   pending: { label: '待开始', color: 'gray', variant: 'outline' },
   running: { label: '复制中', color: 'blue', variant: 'soft' },
-  paused: { label: '已暂停', color: 'amber', variant: 'outline' },
+  paused: { label: '已暂停', color: 'amber', variant: 'soft' },
   completed: { label: '已完成', color: 'green', variant: 'soft' },
-  canceled: { label: '已取消', color: 'gray', variant: 'outline' },
+  canceled: { label: '已取消', color: 'gray', variant: 'surface' },
   failed: { label: '失败', color: 'red', variant: 'soft' },
 }
 
@@ -119,14 +120,14 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
 
   const optionSummary = (
     <Flex align="center" justify="between" gap="2">
-      <Text size="2">
+      <Text size="1" color="gray">
         <Strong>{COPY_LAYOUT_LABEL[layout]}</Strong>
         <Text color="gray" mx="1">
           ·
         </Text>
-        <Text color="gray">{COPY_CONFLICT_LABEL[conflict]}</Text>
+        {COPY_CONFLICT_LABEL[conflict]}
       </Text>
-      <Button variant="ghost" size="1" asChild>
+      <Button variant="ghost" size="1" color="gray" asChild>
         <Link to="/settings">修改</Link>
       </Button>
     </Flex>
@@ -135,69 +136,51 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
   if (!machineStats.length) {
     return (
       <Flex direction="column" gap="4">
-        <Callout.Root color="gray" size="1">
-          <Callout.Icon>
-            <ExclamationTriangleIcon width={14} height={14} />
-          </Callout.Icon>
-          <Callout.Text>
-            <Strong>暂无可复制的图片：</Strong>
-            完成一次扫描并命中图片后，这里会出现机台列表供勾选复制
-          </Callout.Text>
-        </Callout.Root>
+        <EmptyState
+          icon={<DownloadIcon width={18} height={18} />}
+          title="暂无可复制的图片"
+          description="完成一次扫描并命中图片后，这里会出现机台列表供勾选复制。"
+        />
         {optionSummary}
       </Flex>
     )
   }
 
   return (
-    <Flex direction="column" gap="4">
+    <Flex direction="column" gap="5">
       {/* 目标目录 */}
-      <Flex direction="column" gap="2">
-        <Flex justify="between" align="center">
-          <Text as="label" size="2" weight="medium">
-            目标目录
-            <Text color="red" ml="1">
-              *
-            </Text>
-          </Text>
-          {activeDir && (
+      <Field
+        label="目标目录"
+        actions={
+          activeDir ? (
             <Button
               variant="ghost"
               size="1"
-              onClick={() => void handleReveal()}
+              color="gray"
+              onClick={handleReveal}
             >
-              <OpenInNewWindowIcon width={14} height={14} />
+              <OpenInNewWindowIcon width={13} height={13} />
               打开
             </Button>
-          )}
-        </Flex>
-
-        <Flex align="center" gap="2">
-          <Box
-            px="3"
-            py="1"
-            style={{
-              flex: 1,
-              minWidth: 0,
-              height: 32,
-              display: 'flex',
-              alignItems: 'center',
-              border: activeDir
-                ? '1px solid var(--gray-6)'
-                : '1px dashed var(--gray-7)',
-              borderRadius: 'var(--radius-2)',
-              backgroundColor: activeDir
-                ? 'var(--gray-3)'
-                : 'var(--color-panel-solid)',
-              fontFamily: 'var(--code-font-family)',
-              fontSize: '12px',
-            }}
-            title={activeDir || undefined}
+          ) : undefined
+        }
+        hint={
+          activeDir
+            ? undefined
+            : '复制前必须选好目标目录；主进程不会自己弹框，避免对话框关掉了任务却已经开始。'
+        }
+      >
+        <Flex className="field-row" align="center" gap="2">
+          <Flex
+            className="target-dir"
+            align="center"
+            gap="2"
+            data-empty={!activeDir}
           >
             <Text size="1" truncate color={activeDir ? undefined : 'gray'}>
-              {activeDir || '尚未选择，开始复制前必须先选择'}
+              {activeDir || '尚未选择目标目录'}
             </Text>
-          </Box>
+          </Flex>
           <Button
             variant="outline"
             size="2"
@@ -211,160 +194,116 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
             {activeDir ? '更换' : '选择目录'}
           </Button>
         </Flex>
-
-        {!activeDir && (
-          <Text size="1" color="gray">
-            复制前必须选好目标目录，主进程不会自己弹框，避免对话框关掉了任务却已经开始。
-          </Text>
-        )}
-      </Flex>
-
-      <Separator size="4" />
+      </Field>
 
       {/* 勾选机台 */}
-      <Flex direction="column" gap="2">
-        <Flex justify="between" align="center">
-          <Text as="label" size="2" weight="medium">
-            要复制的机台
-          </Text>
-          <Flex align="center" gap="2">
-            <Text
-              size="1"
-              color="gray"
-              style={{ fontVariantNumeric: 'tabular-nums' }}
-            >
-              已选 {allPicked ? machineStats.length : machines.length}/
-              {machineStats.length} 台 · {pickedCount} 张
-            </Text>
-            <Button
-              variant="ghost"
-              size="1"
-              onClick={() =>
-                setMachines(
-                  allPicked ? [] : machineStats.map((item) => item.machine),
-                )
-              }
-            >
-              {allPicked ? '取消全选' : '全选'}
-            </Button>
-          </Flex>
-        </Flex>
-
-        <Text size="1" color="gray">
-          不勾选任何机台等同于复制全部机台的图片。
-        </Text>
-
-        <ScrollArea
-          scrollbars="vertical"
-          style={{
-            maxHeight: 220,
-            border: '1px solid var(--gray-6)',
-            borderRadius: 'var(--radius-3)',
-            padding: 'var(--space-2)',
-            backgroundColor: 'var(--color-panel-solid)',
-          }}
-        >
-          <Grid columns={{ initial: '2', sm: '3' }} gap="2">
+      <Field
+        label="要复制的机台"
+        count={`已选 ${allPicked ? machineStats.length : machines.length}/${machineStats.length} 台 · ${pickedCount} 张`}
+        actions={
+          <Button
+            variant="ghost"
+            size="1"
+            color="gray"
+            onClick={() =>
+              setMachines(
+                allPicked ? [] : machineStats.map((item) => item.machine),
+              )
+            }
+          >
+            {allPicked ? '取消全选' : '全选'}
+          </Button>
+        }
+        hint="不勾选任何机台等同于复制全部机台的图片。"
+      >
+        <ScrollArea type="auto" scrollbars="vertical" className="choice-scroll">
+          <Grid className="machine-grid" gap="1">
             {machineStats.map((item) => {
               const checked = allPicked || machines.includes(item.machine)
+
+              const handleToggle = () => {
+                if (running || paused) return
+
+                if (allPicked) {
+                  const rest = machineStats
+                    .map((entry) => entry.machine)
+                    .filter((name) => name !== item.machine)
+
+                  setMachines(rest)
+                  return
+                }
+
+                toggleMachine(item.machine)
+              }
 
               return (
                 <Flex
                   key={item.machine}
+                  className="machine-item"
                   align="center"
-                  px="2"
-                  py="1"
-                  style={{
-                    borderRadius: 'var(--radius-2)',
-                    userSelect: 'none',
-                    opacity: running ? 0.6 : 1,
-                  }}
+                  gap="2"
+                  data-disabled={running || paused || undefined}
+                  data-dimmed={running || undefined}
+                  onClick={handleToggle}
                 >
+                  <Checkbox
+                    size="1"
+                    checked={checked}
+                    disabled={running || paused}
+                    aria-label={item.machine}
+                    onClick={(event) => event.stopPropagation()}
+                    onCheckedChange={handleToggle}
+                  />
                   <Text
-                    as="label"
-                    size="2"
-                    style={{
-                      cursor: running ? 'not-allowed' : 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 'var(--space-2)',
-                      width: '100%',
-                      minWidth: 0,
-                    }}
+                    as="span"
+                    size="1"
+                    truncate
+                    className="machine-item-label"
+                    title={item.machine}
                   >
-                    <Checkbox
-                      size="1"
-                      checked={checked}
-                      disabled={running || paused}
-                      onCheckedChange={() => {
-                        if (allPicked) {
-                          const rest = machineStats
-                            .map((entry) => entry.machine)
-                            .filter((name) => name !== item.machine)
-
-                          setMachines(rest)
-                          return
-                        }
-                        toggleMachine(item.machine)
-                      }}
-                    />
-                    <Text
-                      size="1"
-                      truncate
-                      style={{
-                        flex: 1,
-                        fontFamily: 'var(--code-font-family)',
-                      }}
-                    >
-                      {item.machine}
-                    </Text>
-                    <Text
-                      size="1"
-                      color="gray"
-                      style={{ fontVariantNumeric: 'tabular-nums' }}
-                    >
-                      {item.images}
-                    </Text>
+                    {item.machine}
+                  </Text>
+                  <Text
+                    as="span"
+                    size="1"
+                    color="gray"
+                    className="machine-item-count"
+                  >
+                    {item.images}
                   </Text>
                 </Flex>
               )
             })}
           </Grid>
         </ScrollArea>
-      </Flex>
+      </Field>
 
-      <Separator size="4" />
-
-      {/* 复制选项 */}
-      <Flex direction="column" gap="1">
+      {/* 复制选项与预览 */}
+      <Box>
         {optionSummary}
 
-        {previewing && !preview && (
-          <Flex align="center" gap="1">
+        {previewing && !preview ? (
+          <Flex align="center" gap="1" mt="2">
             <Spinner size="1" />
             <Text size="1" color="gray">
               正在计算复制规模
             </Text>
           </Flex>
-        )}
+        ) : null}
 
-        {preview && (
+        {preview ? (
           <Text size="1" color="gray">
             将复制 <Strong>{preview.total}</Strong> 张
             {preview.folders.length > 0
               ? `，创建 ${preview.folders.length} 个分组目录`
               : '，全部平铺在目标目录下'}
-            {preview.folders.length > 0 && (
-              <Text
-                color="gray"
-                ml="1"
-                style={{ fontFamily: 'var(--code-font-family)' }}
-              >
+            {preview.folders.length > 0 ? (
+              <Text color="gray" ml="1" className="mono">
                 （{preview.folders.slice(0, 3).join('、')}
                 {preview.folders.length > 3 ? '…' : ''}）
               </Text>
-            )}
-            {preview.conflicts > 0 && (
+            ) : null}
+            {preview.conflicts > 0 ? (
               <Text
                 ml="1"
                 weight="medium"
@@ -373,13 +312,13 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
                 ；命中 {preview.conflicts} 个同名文件，将
                 {CONFLICT_VERB[conflict]}
               </Text>
-            )}
+            ) : null}
           </Text>
-        )}
-      </Flex>
+        ) : null}
+      </Box>
 
       {/* 控制按钮 */}
-      <Flex wrap="wrap" align="center" gap="2">
+      <Flex className="action-bar" wrap="wrap" align="center" gap="2">
         {!running && !paused ? (
           <Button
             size="2"
@@ -396,7 +335,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
             {busy ? (
               <Spinner size="1" />
             ) : (
-              <DownloadIcon width={16} height={16} />
+              <DownloadIcon width={15} height={15} />
             )}
             {finished ? '重新复制' : '开始复制'}
           </Button>
@@ -408,7 +347,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
                 onClick={() => void handleResume()}
                 disabled={busy}
               >
-                <PlayIcon width={16} height={16} />
+                <PlayIcon width={15} height={15} />
                 继续
               </Button>
             ) : (
@@ -418,7 +357,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
                 onClick={() => void handlePause()}
                 disabled={busy}
               >
-                <PauseIcon width={16} height={16} />
+                <PauseIcon width={15} height={15} />
                 暂停
               </Button>
             )}
@@ -428,26 +367,26 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
               onClick={() => void handleCancel()}
               disabled={busy}
             >
-              <StopIcon width={16} height={16} />
+              <StopIcon width={15} height={15} />
               取消
             </Button>
           </>
         )}
 
-        {finished && (task?.progress.failed ?? 0) > 0 && (
+        {finished && (task?.progress.failed ?? 0) > 0 ? (
           <Button
             size="2"
             variant="outline"
             onClick={() => void handleRetry()}
             disabled={busy}
           >
-            <ResetIcon width={16} height={16} />
+            <ResetIcon width={15} height={15} />
             重试失败项（{task?.progress.failed}）
           </Button>
-        )}
+        ) : null}
       </Flex>
 
-      {error && (
+      {error ? (
         <Callout.Root color="red" size="1">
           <Callout.Icon>
             <ExclamationTriangleIcon width={14} height={14} />
@@ -456,76 +395,57 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
             <Strong>复制失败：</Strong> {error}
           </Callout.Text>
         </Callout.Root>
-      )}
+      ) : null}
 
       {/* 进度 */}
-      {task && (
-        <Box
-          p="3"
-          style={{
-            border: '1px solid var(--gray-6)',
-            borderRadius: 'var(--radius-3)',
-            backgroundColor: 'var(--gray-2)',
-          }}
-        >
+      {task ? (
+        <Box className="copy-progress">
           <Flex direction="column" gap="2">
             <Flex justify="between" align="center">
               <Flex align="center" gap="2">
-                {meta && (
+                {meta ? (
                   <Badge color={meta.color} variant={meta.variant}>
                     {meta.label}
                   </Badge>
-                )}
-                {task.progress.batchTotal > 1 && (
-                  <Text
-                    size="1"
-                    color="gray"
-                    style={{ fontVariantNumeric: 'tabular-nums' }}
-                  >
+                ) : null}
+                {task.progress.batchTotal > 1 ? (
+                  <Text size="1" color="gray" className="tabular">
                     第 {task.progress.batchIndex}/{task.progress.batchTotal} 批
                   </Text>
-                )}
+                ) : null}
               </Flex>
-              <Text
-                size="1"
-                color="gray"
-                style={{ fontVariantNumeric: 'tabular-nums' }}
-              >
+              <Text size="1" color="gray" className="tabular">
                 {task.progress.skipped > 0
                   ? `已完成 ${task.progress.copied + task.progress.failed + task.progress.skipped} / ${task.progress.total} 张`
                   : `${task.progress.copied} / ${task.progress.total} 张`}
-                {task.progress.skipped > 0 &&
-                  ` · 跳过 ${task.progress.skipped}`}
-                {task.progress.failed > 0 && ` · 失败 ${task.progress.failed}`}
-                {task.progress.renamed > 0 &&
-                  ` · 改名 ${task.progress.renamed}`}
+                {task.progress.skipped > 0
+                  ? ` · 跳过 ${task.progress.skipped}`
+                  : ''}
+                {task.progress.failed > 0
+                  ? ` · 失败 ${task.progress.failed}`
+                  : ''}
+                {task.progress.renamed > 0
+                  ? ` · 改名 ${task.progress.renamed}`
+                  : ''}
               </Text>
             </Flex>
 
-            <Progress value={percent} />
+            <Progress value={percent} size="2" />
 
             <Flex wrap="wrap" gap="3">
-              <Text
-                size="1"
-                color="gray"
-                style={{ fontVariantNumeric: 'tabular-nums' }}
-              >
+              <Text size="1" color="gray" className="tabular">
                 {formatDuration(task.progress.elapsedMs)}
               </Text>
-              {eta && (
-                <Text
-                  size="1"
-                  color="gray"
-                  style={{ fontVariantNumeric: 'tabular-nums' }}
-                >
+              {eta ? (
+                <Text size="1" color="gray" className="tabular">
                   剩余 {eta}
                 </Text>
-              )}
+              ) : null}
               <Text
                 size="1"
                 color="gray"
                 truncate
-                style={{ fontFamily: 'var(--code-font-family)' }}
+                className="mono"
                 title={task.progress.currentPath}
               >
                 {task.progress.currentPath}
@@ -533,69 +453,61 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
             </Flex>
 
             {task.status === 'completed' &&
-              task.progress.targetDir &&
-              activeDirName && (
-                <Flex align="center" gap="1">
-                  <CheckCircledIcon
-                    width={14}
-                    height={14}
-                    style={{ color: 'var(--green-9)' }}
-                  />
-                  <Text size="1" color="gray">
-                    已写入{' '}
-                    <Text
-                      style={{ fontFamily: 'var(--code-font-family)' }}
-                      title={task.progress.targetDir}
-                    >
-                      {task.progress.targetDir}
-                    </Text>
+            task.progress.targetDir &&
+            activeDirName ? (
+              <Flex align="center" gap="1">
+                <CheckCircledIcon
+                  width={14}
+                  height={14}
+                  className="success-icon"
+                />
+                <Text size="1" color="gray">
+                  已写入{' '}
+                  <Text className="mono" title={task.progress.targetDir}>
+                    {task.progress.targetDir}
                   </Text>
-                </Flex>
-              )}
+                </Text>
+              </Flex>
+            ) : null}
 
-            {task.manifestPath && (
+            {task.manifestPath ? (
               <Text size="1" color="gray" truncate>
                 清单：
-                <Text ml="1" style={{ fontFamily: 'var(--code-font-family)' }}>
+                <Text ml="1" className="mono">
                   {task.manifestPath}
                 </Text>
               </Text>
-            )}
+            ) : null}
 
-            {task.failures.length > 0 && (
+            {task.failures.length > 0 ? (
               <Flex direction="column" gap="1">
                 <Button
                   variant="ghost"
                   color="red"
                   size="1"
-                  style={{ alignSelf: 'flex-start' }}
+                  className="self-start"
                   onClick={() => setShowFailures(!showFailures)}
                 >
                   {showFailures
                     ? '收起失败明细'
                     : `查看失败明细（${task.failures.length}）`}
                 </Button>
-                {showFailures && (
+                {showFailures ? (
                   <ScrollArea
+                    type="auto"
                     scrollbars="vertical"
-                    style={{
-                      maxHeight: 160,
-                      border: '1px solid var(--gray-6)',
-                      borderRadius: 'var(--radius-2)',
-                      backgroundColor: 'var(--color-panel-solid)',
-                    }}
+                    className="failure-list"
                   >
                     {task.failures.map((failure) => (
                       <Box
+                        className="failure-row"
                         key={`${failure.path}-${failure.to}`}
-                        px="2"
-                        py="1"
-                        style={{ borderBottom: '1px solid var(--gray-4)' }}
+                        p="2"
                       >
                         <Text
                           size="1"
                           truncate
-                          style={{ fontFamily: 'var(--code-font-family)' }}
+                          className="mono"
                           title={failure.path}
                         >
                           {failure.path}
@@ -611,12 +523,12 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
                       </Box>
                     ))}
                   </ScrollArea>
-                )}
+                ) : null}
               </Flex>
-            )}
+            ) : null}
           </Flex>
         </Box>
-      )}
+      ) : null}
 
       {/* 确认覆盖弹窗 */}
       <Dialog.Root open={confirmOverwrite} onOpenChange={setConfirmOverwrite}>
@@ -626,20 +538,11 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
             目标目录里已经存在 {preview?.conflicts ?? 0} 个同名文件，
             继续会用源文件覆盖它们，覆盖后无法撤销。
           </Dialog.Description>
-          <Box
-            p="2"
-            mb="3"
-            style={{
-              backgroundColor: 'var(--gray-3)',
-              borderRadius: 'var(--radius-2)',
-              fontFamily: 'var(--code-font-family)',
-              fontSize: '12px',
-            }}
-          >
+          <Flex className="target-dir" align="center" gap="2" mb="3">
             <Text size="1" truncate>
               {activeDir}
             </Text>
-          </Box>
+          </Flex>
           <Flex gap="3" justify="end">
             <Dialog.Close>
               <Button variant="soft" color="gray">

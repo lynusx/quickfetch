@@ -1,6 +1,14 @@
 import { useMemo, useState } from 'react'
 import { CalendarIcon } from '@radix-ui/react-icons'
-import { Button, Flex, Popover, Separator, Text } from '@radix-ui/themes'
+import {
+  Badge,
+  Button,
+  Flex,
+  Grid,
+  Popover,
+  Separator,
+  Text,
+} from '@radix-ui/themes'
 import { zhCN } from 'date-fns/locale'
 import { DayPicker } from 'react-day-picker'
 
@@ -11,14 +19,10 @@ export interface DatePickerProps {
   value?: string
   /** 选中日期变更回调，输出 YYYYMMDD 格式字符串 */
   onChange: (value: string) => void
-  /** 按钮尺寸，默认为 '2' */
-  size?: '1' | '2' | '3'
   /** 是否禁用 */
   disabled?: boolean
   /** 未选择时的占位提示 */
   placeholder?: string
-  /** 自定义行内样式 */
-  style?: React.CSSProperties
 }
 
 /** 将 YYYYMMDD 或 YYYY-MM-DD 解析为本地 Date 对象（避免时区换算跨天） */
@@ -56,18 +60,32 @@ const formatDisplay = (d: Date): string => {
   return `${year}-${month}-${day}`
 }
 
+/** 「今天 / 昨天 / 前天」，其他日期不额外标注 */
+const relativeLabel = (date?: Date): string | null => {
+  if (!date) return null
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const target = new Date(date)
+  target.setHours(0, 0, 0, 0)
+
+  const days = Math.round((target.getTime() - today.getTime()) / 86400000)
+  if (days === 0) return '今天'
+  if (days === -1) return '昨天'
+  if (days === -2) return '前天'
+  return null
+}
+
 export const DatePicker = ({
   value,
   onChange,
-  size = '2',
   disabled = false,
   placeholder = '选择日期',
-  style,
 }: DatePickerProps) => {
   const [open, setOpen] = useState(false)
 
   const selectedDate = useMemo(() => parseDateString(value), [value])
-
+  const relative = relativeLabel(selectedDate)
   const displayText = selectedDate ? formatDisplay(selectedDate) : placeholder
 
   const handleSelect = (nextDate?: Date) => {
@@ -90,52 +108,38 @@ export const DatePicker = ({
           type="button"
           variant="surface"
           color="gray"
-          size={size}
+          size="2"
+          className="date-trigger"
           disabled={disabled}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-start',
-            gap: 'var(--space-2)',
-            width: '100%',
-            fontFamily: 'var(--code-font-family)',
-            cursor: disabled ? 'not-allowed' : 'pointer',
-            ...style,
-          }}
+          aria-label={`选择日期，当前 ${displayText}`}
         >
-          <CalendarIcon
-            width={14}
-            height={14}
-            style={{ color: 'var(--gray-11)', flexShrink: 0 }}
-          />
+          <CalendarIcon width={14} height={14} />
           <Text
-            size={size}
-            style={{
-              color: selectedDate ? 'var(--gray-12)' : 'var(--gray-9)',
-              fontVariantNumeric: 'tabular-nums',
-            }}
+            as="span"
+            size="2"
+            color={selectedDate ? undefined : 'gray'}
+            className="date-trigger-text"
           >
             {displayText}
           </Text>
+          {relative ? (
+            <Badge size="1" color="indigo" variant="soft">
+              {relative}
+            </Badge>
+          ) : null}
         </Button>
       </Popover.Trigger>
 
-      <Popover.Content
-        size="1"
-        align="start"
-        style={{
-          padding: 'var(--space-2)',
-          borderRadius: 'var(--radius-3)',
-        }}
-      >
+      <Popover.Content size="1" align="start" className="date-popover">
         <Flex direction="column" gap="2">
           {/* 快捷选项 */}
-          <Flex align="center" justify="between" gap="2" px="1">
+          <Grid className="date-shortcuts" columns="3" gap="1">
             <Button
               type="button"
               variant="ghost"
               color="gray"
               size="1"
+              className="date-shortcut"
               onClick={() => selectShortcut(0)}
             >
               今天
@@ -145,6 +149,7 @@ export const DatePicker = ({
               variant="ghost"
               color="gray"
               size="1"
+              className="date-shortcut"
               onClick={() => selectShortcut(-1)}
             >
               昨天
@@ -154,11 +159,12 @@ export const DatePicker = ({
               variant="ghost"
               color="gray"
               size="1"
+              className="date-shortcut"
               onClick={() => selectShortcut(-2)}
             >
               前天
             </Button>
-          </Flex>
+          </Grid>
 
           <Separator size="4" />
 

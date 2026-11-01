@@ -1,5 +1,6 @@
 @import '@radix-ui/themes/styles.css';
 @import '@fontsource-variable/public-sans';
+@import './styles/app.css';
 
 :root {
   --default-font-family:

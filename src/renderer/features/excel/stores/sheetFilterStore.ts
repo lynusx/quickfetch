@@ -15,6 +15,13 @@ interface SheetFilterActions {
   setSelectedDefects: (defects: string[]) => void
 }
 
+/** 内容相同就不写回，避免解析结果每次重新生成时触发无限重渲染 */
+const sameSet = (a: Set<string>, b: Set<string>): boolean =>
+  a.size === b.size && [...a].every((item) => b.has(item))
+
+const sameList = (a: string[], b: string[]): boolean =>
+  a.length === b.length && a.every((item, index) => item === b[index])
+
 export const useSheetFilterStore = create<
   SheetFilterState & SheetFilterActions
 >()(
@@ -23,9 +30,19 @@ export const useSheetFilterStore = create<
     defects: new Set<string>(),
     selectedLines: [],
     selectedDefects: [],
-    setLines: (lines) => set({ lines }),
-    setDefects: (defects) => set({ defects }),
-    setSelectedLines: (lines) => set({ selectedLines: lines }),
-    setSelectedDefects: (defects) => set({ selectedDefects: defects }),
+    setLines: (lines) =>
+      set((state) => (sameSet(state.lines, lines) ? state : { lines })),
+    setDefects: (defects) =>
+      set((state) => (sameSet(state.defects, defects) ? state : { defects })),
+    setSelectedLines: (lines) =>
+      set((state) =>
+        sameList(state.selectedLines, lines) ? state : { selectedLines: lines },
+      ),
+    setSelectedDefects: (defects) =>
+      set((state) =>
+        sameList(state.selectedDefects, defects)
+          ? state
+          : { selectedDefects: defects },
+      ),
   })),
 )

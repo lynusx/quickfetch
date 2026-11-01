@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FileIcon, ReloadIcon } from '@radix-ui/react-icons'
+import {
+  FileIcon,
+  MagnifyingGlassIcon,
+  ReloadIcon,
+} from '@radix-ui/react-icons'
 import { Button, Flex, IconButton, Text, TextField } from '@radix-ui/themes'
 
 import { ChoiceList, ChoiceRadio } from '@/components/ChoiceList'
+import { Field, Step } from '@/components/Field'
 import { useImageFilterStore } from '../stores/imageFilterStore'
 import { useSettingsStore } from '@/features/settings'
 import type { Plant } from '@shared/ipc'
@@ -86,146 +91,146 @@ const ScanSetupPanel = () => {
   }
 
   return (
-    <Flex direction="column" gap="4">
-      <Flex direction="column" gap="1">
-        <Text as="label" size="2" weight="medium">
-          DC 根目录
-        </Text>
-        <TextField.Root
-          size="2"
-          value={draft}
-          placeholder="\\10.108.164.2\qj-dc-el\DC"
-          spellCheck={false}
-          style={{ fontFamily: 'var(--code-font-family)' }}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') void handleSave()
-          }}
-          onBlur={() => void handleSave()}
+    <Flex direction="column" gap="5">
+      <Step index={1} done={configured}>
+        <Field
+          label="DC 根目录"
+          hint={
+            configured
+              ? '目录变更后会自动重新识别机台，扫描结果按新目录为准。'
+              : '输入或选择 DC 根目录后，会自动识别其中的机台。'
+          }
         >
-          <TextField.Slot side="right">
-            <IconButton
-              size="1"
-              variant="ghost"
-              aria-label="选择目录"
-              disabled={saving}
-              onClick={() => void pickRoot()}
-            >
-              <FileIcon width={14} height={14} />
-            </IconButton>
-          </TextField.Slot>
-        </TextField.Root>
-      </Flex>
+          <TextField.Root
+            size="2"
+            value={draft}
+            placeholder="\\10.108.164.2\qj-dc-el\DC"
+            spellCheck={false}
+            className="mono"
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') void handleSave()
+            }}
+            onBlur={() => void handleSave()}
+          >
+            <TextField.Slot side="right">
+              <IconButton
+                size="1"
+                variant="ghost"
+                aria-label="选择目录"
+                disabled={saving}
+                onClick={() => void pickRoot()}
+              >
+                <FileIcon width={14} height={14} />
+              </IconButton>
+            </TextField.Slot>
+          </TextField.Root>
+        </Field>
+      </Step>
 
-      {configured && machines.length > 0 ? (
-        <>
-          <Flex direction="column" gap="1">
-            <Flex justify="between" align="center">
-              <Text as="label" size="2" weight="medium">
-                厂区
-              </Text>
-              <Text size="1" color="gray">
-                {plant ? plantLabel(plant) : '未选择'}
-              </Text>
-            </Flex>
-            <ChoiceRadio
-              columns={2}
-              value={plant}
-              onValueChange={(value) => setPlant(value as Plant)}
-              options={plants.map((name) => ({
-                value: name,
-                label: plantLabel(name),
-                meta: machines.filter((item) => item.plant === name).length,
-              }))}
-            />
-          </Flex>
-
-          <Flex direction="column" gap="2">
-            <Flex justify="between" align="center">
-              <Flex align="center" gap="2">
-                <Text as="label" size="2" weight="medium">
-                  机台
-                </Text>
-                <Text size="1" color="gray">
-                  {selectedMachines.length}/{visible.length}
-                </Text>
-              </Flex>
-              <Flex align="center" gap="1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="1"
-                  onClick={() => setSelectedMachines([])}
-                  disabled={!selectedMachines.length}
-                >
-                  清空
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="1"
-                  onClick={toggleAll}
-                  disabled={!visible.length}
-                >
-                  {visible.every((item) => selectedMachines.includes(item.name))
-                    ? '取消本区'
-                    : '全选本区'}
-                </Button>
-                <IconButton
-                  type="button"
-                  variant="ghost"
-                  size="1"
-                  aria-label="重新识别机台"
-                  disabled={saving}
-                  onClick={() => void refresh()}
-                >
-                  <ReloadIcon width={14} height={14} />
-                </IconButton>
-              </Flex>
-            </Flex>
-
-            <TextField.Root
-              size="2"
-              value={keyword}
-              placeholder="按机台名搜索，如 A03"
-              spellCheck={false}
-              onChange={(event) => setKeyword(event.target.value)}
-            />
-
-            {visible.length ? (
-              <ChoiceList
+      <Step index={2} done={selectedMachines.length > 0}>
+        {configured && machines.length > 0 ? (
+          <Flex direction="column" gap="4">
+            <Field label="厂区" count={plant ? plantLabel(plant) : '未选择'}>
+              <ChoiceRadio
                 columns={2}
-                scroll
-                value={selectedMachines}
-                onValueChange={setSelectedMachines}
-                options={visible.map((machine) => ({
-                  value: machine.name,
-                  label: (
-                    <Text
-                      size="2"
-                      style={{ fontFamily: 'var(--code-font-family)' }}
-                    >
-                      {machine.name}
-                    </Text>
-                  ),
+                value={plant}
+                onValueChange={(value) => setPlant(value as Plant)}
+                options={plants.map((name) => ({
+                  value: name,
+                  label: plantLabel(name),
+                  meta: machines.filter((item) => item.plant === name).length,
                 }))}
               />
-            ) : (
-              <Text size="2" color="gray">
-                没有匹配「{keyword}」的机台
-              </Text>
-            )}
+            </Field>
+
+            <Field
+              label="机台"
+              count={`${selectedMachines.length}/${visible.length}`}
+              actions={
+                <>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="1"
+                    color="gray"
+                    onClick={() => setSelectedMachines([])}
+                    disabled={!selectedMachines.length}
+                  >
+                    清空
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="1"
+                    color="gray"
+                    onClick={toggleAll}
+                    disabled={!visible.length}
+                  >
+                    {visible.every((item) =>
+                      selectedMachines.includes(item.name),
+                    )
+                      ? '取消本区'
+                      : '全选本区'}
+                  </Button>
+                  <IconButton
+                    type="button"
+                    variant="ghost"
+                    size="1"
+                    color="gray"
+                    aria-label="重新识别机台"
+                    disabled={saving}
+                    onClick={() => void refresh()}
+                  >
+                    <ReloadIcon width={14} height={14} />
+                  </IconButton>
+                </>
+              }
+            >
+              <TextField.Root
+                size="2"
+                value={keyword}
+                placeholder="按机台名搜索，如 A03"
+                spellCheck={false}
+                onChange={(event) => setKeyword(event.target.value)}
+              >
+                <TextField.Slot side="left">
+                  <MagnifyingGlassIcon width={13} height={13} />
+                </TextField.Slot>
+              </TextField.Root>
+
+              {visible.length ? (
+                <ChoiceList
+                  columns={2}
+                  scroll
+                  value={selectedMachines}
+                  onValueChange={setSelectedMachines}
+                  options={visible.map((machine) => ({
+                    value: machine.name,
+                    label: (
+                      <Text as="span" size="2" className="mono">
+                        {machine.name}
+                      </Text>
+                    ),
+                  }))}
+                />
+              ) : (
+                <Text size="1" color="gray">
+                  没有匹配「{keyword}」的机台
+                </Text>
+              )}
+            </Field>
           </Flex>
-        </>
-      ) : (
-        <Text size="2" color="gray">
-          {configured
-            ? 'DC 根目录下没有可用机台，请点刷新重新识别'
-            : settings?.rootPath === null && !draft
-              ? '输入或选择 DC 根目录后，会自动识别其中的机台'
-              : '正在识别机台…'}
-        </Text>
-      )}
+        ) : (
+          <Text size="1" color="gray">
+            {configured
+              ? 'DC 根目录下没有可用机台，请点刷新重新识别'
+              : settings?.rootPath === null && !draft
+                ? '配置根目录后，这里会出现厂区与机台列表'
+                : '正在识别机台…'}
+          </Text>
+        )}
+      </Step>
     </Flex>
   )
 }

@@ -1,7 +1,8 @@
 import { CheckIcon, CircleBackslashIcon } from '@radix-ui/react-icons'
-import { Button, Flex, Text } from '@radix-ui/themes'
+import { Button, Flex } from '@radix-ui/themes'
 
 import { ChoiceList } from '@/components/ChoiceList'
+import { Field } from '@/components/Field'
 import { useExcelStore } from '../stores/excelStore'
 import { useSheetFilterStore } from '../stores/sheetFilterStore'
 
@@ -40,22 +41,12 @@ const SheetFilterPanel = () => {
 
   return (
     <Flex direction="column" gap="4">
-      {lines.size > 0 && (
-        <Flex direction="column" gap="2">
-          <Flex justify="between" align="center">
-            <Flex align="center" gap="2">
-              <Text size="2" weight="medium">
-                线别
-              </Text>
-              <Text
-                size="1"
-                color="gray"
-                style={{ fontVariantNumeric: 'tabular-nums' }}
-              >
-                {selectedLines.length}/{lines.size}
-              </Text>
-            </Flex>
-            <Flex align="center" gap="1">
+      {lines.size > 0 ? (
+        <Field
+          label="线别"
+          count={`${selectedLines.length}/${lines.size}`}
+          actions={
+            <>
               <Button
                 type="button"
                 variant="ghost"
@@ -77,34 +68,24 @@ const SheetFilterPanel = () => {
                 <CheckIcon width={12} height={12} />
                 全选
               </Button>
-            </Flex>
-          </Flex>
-
+            </>
+          }
+        >
           <ChoiceList
             columns={lines.size > 4 ? 3 : lines.size > 2 ? 2 : 1}
             value={selectedLines}
             onValueChange={setSelectedLines}
             options={lineOptions}
           />
-        </Flex>
-      )}
+        </Field>
+      ) : null}
 
-      {defects.size > 0 && (
-        <Flex direction="column" gap="2">
-          <Flex justify="between" align="center">
-            <Flex align="center" gap="2">
-              <Text size="2" weight="medium">
-                不良项
-              </Text>
-              <Text
-                size="1"
-                color="gray"
-                style={{ fontVariantNumeric: 'tabular-nums' }}
-              >
-                {selectedDefects.length}/{defects.size}
-              </Text>
-            </Flex>
-            <Flex align="center" gap="1">
+      {defects.size > 0 ? (
+        <Field
+          label="不良项"
+          count={`${selectedDefects.length}/${defects.size}`}
+          actions={
+            <>
               <Button
                 type="button"
                 variant="ghost"
@@ -126,9 +107,9 @@ const SheetFilterPanel = () => {
                 <CheckIcon width={12} height={12} />
                 全选
               </Button>
-            </Flex>
-          </Flex>
-
+            </>
+          }
+        >
           <ChoiceList
             columns={2}
             scroll={defects.size > 8}
@@ -136,8 +117,8 @@ const SheetFilterPanel = () => {
             onValueChange={setSelectedDefects}
             options={defectOptions}
           />
-        </Flex>
-      )}
+        </Field>
+      ) : null}
     </Flex>
   )
 }

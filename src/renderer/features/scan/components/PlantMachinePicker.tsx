@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ExclamationTriangleIcon,
   FileIcon,
+  MagnifyingGlassIcon,
   ReloadIcon,
 } from '@radix-ui/react-icons'
 import {
@@ -14,6 +15,7 @@ import {
 } from '@radix-ui/themes'
 
 import { ChoiceList, ChoiceRadio } from '@/components/ChoiceList'
+import { Field, Step } from '@/components/Field'
 import { useToast } from '@/hooks/useToast'
 import type { PlantFilterStore } from '../stores/plantFilterStore'
 import type { EntrySetupResult, LxtSkippedLink, Plant } from '@shared/ipc'
@@ -163,13 +165,9 @@ const PlantMachinePicker = ({
   const configured = Boolean(entryRoot)
 
   return (
-    <Flex direction="column" gap="4">
-      {/* 入口目录输入框 */}
-      <Flex direction="column" gap="1">
-        <Text size="2" weight="medium">
-          入口目录
-        </Text>
-        <Flex gap="2">
+    <Flex direction="column" gap="5">
+      <Step index={1} done={configured}>
+        <Field label="入口目录" hint={labels.rootHint}>
           <TextField.Root
             size="2"
             value={draft}
@@ -180,7 +178,7 @@ const PlantMachinePicker = ({
             onKeyDown={(e) => {
               if (e.key === 'Enter') void commitDraft()
             }}
-            style={{ flex: 1, fontFamily: 'var(--font-mono)' }}
+            className="mono"
           >
             <TextField.Slot side="right">
               <IconButton
@@ -195,46 +193,27 @@ const PlantMachinePicker = ({
               </IconButton>
             </TextField.Slot>
           </TextField.Root>
-        </Flex>
-        <Text size="1" color="gray">
-          {labels.rootHint}
-        </Text>
-      </Flex>
+        </Field>
+      </Step>
 
       {skipped.length > 0 && (
-        <details
-          style={{
-            borderRadius: 'var(--radius-3)',
-            border: '1px solid var(--gray-4)',
-            padding: 'var(--space-2) var(--space-3)',
-            fontSize: 'var(--font-size-1)',
-            backgroundColor: 'var(--gray-a2)',
-          }}
-        >
-          <summary
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              cursor: 'pointer',
-              color: 'var(--gray-11)',
-            }}
-          >
+        <details className="skipped-box">
+          <summary>
             <ExclamationTriangleIcon width={14} height={14} />
-            {skipped.length} 个快捷方式已跳过
+            <Text as="span" size="1">
+              {skipped.length} 个快捷方式已跳过
+            </Text>
           </summary>
-          <Flex direction="column" gap="1" mt="2">
+          <Flex className="skipped-list" direction="column" gap="1">
             {skipped.map((item) => (
-              <Text
-                key={`${item.plant}/${item.file}`}
-                size="1"
-                style={{ fontFamily: 'var(--font-mono)' }}
-              >
-                {item.plant}/{item.file}
-                <Text size="1" color="gray" ml="2">
+              <Flex key={`${item.plant}/${item.file}`} align="baseline" gap="2">
+                <Text as="span" size="1" className="mono">
+                  {item.plant}/{item.file}
+                </Text>
+                <Text size="1" color="gray">
                   {item.reason}
                 </Text>
-              </Text>
+              </Flex>
             ))}
           </Flex>
         </details>
@@ -246,126 +225,110 @@ const PlantMachinePicker = ({
         </Callout.Root>
       )}
 
-      {configured && active.length > 0 ? (
-        <>
-          {/* 厂区单选 */}
-          <Flex direction="column" gap="2">
-            <Flex align="center" gap="2">
-              <Text size="2" weight="medium">
-                厂区
-              </Text>
-              <Text
-                size="1"
-                color="gray"
-                style={{ fontVariantNumeric: 'tabular-nums' }}
-              >
-                {plant ? plantLabel(plant) : '未选择'}
-              </Text>
-            </Flex>
-            <ChoiceRadio
-              columns={2}
-              value={plant}
-              onValueChange={setPlant}
-              options={plants.map((name) => ({
-                value: name,
-                label: plantLabel(name),
-                meta: active.filter((item) => item.plant === name).length,
-              }))}
-            />
-          </Flex>
-
-          {/* 机台多选 */}
-          <Flex direction="column" gap="2">
-            <Flex justify="between" align="center">
-              <Flex align="center" gap="2">
-                <Text size="2" weight="medium">
-                  机台
-                </Text>
-                <Text
-                  size="1"
-                  color="gray"
-                  style={{ fontVariantNumeric: 'tabular-nums' }}
-                >
-                  {selectedMachines.length}/{visible.length}
-                </Text>
-              </Flex>
-              <Flex align="center" gap="1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  color="gray"
-                  size="1"
-                  onClick={() => setSelectedMachines([])}
-                  disabled={!selectedMachines.length}
-                >
-                  清空
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  color="gray"
-                  size="1"
-                  onClick={toggleAll}
-                >
-                  {visible.every((item) => selectedMachines.includes(item.key))
-                    ? '取消本区'
-                    : '全选本区'}
-                </Button>
-                <IconButton
-                  type="button"
-                  variant="ghost"
-                  color="gray"
-                  size="1"
-                  aria-label="重新识别入口"
-                  disabled={saving}
-                  onClick={async () => announce(await onRefresh())}
-                  title="重新识别"
-                >
-                  <ReloadIcon width={13} height={13} />
-                </IconButton>
-              </Flex>
-            </Flex>
-
-            <TextField.Root
-              size="2"
-              value={keyword}
-              placeholder={labels.searchPlaceholder}
-              spellCheck={false}
-              onChange={(e) => setKeyword(e.target.value)}
-            />
-
-            {visible.length ? (
-              <ChoiceList
+      <Step index={2} done={selectedMachines.length > 0}>
+        {configured && active.length > 0 ? (
+          <Flex direction="column" gap="4">
+            <Field label="厂区" count={plant ? plantLabel(plant) : '未选择'}>
+              <ChoiceRadio
                 columns={2}
-                scroll
-                value={selectedMachines}
-                onValueChange={setSelectedMachines}
-                options={visible.map((machine) => ({
-                  value: machine.key,
-                  label: (
-                    <span style={{ fontFamily: 'var(--font-mono)' }}>
-                      {machine.name}
-                    </span>
-                  ),
-                  title: `${machine.host}${
-                    machine.share ? ` · ${String(machine.share)}` : ''
-                  }`,
+                value={plant}
+                onValueChange={setPlant}
+                options={plants.map((name) => ({
+                  value: name,
+                  label: plantLabel(name),
+                  meta: active.filter((item) => item.plant === name).length,
                 }))}
               />
-            ) : (
-              <Text size="1" color="gray">
-                没有匹配「{keyword}」的机台
-              </Text>
-            )}
+            </Field>
+
+            <Field
+              label="机台"
+              count={`${selectedMachines.length}/${visible.length}`}
+              actions={
+                <>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    color="gray"
+                    size="1"
+                    onClick={() => setSelectedMachines([])}
+                    disabled={!selectedMachines.length}
+                  >
+                    清空
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    color="gray"
+                    size="1"
+                    onClick={toggleAll}
+                  >
+                    {visible.every((item) =>
+                      selectedMachines.includes(item.key),
+                    )
+                      ? '取消本区'
+                      : '全选本区'}
+                  </Button>
+                  <IconButton
+                    type="button"
+                    variant="ghost"
+                    color="gray"
+                    size="1"
+                    aria-label="重新识别入口"
+                    disabled={saving}
+                    onClick={async () => announce(await onRefresh())}
+                    title="重新识别"
+                  >
+                    <ReloadIcon width={13} height={13} />
+                  </IconButton>
+                </>
+              }
+            >
+              <TextField.Root
+                size="2"
+                value={keyword}
+                placeholder={labels.searchPlaceholder}
+                spellCheck={false}
+                onChange={(e) => setKeyword(e.target.value)}
+              >
+                <TextField.Slot side="left">
+                  <MagnifyingGlassIcon width={13} height={13} />
+                </TextField.Slot>
+              </TextField.Root>
+
+              {visible.length ? (
+                <ChoiceList
+                  columns={2}
+                  scroll
+                  value={selectedMachines}
+                  onValueChange={setSelectedMachines}
+                  options={visible.map((machine) => ({
+                    value: machine.key,
+                    label: (
+                      <Text as="span" size="2" className="mono">
+                        {machine.name}
+                      </Text>
+                    ),
+                    title: `${machine.host}${
+                      machine.share ? ` · ${String(machine.share)}` : ''
+                    }`,
+                  }))}
+                />
+              ) : (
+                <Text size="1" color="gray">
+                  没有匹配「{keyword}」的机台
+                </Text>
+              )}
+            </Field>
           </Flex>
-        </>
-      ) : (
-        <Text size="1" color="gray">
-          {configured
-            ? '入口里没有可用机台，请检查快捷方式'
-            : '选择入口目录后会识别其中的机台'}
-        </Text>
-      )}
+        ) : (
+          <Text size="1" color="gray">
+            {configured
+              ? '入口里没有可用机台，请检查快捷方式'
+              : '选择入口目录后会识别其中的机台'}
+          </Text>
+        )}
+      </Step>
     </Flex>
   )
 }

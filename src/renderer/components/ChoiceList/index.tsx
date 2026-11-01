@@ -8,6 +8,7 @@ import {
   ScrollArea,
   Text,
 } from '@radix-ui/themes'
+import { cn } from '@/lib/utils'
 
 export interface ChoiceOption {
   value: string
@@ -16,20 +17,29 @@ export interface ChoiceOption {
   title?: string
 }
 
-const COLUMN_MAP = {
-  1: '1',
-  2: '2',
-  3: '3',
-  4: '4',
+const COLUMN_CLASS = {
+  1: 'choice-cols-1',
+  2: 'choice-cols-2',
+  3: 'choice-cols-3',
+  4: 'choice-cols-4',
 } as const
 
 interface ChoiceBaseProps {
   options: ChoiceOption[]
-  columns?: keyof typeof COLUMN_MAP
+  columns?: keyof typeof COLUMN_CLASS
   scroll?: boolean
   disabled?: boolean
   empty?: ReactNode
 }
+
+const emptyText = (empty: ReactNode) => (
+  <Text size="2" color="gray">
+    {empty ?? '没有可选项'}
+  </Text>
+)
+
+const gridClass = (columns: keyof typeof COLUMN_CLASS) =>
+  cn('choice-grid', COLUMN_CLASS[columns])
 
 export const ChoiceList = ({
   options,
@@ -58,82 +68,55 @@ export const ChoiceList = ({
     onValueChange([...ordered, ...extra])
   }
 
-  if (!options.length) {
-    return (
-      <Text size="2" color="gray">
-        {empty ?? '没有可选项'}
-      </Text>
-    )
-  }
+  if (!options.length) return emptyText(empty)
 
   const content = (
-    <Grid
-      columns={COLUMN_MAP[columns]}
-      gap="2"
-      style={{
-        border: '1px solid var(--gray-6)',
-        borderRadius: 'var(--radius-3)',
-        padding: 'var(--space-2)',
-        backgroundColor: 'var(--color-panel-solid)',
-      }}
-    >
-      {options.map((option) => (
-        <Flex
-          key={option.value}
-          align="center"
-          title={option.title}
-          px="2"
-          py="1"
-          style={{
-            borderRadius: 'var(--radius-2)',
-            userSelect: 'none',
-          }}
-        >
-          <Text
-            as="label"
-            size="2"
-            style={{
-              cursor: disabled ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-2)',
-              width: '100%',
-              minWidth: 0,
+    <Grid className={gridClass(columns)} gap="2">
+      {options.map((option) => {
+        const checked = selected.has(option.value)
+
+        return (
+          <Flex
+            key={option.value}
+            className="choice-cell"
+            align="center"
+            gap="2"
+            data-selected={checked || undefined}
+            data-disabled={disabled || undefined}
+            title={option.title}
+            onClick={() => {
+              if (disabled) return
+              toggle(option.value, !checked)
             }}
           >
             <Checkbox
               size="1"
-              checked={selected.has(option.value)}
+              checked={checked}
               disabled={disabled}
-              onCheckedChange={(checked) =>
-                toggle(option.value, checked === true)
+              aria-label={
+                typeof option.label === 'string' ? option.label : option.value
               }
+              onClick={(event) => event.stopPropagation()}
+              onCheckedChange={(next) => toggle(option.value, next === true)}
             />
-            <Text size="2" truncate style={{ flex: 1 }}>
+            <Text as="span" size="2" className="choice-label">
               {option.label}
             </Text>
-            {option.meta != null && (
-              <Text size="1" color="gray">
+            {option.meta != null ? (
+              <Text as="span" size="1" color="gray" className="choice-meta">
                 {option.meta}
               </Text>
-            )}
-          </Text>
-        </Flex>
-      ))}
+            ) : null}
+          </Flex>
+        )
+      })}
     </Grid>
   )
 
   if (scroll) {
     return (
-      <ScrollArea
-        scrollbars="vertical"
-        style={{
-          maxHeight: 220,
-          border: '1px solid var(--gray-6)',
-          borderRadius: 'var(--radius-3)',
-        }}
-      >
-        <Box p="1">{content}</Box>
+      <ScrollArea type="auto" scrollbars="vertical" className="choice-scroll">
+        <Box className="choice-scroll-inner">{content}</Box>
       </ScrollArea>
     )
   }
@@ -152,13 +135,7 @@ export const ChoiceRadio = ({
   value: string
   onValueChange: (value: string) => void
 }) => {
-  if (!options.length) {
-    return (
-      <Text size="2" color="gray">
-        {empty ?? '没有可选项'}
-      </Text>
-    )
-  }
+  if (!options.length) return emptyText(empty)
 
   return (
     <RadioGroup.Root
@@ -166,50 +143,43 @@ export const ChoiceRadio = ({
       value={value}
       disabled={disabled}
       onValueChange={onValueChange}
-      style={{
-        border: '1px solid var(--gray-6)',
-        borderRadius: 'var(--radius-3)',
-        padding: 'var(--space-2)',
-        backgroundColor: 'var(--color-panel-solid)',
-      }}
     >
-      <Grid columns={COLUMN_MAP[columns]} gap="2">
-        {options.map((option) => (
-          <Flex
-            key={option.value}
-            align="center"
-            title={option.title}
-            px="2"
-            py="1"
-            style={{
-              borderRadius: 'var(--radius-2)',
-              userSelect: 'none',
-            }}
-          >
-            <Text
-              as="label"
-              size="2"
-              style={{
-                cursor: disabled ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--space-2)',
-                width: '100%',
-                minWidth: 0,
+      <Grid className={gridClass(columns)} gap="2">
+        {options.map((option) => {
+          const checked = option.value === value
+
+          return (
+            <Flex
+              key={option.value}
+              className="choice-cell"
+              align="center"
+              gap="2"
+              data-selected={checked || undefined}
+              data-disabled={disabled || undefined}
+              title={option.title}
+              onClick={() => {
+                if (disabled) return
+                onValueChange(option.value)
               }}
             >
-              <RadioGroup.Item value={option.value} />
-              <Text size="2" truncate style={{ flex: 1 }}>
+              <RadioGroup.Item
+                value={option.value}
+                aria-label={
+                  typeof option.label === 'string' ? option.label : option.value
+                }
+                onClick={(event) => event.stopPropagation()}
+              />
+              <Text as="span" size="2" className="choice-label">
                 {option.label}
               </Text>
-              {option.meta != null && (
-                <Text size="1" color="gray">
+              {option.meta != null ? (
+                <Text as="span" size="1" color="gray" className="choice-meta">
                   {option.meta}
                 </Text>
-              )}
-            </Text>
-          </Flex>
-        ))}
+              ) : null}
+            </Flex>
+          )
+        })}
       </Grid>
     </RadioGroup.Root>
   )

@@ -169,6 +169,10 @@ src/
 
 - 组件库：**Radix Themes**（`@radix-ui/themes`），根节点由 `<Theme>` 包裹
 - 样式：`@radix-ui/themes/styles.css`，使用 Radix 设计令牌
+- 布局与文本优先使用 `Box` / `Flex` / `Grid` / `Text` / `Heading`；原生标签只保留语义必需的 `button`、`label`、`input`、`details` 等
+- 设计层：`src/renderer/styles/app.css` 只基于 Radix 令牌定义外壳、面板、统计、选项与空状态，不引入 reset / 其它组件库
+- 页面标题统一由 `components/PageHeader` 渲染，`AppLayout` 不再重复标题栏；扫描页的任务进度、统计与控制按钮统一放在 `features/scan/components/ScanTaskPanel`
+- 选择类控件统一使用 `components/ChoiceList`（多选）与 `ChoiceRadio`（单选），整个单元格可点击
 - 别名：`@/*` → `src/renderer/*`（`tsconfig*.json` 与 `electron.vite.config.ts` 同步配置）
 - 图标：`@radix-ui/react-icons`；提示：`sonner`；`cn()` 为内部纯逻辑实现
 
