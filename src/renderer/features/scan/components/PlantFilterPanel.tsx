@@ -20,18 +20,13 @@ import {
 } from '@radix-ui/themes'
 
 import { ChoiceList, ChoiceRadio } from '@/components/ChoiceList'
+import { DatePicker } from '@/components/DatePicker'
 import type { PlantFilterStore } from '../stores/plantFilterStore'
 import {
   getAllAvailableTimes,
   getAllPaddedTimes,
   getShiftInfo,
 } from '@/utils/common'
-
-// YYYYMMDD → YYYY-MM-DD
-const toDateInputValue = (date: string) => {
-  if (!date || date.length !== 8) return ''
-  return `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`
-}
 
 interface PlantFilterPanelProps {
   filter: PlantFilterStore
@@ -127,13 +122,7 @@ const PlantFilterPanel = ({
           <CalendarIcon width={14} height={14} />
           日期
         </Text>
-        <TextField.Root
-          type="date"
-          size="2"
-          value={toDateInputValue(date)}
-          onChange={(event) => setDate(event.target.value.replace(/-/g, ''))}
-          style={{ fontFamily: 'var(--code-font-family)' }}
-        />
+        <DatePicker value={date} onChange={setDate} />
       </Flex>
 
       {/* 班次 */}
