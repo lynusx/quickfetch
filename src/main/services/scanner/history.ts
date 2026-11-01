@@ -30,8 +30,16 @@ interface HistoryRecord {
   status: ScanTaskStatus
   params: ScanTaskParams
   branches: ScanBranch[]
-  /** 全量图片路径，恢复历史与再次复制都靠它 */
-  images: { path: string; absolutePath: string; name: string }[]
+  /**
+   * 全量图片路径，恢复历史与再次复制都靠它。
+   * `machine` 是后加的：老记录没有，复制时由 machineOf 回落到 path 第 0 段。
+   */
+  images: {
+    path: string
+    absolutePath: string
+    name: string
+    machine?: string
+  }[]
   progress: ScanTask['progress']
   createdAt: number
   startedAt: number | null
@@ -104,10 +112,13 @@ export const saveRecord = async (
     branches: task.branches,
     // 必须存全量：历史任务的再次复制要能读到每一张图，
     // 只存预览的话恢复出来的任务会把 200 条之后的结果静默丢掉
+    // machine 必须一起存：力禧特/利珀的 path 第 0 段是厂区，
+    // 复制时按机台筛选只能靠这个字段，丢了就会筛空
     images: images.map((image) => ({
       path: image.path,
       absolutePath: image.absolutePath,
       name: image.name,
+      machine: image.machine,
     })),
     progress: task.progress,
     createdAt: task.createdAt,
