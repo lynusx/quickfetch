@@ -36,6 +36,88 @@ pnpm format:fix
 > 若启动报 `Electron uninstall`，说明依赖的安装脚本被 pnpm 跳过；
 > `pnpm dev` 会通过 `scripts/ensure-electron.cjs` 自动补下载。
 
+## 常见问题排查
+
+### `pnpm dev` 启动即退出，退出码 `2147483651`
+
+现象：Vite 的 main / preload 都编译成功、dev server 也起来了，随后 Electron 静默退出，
+终端只剩 `ELIFECYCLE Command failed with exit code 2147483651.`，没有窗口，
+也看不到任何主进程日志。
+
+`2147483651` 就是 `0x80000003`（`STATUS_BREAKPOINT`）。Electron 在**执行
+`out/main/index.cjs` 之前**就崩了，所以业务代码里的日志一行都打不出来。最常见的原因是
+项目目录的文件被标成了 **Low 完整性级别（Low Mandatory Level）**：Chromium 的沙箱初始化
+需要正常的完整性级别，拿到 Low 会直接触发断点异常。
+
+排查（Windows，在项目根目录执行）：
+
+```powershell
+# 正常应直接输出 v45.x.x；崩溃或没有输出说明 Electron 起不来
+node_modules\electron\dist\electron.exe --version
+
+# 只有加 --no-sandbox 才正常 → 确认是沙箱初始化失败（只用来定位，不要当修复）
+node_modules\electron\dist\electron.exe --no-sandbox --version
+
+# 出现 "Mandatory Label\Low Mandatory Level" 就是根因
+icacls . | findstr Mandatory
+```
+
+修复：
+
+```powershell
+icacls . /setintegritylevel "(OI)(CI)Medium" /T /C
+```
+
+必须加 `/T`：只改项目根不够，`node_modules\electron\dist\electron.exe` 本身也得是
+Medium。修完重新 `pnpm dev` 即可。从这种目录复制出来的其它副本（例如桌面上的
+`shx-tools2`）会有同样的问题，要一起处理。
+
+`pnpm dev` / `pnpm start` 都会先执行 `scripts/ensure-electron.cjs`，它现在会实际跑一次
+`electron --version`，失败时直接打印上面的排查和修复命令；确认环境无误、需要临时跳过时设
+`SHX_SKIP_ELECTRON_CHECK=1`。
+
+> 这类 Low 完整性 ACL 不是 Windows 或 git 自己产生的，通常来自某个沙箱 / 受限运行工具，
+> 或者用 `robocopy /COPYALL`、`xcopy /O`、7-Zip「还原文件安全信息」等保留 ACL 的方式搬过
+> 目录。修复后又变回 Low，可以用 Process Monitor 过滤 `SetSecurity` 抓出改它的进程。
+
+### macOS 上 Electron 启动失败
+
+macOS 没有 Windows 的完整性级别机制，但同样可能在打开窗口前退出。按顺序排查：
+
+```bash
+# 架构：Apple Silicon 应输出 arm64，Intel 为 x86_64
+file node_modules/electron/dist/Electron.app/Contents/MacOS/Electron
+
+# 隔离属性：有输出说明被 Gatekeeper 标记
+xattr -p com.apple.quarantine node_modules/electron/dist/Electron.app
+
+# 签名校验
+codesign --verify --deep --strict node_modules/electron/dist/Electron.app
+
+# 执行权限
+ls -l node_modules/electron/dist/Electron.app/Contents/MacOS/Electron
+```
+
+对应处理：
+
+```bash
+# 清除下载带来的隔离属性
+xattr -dr com.apple.quarantine node_modules/electron/dist/Electron.app
+
+# 开发环境可以 ad-hoc 重签
+codesign --force --deep --sign - node_modules/electron/dist/Electron.app
+
+# 补执行权限
+chmod +x node_modules/electron/dist/Electron.app/Contents/MacOS/Electron
+```
+
+- 进程被系统直接杀掉（shell 显示 `Killed: 9`、退出码 137）基本是签名或隔离属性问题
+- `Bad CPU type in executable` 说明拉到的二进制架构和机器不一致，删除
+  `node_modules/electron` 后重新 `pnpm install`
+- 仍然起不来就看 Console.app 里 Electron 的报错
+
+> macOS 只用于开发调试，打包产物只有 Windows 版（`pnpm dist:win`）。
+
 ## 构建与打包
 
 ```bash
