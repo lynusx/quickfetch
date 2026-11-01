@@ -51,9 +51,9 @@ pnpm dist:win                 # 在 out/ 基础上打 Windows x64 NSIS 安装包
 src/
 ├── main/                 # 主进程（领域引擎内聚）
 │   ├── index.ts          # 窗口创建、应用生命周期
-│   ├── ipc/              # 按模块划分的 IPC 注册层（scan/copy/settings/history/excel）
+│   ├── ipc/              # 按模块划分的 IPC 注册层（index.ts 聚合 settings/scan/copy/history/excel）
 │   ├── services/         # 核心服务
-│   │   ├── scanner/      # 扫描任务引擎（探测、展开、收图、自适应降档）
+│   │   ├── scanner/      # 扫描任务引擎（任务表、各类 resolver、探测、收图、历史落盘）
 │   │   ├── copy/         # 复制任务引擎（平铺复制、命名冲突策略、任务表）
 │   │   ├── discovery/    # 机台与快捷方式识别（LXT / PL / lnk / shortcuts）
 │   │   └── settings/     # 配置管理与环境覆盖持久化（userData/settings.json）
@@ -62,9 +62,9 @@ src/
 ├── shared/               # 主进程 ↔ preload ↔ 渲染层共用的类型契约（ipc.ts, historyLimit.ts）
 └── renderer/             # 渲染层（Feature-First 特性优先架构）
     ├── index.html
-    ├── main.tsx          # 挂载入口
-    ├── App.tsx           # 路由表 + 全局 Provider
-    ├── index.css         # Tailwind 入口 + shadcn 主题变量
+    ├── main.tsx          # 挂载入口（HashRouter）
+    ├── App.tsx           # 路由表 + Radix <Theme> Provider
+    ├── index.css         # 全局基础样式（Radix Themes 样式由 styles.css 提供）
     ├── layouts/          # 框架布局（AppLayout、AppSidebar）
     ├── features/         # 业务特性模块（高内聚，页面、组件、Hook、Store 在一起）
     │   ├── scan/         # 图片扫描（EL / 力禧特 / 利珀页面、组件与状态）
@@ -73,8 +73,8 @@ src/
     │   ├── excel/        # Excel 解析（上传、解析、筛选、表格与状态）
     │   └── settings/     # 应用设置（SettingsPage、settingsStore、userPreferencesStore）
     ├── components/       # 全局跨模块组件
-    │   ├── ui/           # shadcn/ui 原子组件（CLI 生成）
-    │   └── ChoiceList/   # 高对比度单选/多选组件
+    │   ├── ChoiceList/   # 基于 Radix Themes 的单选/多选组件
+    │   └── DatePicker/   # 基于 Radix Popover + react-day-picker 的日期选择
     ├── hooks/            # 全局 UI 辅助 Hook（useToast, use-mobile）
     ├── lib/utils.ts      # cn()
     ├── utils/            # 全局通用工具函数

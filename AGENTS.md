@@ -22,9 +22,10 @@
 ## 这个项目的几条硬约束
 
 **架构**：Electron 三进程，IPC 契约全部集中在 `src/shared/ipc.ts`。新增通道三处一起改：
-`shared/ipc.ts` 定类型 → `main/ipc.ts` 注册 → `preload/index.ts` 暴露，漏一处就断链。
+`src/shared/ipc.ts` 定类型 → `src/main/ipc/<域>.ipc.ts` 注册（入口 `src/main/ipc/index.ts`
+聚合）→ `src/preload/index.ts` 暴露，漏一处就断链。
 
-**配置落盘**：只走 `src/main/settings.ts` 写 `userData/settings.json`，不要在渲染层用 `localStorage`
+**配置落盘**：只走 `src/main/services/settings/settings.ts` 写 `userData/settings.json`，不要在渲染层用 `localStorage`
 存业务配置——主进程扫描时读的是磁盘，两边会不一致。写文件是「临时文件 + rename」的原子写，别改成直接写。
 例外是纯界面偏好（类型清单、上次勾选的类型）：这些只影响筛选面板长什么样，扫描参数仍随 IPC 传给主进程，
 所以走 `userPreferencesStore` / 各 `filterStore` 的 `persist`。**类型清单一律默认空**，不替用户预设
@@ -37,10 +38,10 @@ Windows 上实际位置是 `%APPDATA%\shx-tools\`，**和开发态是同一个�
 想改用 `SHX Tools`，得往项目 `package.json` 加 `productName` 字段——那会让老用户的历史与设置"消失"，
 必须同时写迁移。
 
-**环境变量优先级**：`环境变量 > 设置页 > 默认值`，实现在 `src/main/load.ts` 的 `loadFrom()`。
+**环境变量优先级**：`环境变量 > 设置页 > 默认值`，实现在 `src/main/services/settings/load.ts` 的 `loadFrom()`。
 被环境变量接管的项，设置页会把输入框标灰（`AppSettings.envOverrides`）。加新档位时这个字段要同步。
 
-**网络错误判定**：只有 `fsx.ts` 里 `NETWORK_CODES` 列出的错误码才算「不可达」，其余一律按
+**网络错误判定**：只有 `src/main/services/scanner/fsx.ts` 里 `NETWORK_CODES` 列出的错误码才算「不可达」，其余一律按
 「目录不可用」处理。断网熔断全靠这个判定，把路径问题算成断网会直接暂停整个任务并提示
 「请接专用内网」，现场极难查。同理，探测第二层目录（力禧特的共享名、利珀的标识目录）
 不要读 `\\IP` 这种只有主机的 UNC 根——Windows 枚举它会返回 EINVAL/ERROR_BAD_NETPATH，
@@ -51,8 +52,8 @@ Windows 上实际位置是 `%APPDATA%\shx-tools\`，**和开发态是同一个�
 重启后为空，历史是唯一的恢复入口——少挂一个页面，那一类扫描的结果就等于「扫完就没了」。
 新增扫描类别时先确认这一点。
 
-**退出前抢救未完成任务**：`main/index.ts` 的 `before-quit` 会拦住退出，调
-`scanner/registry.ts` 的 `persistUnfinished()`，把还在跑的任务按 `interrupted`
+**退出前抢救未完成任务**：`src/main/index.ts` 的 `before-quit` 会拦住退出，调
+`src/main/services/scanner/registry.ts` 的 `persistUnfinished()`，把还在跑的任务按 `interrupted`
 状态写进历史（最多等 3 秒）。现场扫几分钟后直接关窗口很常见，不救的话已经读到的
 几千张图会随进程消失。`saveRecord(task, images, { interrupted: true })` 是这条路径的入口，
 平时不传这个参数——正常结束的任务只认 completed / canceled / failed 三种终态。
