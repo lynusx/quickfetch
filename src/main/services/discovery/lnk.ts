@@ -15,8 +15,7 @@ import { shell } from 'electron'
  */
 
 export type LnkResult =
-  | { ok: true; target: string; host: string }
-  | { ok: false; reason: string }
+  { ok: true; target: string; host: string } | { ok: false; reason: string }
 
 /** 去掉首尾空白和尾部残留的 null 字节 */
 const clean = (value: string): string => value.replace(/\0+$/, '').trim()

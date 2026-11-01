@@ -354,12 +354,7 @@ export const COPY_LAYOUT_LABEL: Record<CopyLayout, string> = {
 }
 
 export type CopyStatus =
-  | 'pending'
-  | 'running'
-  | 'paused'
-  | 'completed'
-  | 'canceled'
-  | 'failed'
+  'pending' | 'running' | 'paused' | 'completed' | 'canceled' | 'failed'
 
 /**
  * 目标目录已有同名文件时的策略。

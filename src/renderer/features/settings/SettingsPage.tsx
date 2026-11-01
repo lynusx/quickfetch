@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ExclamationTriangleIcon } from '@radix-ui/react-icons'
 import {
   Box,
@@ -77,11 +77,14 @@ const NumberRow = ({
   onChange,
 }: NumberRowProps) => {
   const [draft, setDraft] = useState(String(value))
+  const [syncedValue, setSyncedValue] = useState(value)
   const overridden = Boolean(envName)
 
-  useEffect(() => {
+  // 落盘后 value 会回写；在渲染期条件同步，避免 effect 里 setState 的级联渲染
+  if (value !== syncedValue) {
+    setSyncedValue(value)
     setDraft(String(value))
-  }, [value])
+  }
 
   const commit = () => {
     const parsed = Number.parseInt(draft, 10)

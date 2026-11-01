@@ -112,10 +112,14 @@ const HistoryPanel = ({
 
   const [open, setOpen] = useState(false)
   const [draftLimit, setDraftLimit] = useState(String(limit))
+  const [syncedLimit, setSyncedLimit] = useState(limit)
 
-  useEffect(() => {
+  // limit 会在提交后由外层回写，也可能来自异步载入。用渲染期的条件同步
+  // 代替 useEffect 里的 setState：后者会多走一轮提交，并触发级联渲染告警。
+  if (limit !== syncedLimit) {
+    setSyncedLimit(limit)
     setDraftLimit(String(limit))
-  }, [limit])
+  }
 
   useEffect(() => {
     void load()

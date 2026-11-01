@@ -61,10 +61,14 @@ export const useScanTask = ({
   const { task, creating, error, setTask, setCreating, setError } = store()
 
   const toastRef = useRef(showToast)
-  toastRef.current = showToast
-
   const paramsRef = useRef(getParams)
-  paramsRef.current = getParams
+
+  // 在 effect 里刷新，而不是渲染期直接赋值：渲染期写 ref 会被
+  // react-hooks/refs 判定为副作用，且并发渲染下可能写到被丢弃的那次渲染上
+  useEffect(() => {
+    toastRef.current = showToast
+    paramsRef.current = getParams
+  })
 
   useEffect(() => {
     // 页面切走再回来时，用当前状态作为基线，避免重复弹出「扫描完成」

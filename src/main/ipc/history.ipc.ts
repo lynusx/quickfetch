@@ -13,9 +13,8 @@ import {
 import { saveHistoryLimit } from '../services/settings'
 
 export const registerHistoryIpc = (): void => {
-  ipcMain.handle(
-    'history:list',
-    (): Promise<ScanHistoryItem[]> => listHistory(),
+  ipcMain.handle('history:list', (): Promise<ScanHistoryItem[]> =>
+    listHistory(),
   )
 
   ipcMain.handle('history:load', async (_event, taskId: string) => {
