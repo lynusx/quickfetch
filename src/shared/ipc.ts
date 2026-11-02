@@ -384,6 +384,11 @@ export interface AppPreferences {
   copyBatchSize: number
 }
 
+/**
+ * 默认档位按现场 8G 内存电脑设定：内存峰值主要由「每批机台数」决定，
+ * 所以批次保持 2；读取与复制并发维持低位，网络盘吃紧时再靠
+ * 失败率自适应降档兜底。调高前先确认现场内存余量。
+ */
 export const DEFAULT_PREFERENCES: AppPreferences = {
   copyLayout: 'flat',
   copyConflict: 'rename',
@@ -401,7 +406,7 @@ export const PREFERENCE_RANGE = {
   scanConcurrency: { min: 1, max: 8, step: 1 },
   scanBatchSize: { min: 1, max: 4, step: 1 },
   copyConcurrency: { min: 1, max: 16, step: 1 },
-  copyBatchSize: { min: 10, max: 500, step: 10 },
+  copyBatchSize: { min: 10, max: 100, step: 10 },
 } as const
 
 export interface CopyTaskParams {

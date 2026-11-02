@@ -1,27 +1,7 @@
 /* 设置页样式。 */
 
-.settings-layout {
-  display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
-  gap: 32px;
-  align-items: start;
-}
-
 .settings-content {
   min-width: 0;
-}
-
-.settings-nav {
-  position: sticky;
-  top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.settings-nav-item {
-  width: 100%;
-  justify-content: flex-start;
 }
 
 .settings-section {
@@ -102,8 +82,13 @@
   padding-top: 2px;
 }
 
-.setting-slider-scale {
-  margin-top: 4px;
+.setting-slider-track {
+  flex: 1;
+  min-width: 0;
+}
+
+.setting-slider-bound {
+  flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
 
@@ -128,17 +113,4 @@
   font-family: var(--code-font-family);
   font-size: 10.5px;
   color: var(--gray-10);
-}
-
-@media (max-width: 1080px) {
-  .settings-layout {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-
-  .settings-nav {
-    position: static;
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
 }
