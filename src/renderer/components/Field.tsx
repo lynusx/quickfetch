@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { Box, Flex, Text } from '@radix-ui/themes'
 import { cn } from '@/lib/utils'
 
+import './Field.css'
+
 interface FieldProps {
   label: ReactNode
   icon?: ReactNode

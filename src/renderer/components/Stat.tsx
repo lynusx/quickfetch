@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { Flex, Grid, Text } from '@radix-ui/themes'
 
+import './Stat.css'
+
 type StatTone = 'default' | 'accent' | 'success' | 'danger'
 
 interface StatProps {

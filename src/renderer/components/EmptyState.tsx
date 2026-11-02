@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { Box, Flex, Text } from '@radix-ui/themes'
 
+import './EmptyState.css'
+
 interface EmptyStateProps {
   icon: ReactNode
   title: ReactNode

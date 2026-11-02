@@ -1,0 +1,77 @@
+/* 选择项：ChoiceList / ChoiceRadio。 */
+
+.choice-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.choice-cols-1 {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+.choice-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.choice-cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.choice-cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.choice-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--gray-a4);
+  border-radius: var(--radius-2);
+  background: var(--app-surface);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    border-color var(--app-transition),
+    background-color var(--app-transition),
+    color var(--app-transition);
+}
+
+.choice-cell:hover {
+  border-color: var(--gray-a6);
+  background: var(--gray-a2);
+}
+
+.choice-cell[data-selected='true'] {
+  border-color: var(--accent-a7);
+  background: var(--accent-a2);
+}
+
+.choice-cell[data-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.choice-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--gray-11);
+}
+
+.choice-cell[data-selected='true'] .choice-label {
+  font-weight: 600;
+  color: var(--accent-12);
+}
+
+.choice-meta {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--gray-9);
+  font-variant-numeric: tabular-nums;
+}

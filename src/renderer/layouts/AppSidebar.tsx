@@ -10,6 +10,7 @@ import { Box, Flex, Text } from '@radix-ui/themes'
 
 import { BrandMark } from '@/components/BrandMark'
 import { getAppVersion } from '@/utils/common'
+import './AppSidebar.css'
 
 const NAV_GROUPS = [
   {

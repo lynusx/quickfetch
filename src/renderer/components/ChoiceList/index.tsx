@@ -10,6 +10,8 @@ import {
 } from '@radix-ui/themes'
 import { cn } from '@/lib/utils'
 
+import './ChoiceList.css'
+
 export interface ChoiceOption {
   value: string
   label: ReactNode

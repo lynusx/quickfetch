@@ -2,6 +2,7 @@ import { Box, Flex } from '@radix-ui/themes'
 import { Outlet } from 'react-router'
 
 import { AppSidebar } from './AppSidebar'
+import './AppLayout.css'
 
 /**
  * 应用外壳。

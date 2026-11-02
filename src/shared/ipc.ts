@@ -416,7 +416,7 @@ export const PREFERENCE_RANGE = {
   scanConcurrency: { min: 1, max: 8, step: 1 },
   scanBatchSize: { min: 1, max: 4, step: 1 },
   copyConcurrency: { min: 1, max: 16, step: 1 },
-  copyBatchSize: { min: 1, max: 500, step: 10 },
+  copyBatchSize: { min: 10, max: 500, step: 10 },
   lxtScanConcurrency: { min: 1, max: 12, step: 1 },
   lxtScanBatchSize: { min: 1, max: 12, step: 1 },
 } as const

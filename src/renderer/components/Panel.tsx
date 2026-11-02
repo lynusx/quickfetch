@@ -2,6 +2,8 @@ import type { CSSProperties, ReactNode } from 'react'
 import { Box, Flex, Heading, Text } from '@radix-ui/themes'
 import { cn } from '@/lib/utils'
 
+import './Panel.css'
+
 interface PanelProps {
   children: ReactNode
   className?: string

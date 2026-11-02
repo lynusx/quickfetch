@@ -14,6 +14,7 @@ import ExcelUploadZone from './components/ExcelUploadZone'
 import ExcelViewer from './components/ExcelViewer'
 import { MAX_EXCEL_SIZE_LABEL } from './constants'
 import { useExcelStore } from './stores/excelStore'
+import './excel.css'
 
 const GUIDE = [
   {

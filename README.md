@@ -152,15 +152,15 @@ src/
     ├── index.html
     ├── main.tsx          # 挂载入口（HashRouter）
     ├── App.tsx           # 路由表 + Radix <Theme> Provider
-    ├── index.css         # 全局基础样式（Radix Themes 样式由 styles.css 提供）
-    ├── layouts/          # 框架布局（AppLayout、AppSidebar）
-    ├── features/         # 业务特性模块（高内聚，页面、组件、Hook、Store 在一起）
+    ├── index.css         # 全局基线：Radix/font 导入、令牌、reset、共享工具类、sonner
+    ├── layouts/          # 框架布局（AppLayout、AppSidebar，样式与组件同目录）
+    ├── features/         # 业务特性模块（高内聚，页面、组件、Hook、Store、样式在一起）
     │   ├── scan/         # 图片扫描（EL / 力禧特 / 利珀页面、组件与状态）
     │   ├── copy/         # 复制管理（CopyPanel、useImageCopy、copyStore）
     │   ├── history/      # 历史记录（HistoryPanel、historyStore）
     │   ├── excel/        # Excel 解析（上传、解析、筛选、表格与状态）
     │   └── settings/     # 应用设置（SettingsPage、settingsStore、userPreferencesStore）
-    ├── components/       # 全局跨模块组件
+    ├── components/       # 全局跨模块组件（各自带同名 CSS）
     │   ├── ChoiceList/   # 基于 Radix Themes 的单选/多选组件
     │   └── DatePicker/   # 基于 Radix Popover + react-day-picker 的日期选择
     ├── hooks/            # 全局 UI 辅助 Hook（useToast）
@@ -177,7 +177,7 @@ src/
 - 样式：`@radix-ui/themes/styles.css`，使用 Radix 设计令牌
 - 字体：拉丁使用 `Public Sans Variable`，中文回退到系统字体（Windows 微软雅黑、macOS PingFang SC、Linux Noto Sans CJK）；不打包 CJK 字体。字体变量需同时覆盖 `:root` 与 `.radix-themes`，否则 Radix 组件会使用自己的默认栈
 - 布局与文本优先使用 `Box` / `Flex` / `Grid` / `Text` / `Heading`；原生标签只保留语义必需的 `button`、`label`、`input`、`details` 等
-- 设计层：`src/renderer/styles/app.css` 只基于 Radix 令牌定义外壳、面板、统计、选项与空状态，不引入 reset / 其它组件库
+- 设计层：全局令牌、reset、共享工具类与 sonner 覆盖在 `src/renderer/index.css`；组件 CSS 与组件同目录，业务 feature CSS 在各自 feature 目录（如 `features/scan/scan.css`）。不引入 reset / 其它组件库
 - 页面标题统一由 `components/PageHeader` 渲染，`AppLayout` 不再重复标题栏；扫描页的任务进度、统计与控制按钮统一放在 `features/scan/components/ScanTaskPanel`
 - 选择类控件统一使用 `components/ChoiceList`（多选）与 `ChoiceRadio`（单选），整个单元格可点击
 - 别名：`@/*` → `src/renderer/*`（`tsconfig*.json` 与 `electron.vite.config.ts` 同步配置）

@@ -9,8 +9,8 @@ import {
   Grid,
   Heading,
   RadioCards,
+  Slider,
   Text,
-  TextField,
 } from '@radix-ui/themes'
 
 import { PageHeader } from '@/components/PageHeader'
@@ -33,6 +33,7 @@ import {
   PREFERENCE_ENV,
   PREFERENCE_RANGE,
 } from '@shared/ipc'
+import './settings.css'
 
 /** 分组方式的实际目录形态，光看名字不知道会建几层 */
 const LAYOUT_SAMPLE: Record<CopyLayout, string> = {
@@ -57,24 +58,24 @@ const SECTIONS = [
   { id: 'other', label: '其他' },
 ]
 
-interface NumberRowProps {
+interface SliderRowProps {
   label: string
   hint: string
   unit: string
   value: number
   range: { min: number; max: number; step: number }
-  /** 被环境变量接管时禁用输入并说明原因，不然用户会以为没保存上 */
+  /** 被环境变量接管时禁用滑杆并说明原因，不然用户会以为没保存上 */
   envName?: string
   onChange: (next: number) => void
 }
 
 /**
- * 数值设置：输入框失焦或回车才落盘。
+ * 数值设置：拖动时只更新本地显示，松手或键盘操作结束才落盘。
  *
- * 边输入边写盘会把 40 写成 4 再写成 40，主进程要跑两趟；
- * 而且用户删空输入框时不该立刻变成下限值。
+ * 边拖边写盘会把一次拖动拆成几十次 IPC，主进程要跟着改几十遍配置；
+ * 本地 draft 负责跟手，onValueCommit 只提交最终值。
  */
-const NumberRow = ({
+const SliderRow = ({
   label,
   hint,
   unit,
@@ -82,73 +83,87 @@ const NumberRow = ({
   range,
   envName,
   onChange,
-}: NumberRowProps) => {
-  const [draft, setDraft] = useState(String(value))
+}: SliderRowProps) => {
+  const [draft, setDraft] = useState(value)
   const [syncedValue, setSyncedValue] = useState(value)
   const overridden = Boolean(envName)
 
   // 落盘后 value 会回写；在渲染期条件同步，避免 effect 里 setState 的级联渲染
   if (value !== syncedValue) {
     setSyncedValue(value)
-    setDraft(String(value))
+    setDraft(value)
   }
 
-  const commit = () => {
-    const parsed = Number.parseInt(draft, 10)
+  const commit = (next: number) => {
+    const clamped = Math.min(range.max, Math.max(range.min, next))
+    setDraft(clamped)
 
-    if (!Number.isFinite(parsed)) {
-      setDraft(String(value))
-      return
-    }
-
-    const next = Math.min(range.max, Math.max(range.min, parsed))
-    setDraft(String(next))
-
-    if (next !== value) onChange(next)
+    if (clamped !== value) onChange(clamped)
   }
 
   return (
-    <Flex className="setting-row" align="center" justify="between" gap="5">
-      <Box className="setting-row-main">
-        <Text as="p" size="2" weight="medium" className="setting-row-label">
-          {label}
-        </Text>
-        <Text as="p" size="1" color="gray" className="setting-row-hint">
-          {overridden ? (
-            <>
-              已由环境变量 <Code size="1">{envName}</Code> 接管，此处不生效
-            </>
-          ) : (
-            <>
-              {hint}
-              <Text size="1" color="gray" ml="2">
-                [范围: {range.min} ~ {range.max}]
-              </Text>
-            </>
-          )}
-        </Text>
-      </Box>
-      <TextField.Root
-        size="2"
-        type="number"
-        min={range.min}
-        max={range.max}
-        step={range.step}
-        value={draft}
-        disabled={overridden}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') event.currentTarget.blur()
-        }}
-        className="setting-number-input"
-      >
-        <TextField.Slot side="right">
-          <Text size="1" color="gray">
-            {unit}
+    <Flex className="setting-row setting-row-slider" direction="column">
+      <Flex align="start" justify="between" gap="4">
+        <Box className="setting-row-main">
+          <Text as="p" size="2" weight="medium" className="setting-row-label">
+            {label}
           </Text>
-        </TextField.Slot>
-      </TextField.Root>
+          <Text as="p" size="1" color="gray" className="setting-row-hint">
+            {overridden ? (
+              <>
+                已由环境变量 <Code size="1">{envName}</Code> 接管，此处不生效
+              </>
+            ) : (
+              hint
+            )}
+          </Text>
+        </Box>
+        <Text
+          as="span"
+          size="2"
+          weight="medium"
+          className="setting-slider-value"
+        >
+          {draft} {unit}
+        </Text>
+      </Flex>
+
+      <Box className="setting-slider-wrap" role="group" aria-label={label}>
+        <Slider
+          value={[draft]}
+          min={range.min}
+          max={range.max}
+          step={range.step}
+          disabled={overridden}
+          aria-label={label}
+          onValueChange={(values) => {
+            const next = values[0]
+
+            if (next !== undefined) setDraft(next)
+          }}
+          onValueCommit={(values) => {
+            const next = values[0]
+
+            if (next !== undefined) commit(next)
+          }}
+        />
+        <Flex
+          className="setting-slider-scale"
+          align="center"
+          justify="between"
+          gap="2"
+        >
+          <Text as="span" size="1" color="gray">
+            {range.min}
+          </Text>
+          <Text as="span" size="1" color="gray">
+            步长 {range.step}
+          </Text>
+          <Text as="span" size="1" color="gray">
+            {range.max}
+          </Text>
+        </Flex>
+      </Box>
     </Flex>
   )
 }
@@ -371,16 +386,16 @@ const SettingsPage = () => {
 
             <Panel>
               <PanelBody>
-                <NumberRow
+                <SliderRow
                   label="同时读取目录"
-                  hint={`${PREFERENCE_RANGE.scanConcurrency.min}–${PREFERENCE_RANGE.scanConcurrency.max}，失败率过高会自动降档`}
+                  hint="失败率过高会自动降档"
                   unit="个"
                   value={preferences.scanConcurrency}
                   range={PREFERENCE_RANGE.scanConcurrency}
                   envName={envName('scanConcurrency')}
                   onChange={(next) => patch({ scanConcurrency: next })}
                 />
-                <NumberRow
+                <SliderRow
                   label="每批扫描机台"
                   hint="一批跑完再开下一批"
                   unit="台"
@@ -389,16 +404,16 @@ const SettingsPage = () => {
                   envName={envName('scanBatchSize')}
                   onChange={(next) => patch({ scanBatchSize: next })}
                 />
-                <NumberRow
+                <SliderRow
                   label="同时复制文件"
-                  hint={`${PREFERENCE_RANGE.copyConcurrency.min}–${PREFERENCE_RANGE.copyConcurrency.max}，共享盘冲突时调低`}
+                  hint="共享盘冲突时调低"
                   unit="个"
                   value={preferences.copyConcurrency}
                   range={PREFERENCE_RANGE.copyConcurrency}
                   envName={envName('copyConcurrency')}
                   onChange={(next) => patch({ copyConcurrency: next })}
                 />
-                <NumberRow
+                <SliderRow
                   label="每批复制文件"
                   hint="批与批之间让出一次界面刷新"
                   unit="张"

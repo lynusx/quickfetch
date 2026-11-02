@@ -19,6 +19,7 @@ import { scanStoreOf } from '../stores/scanStore'
 import { useSettingsStore } from '@/features/settings'
 import type { ScanCategory, ScanTaskParams } from '@shared/ipc'
 import { DEFAULT_HISTORY_LIMIT } from '@shared/historyLimit'
+import '../scan.css'
 
 const EYEBROW: Record<ScanCategory, string> = {
   el: '一键找图 · EL',

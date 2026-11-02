@@ -16,6 +16,7 @@
 项目统一使用 `@radix-ui/themes` 构建 UI，根节点由 `<Theme>` 包裹，已彻底移除 shadcn/ui 及 Tailwind CSS。
 
 - 样式文件：`@radix-ui/themes/styles.css`
+- 组件样式与组件布局文件同目录（如 `components/Panel.tsx` + `Panel.css`、`features/scan/scan.css`）；全局基线、令牌、共享工具类与 sonner 覆盖在 `src/renderer/index.css`。不要新建 `styles/app.css` 之类的汇总文件
 - 组件统一从 `@radix-ui/themes` 导入（如 `Button`, `Flex`, `Grid`, `Box`, `Text`, `Heading`, `Card`, `Badge`, `Dialog`, `Callout`, `Progress`, `Table` 等）
 - 图标统一使用 `@radix-ui/react-icons`
 - 禁止混用其他组件库与全局 CSS reset；自定义颜色使用 Radix 设计令牌（如 `var(--accent-9)`、`var(--gray-3)`）

@@ -23,6 +23,7 @@ import { SCAN_STATUS_META } from '../scan/components/scanStatus'
 import type { ScanCategory, ScanHistoryItem, ScanTaskStatus } from '@shared/ipc'
 import { formatDuration } from '@/utils/common'
 import { toErrorMessage } from '@/utils/error'
+import './history.css'
 
 /** 历史列表只关心「什么时候扫的、扫了什么、结果多少」，时间精确到分钟就够 */
 const formatTime = (timestamp: number): string => {

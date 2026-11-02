@@ -1,5 +1,7 @@
 import { Flex } from '@radix-ui/themes'
 
+import './BrandMark.css'
+
 /**
  * 应用标识。
  *

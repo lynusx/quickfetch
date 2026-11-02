@@ -1,6 +1,5 @@
 @import '@radix-ui/themes/styles.css';
 @import '@fontsource-variable/public-sans';
-@import './styles/app.css';
 
 /*
  * Radix 在 .radix-themes 上直接声明了 --default-font-family / --code-font-family，
@@ -33,6 +32,7 @@ body,
 }
 
 body {
+  overflow: hidden;
   font-family: var(--default-font-family);
   background-color: var(--color-background);
   color: var(--gray-12);
@@ -50,4 +50,140 @@ body {
   border: 1px solid var(--gray-6) !important;
   border-radius: var(--radius-3) !important;
   box-shadow: var(--shadow-3) !important;
+}
+
+/* 全局应用令牌、基线与共享工具类 */
+
+.radix-themes {
+  --app-sidebar-width: 252px;
+  --app-content-max: 1480px;
+  --app-canvas: var(--gray-2);
+  --app-surface: var(--color-panel-solid);
+  --app-border: var(--gray-5);
+  --app-border-strong: var(--gray-6);
+  --app-radius-panel: 14px;
+  --app-radius-control: 9px;
+  --app-shadow-panel: 0 1px 2px var(--gray-a3);
+  --app-transition: 140ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+::selection {
+  background: var(--accent-a4);
+  color: var(--accent-12);
+}
+
+.app-shell :focus-visible {
+  outline: 2px solid var(--accent-8);
+  outline-offset: 2px;
+}
+
+.app-shell ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.app-shell ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-shell ::-webkit-scrollbar-thumb {
+  background: var(--gray-a4);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 8px;
+}
+
+.app-shell ::-webkit-scrollbar-thumb:hover {
+  background: var(--gray-a6);
+  background-clip: content-box;
+}
+
+/* 数字统一等宽，进度与统计不会跳动 */
+.tabular,
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.mono {
+  font-family: var(--code-font-family);
+}
+
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--gray-8);
+}
+
+.status-dot[data-tone='success'] {
+  background: var(--green-9);
+}
+
+.status-dot[data-tone='accent'] {
+  background: var(--accent-9);
+}
+
+.status-dot[data-tone='warn'] {
+  background: var(--amber-9);
+}
+
+.status-dot[data-tone='danger'] {
+  background: var(--red-9);
+}
+
+.workbench-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.field-count {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--gray-9);
+  font-variant-numeric: tabular-nums;
+}
+
+.choice-scroll {
+  max-height: 222px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--radius-3);
+  background: var(--app-surface);
+}
+
+.choice-scroll-inner {
+  padding: 8px;
+}
+
+.action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-bar-spacer {
+  flex: 1;
+}
+
+@media (max-width: 1180px) {
+  .workbench-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1080px) {
+  .radix-themes {
+    --app-sidebar-width: 224px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell * {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
 }

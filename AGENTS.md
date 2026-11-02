@@ -11,7 +11,7 @@
 | 架构、IPC、配置落盘、网络判定等 | [`.claude/AGENTS.md`](.claude/AGENTS.md)                                       |
 | 要动 UI、加组件、调整样式       | [`.claude/skills/radix-themes/SKILL.md`](.claude/skills/radix-themes/SKILL.md) |
 
-## 三条原则
+## 四条原则
 
 1. **界面从简。** 删掉重复的标题、同义的说明文字和纯装饰标签；同一信息只出现一次。删完如果看不懂，说明信息层级或布局有问题，重排这个区域，不要靠加字补救。
    - `PageHeader` / `PanelHeader` 的 `eyebrow`、`description`、`badge` 只在提供新信息时使用，不要复述标题或彼此重复。
@@ -23,7 +23,9 @@
 
 3. **界面只用 Radix Themes 组件。** 布局用 `Box` / `Flex` / `Grid` / `Section` / `Container`，排版用 `Text` / `Heading` / `Strong` / `Em` / `Code` / `Link` / `Blockquote`；不要在 JSX 里手写裸 `div` / `span` / `p` / `h1`–`h6` 做布局或排版。Radix 组件上的 `as="span"` / `as="div"` 是正常用法。
    - 原生 `button` / `label` / `input` / `details` / `summary` 只在语义必需时使用（现有：历史摘要行、Excel 上传区、快捷方式折叠区），并保证可访问名称；图标按钮必须有 `aria-label`。
-   - 不引入 shadcn/ui、Tailwind、其它组件库或第三方全局 reset；自定义样式只用 Radix 令牌，写在 `src/renderer/styles/app.css`。
+   - 不引入 shadcn/ui、Tailwind、其它组件库或第三方全局 reset；自定义样式只用 Radix 令牌。
+
+4. **样式跟着组件走。** 组件 CSS 与组件布局文件同目录（如 `components/Panel.tsx` + `Panel.css`、`features/scan/scan.css`、`layouts/AppLayout.css`），并在组件文件里 `import`。不要新建 `styles/app.css` 之类的汇总文件，也不要把所有样式聚在一个文件里。只有全局令牌、reset、共享工具类和跨组件/跨 feature 共享类放 `src/renderer/index.css`；新增组件时一并创建同名 CSS，没有样式就不建空文件。
 
 ## 现场与文档底线
 

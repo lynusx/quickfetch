@@ -47,17 +47,30 @@ const defaultSettings = (): AppSettings => ({
   envOverrides: [],
 })
 
-const clampInt = (
+/**
+ * 把偏好值压进对应档位：先 clamp 到 min/max，再按 step 取最近的合法值。
+ *
+ * 设置页的滑杆已经按 step 取点，这里再兜一层，避免旧 settings.json
+ * 留下 55 这种不在步长上的值，滑杆一打开就先跳一格。
+ */
+const clampPreference = (
   value: unknown,
-  min: number,
-  max: number,
+  key: keyof typeof PREFERENCE_RANGE,
   fallback: number,
 ): number => {
   const parsed = typeof value === 'number' ? value : Number(value)
 
   if (!Number.isFinite(parsed)) return fallback
 
-  return Math.min(max, Math.max(min, Math.round(parsed)))
+  const { min, max, step } = PREFERENCE_RANGE[key]
+  const clamped = Math.min(max, Math.max(min, Math.round(parsed)))
+  const maxSteps = Math.floor((max - min) / step)
+  const steps = Math.min(
+    maxSteps,
+    Math.max(0, Math.round((clamped - min) / step)),
+  )
+
+  return min + steps * step
 }
 
 /**
@@ -81,40 +94,34 @@ export const normalizePreferences = (
     copyConflict: conflicts.includes(merged.copyConflict)
       ? merged.copyConflict
       : DEFAULT_PREFERENCES.copyConflict,
-    scanConcurrency: clampInt(
+    scanConcurrency: clampPreference(
       merged.scanConcurrency,
-      PREFERENCE_RANGE.scanConcurrency.min,
-      PREFERENCE_RANGE.scanConcurrency.max,
+      'scanConcurrency',
       DEFAULT_PREFERENCES.scanConcurrency,
     ),
-    scanBatchSize: clampInt(
+    scanBatchSize: clampPreference(
       merged.scanBatchSize,
-      PREFERENCE_RANGE.scanBatchSize.min,
-      PREFERENCE_RANGE.scanBatchSize.max,
+      'scanBatchSize',
       DEFAULT_PREFERENCES.scanBatchSize,
     ),
-    copyConcurrency: clampInt(
+    copyConcurrency: clampPreference(
       merged.copyConcurrency,
-      PREFERENCE_RANGE.copyConcurrency.min,
-      PREFERENCE_RANGE.copyConcurrency.max,
+      'copyConcurrency',
       DEFAULT_PREFERENCES.copyConcurrency,
     ),
-    copyBatchSize: clampInt(
+    copyBatchSize: clampPreference(
       merged.copyBatchSize,
-      PREFERENCE_RANGE.copyBatchSize.min,
-      PREFERENCE_RANGE.copyBatchSize.max,
+      'copyBatchSize',
       DEFAULT_PREFERENCES.copyBatchSize,
     ),
-    lxtScanConcurrency: clampInt(
+    lxtScanConcurrency: clampPreference(
       merged.lxtScanConcurrency,
-      PREFERENCE_RANGE.lxtScanConcurrency.min,
-      PREFERENCE_RANGE.lxtScanConcurrency.max,
+      'lxtScanConcurrency',
       DEFAULT_PREFERENCES.lxtScanConcurrency,
     ),
-    lxtScanBatchSize: clampInt(
+    lxtScanBatchSize: clampPreference(
       merged.lxtScanBatchSize,
-      PREFERENCE_RANGE.lxtScanBatchSize.min,
-      PREFERENCE_RANGE.lxtScanBatchSize.max,
+      'lxtScanBatchSize',
       DEFAULT_PREFERENCES.lxtScanBatchSize,
     ),
   }

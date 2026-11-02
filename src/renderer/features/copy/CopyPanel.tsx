@@ -34,6 +34,7 @@ import { selectPreferences, useSettingsStore } from '@/features/settings'
 import type { CopyConflictPolicy, CopyStatus, ScanCategory } from '@shared/ipc'
 import { COPY_CONFLICT_LABEL, COPY_LAYOUT_LABEL } from '@shared/ipc'
 import { formatDuration, formatEta } from '@/utils/common'
+import './copy.css'
 
 const STATUS_META: Record<
   CopyStatus,

@@ -1,0 +1,100 @@
+/* 历史记录：HistoryPanel。 */
+
+.history-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--radius-3);
+  background: var(--gray-a2);
+}
+
+.history-toolbar-hint {
+  flex: 1;
+  min-width: 0;
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: var(--gray-10);
+}
+
+.history-limit-field {
+  flex-shrink: 0;
+}
+
+.history-limit-input {
+  width: 76px;
+}
+
+.history-scroll {
+  max-height: 300px;
+}
+
+.history-list {
+  border: 1px solid var(--app-border);
+  border-radius: var(--radius-3);
+  overflow: hidden;
+}
+
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--gray-a3);
+  transition: background-color var(--app-transition);
+}
+
+.history-row:last-child {
+  border-bottom: none;
+}
+
+.history-row:hover {
+  background: var(--gray-a2);
+}
+
+.history-row[data-active='true'] {
+  background: var(--accent-a2);
+}
+
+.history-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.history-time {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  color: var(--gray-9);
+  font-variant-numeric: tabular-nums;
+}
+
+.history-summary {
+  all: unset;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--accent-11);
+  text-align: left;
+}
+
+.history-summary:hover {
+  text-decoration: underline;
+}
+
+.history-stats {
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--gray-9);
+  font-variant-numeric: tabular-nums;
+}

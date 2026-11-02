@@ -1,0 +1,31 @@
+/* 应用外壳：AppLayout。 */
+
+.app-shell {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--app-canvas);
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--app-canvas);
+}
+
+.app-content {
+  width: 100%;
+  max-width: var(--app-content-max);
+  margin: 0 auto;
+  padding: 30px 34px 56px;
+}
+
+@media (max-width: 1240px) {
+  .app-content {
+    padding: 24px 24px 48px;
+  }
+}

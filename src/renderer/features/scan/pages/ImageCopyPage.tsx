@@ -21,6 +21,7 @@ import { useImageFilterStore } from '../stores/imageFilterStore'
 import { useElScanStore } from '../stores/scanStore'
 import { useSettingsStore, useUserPreferencesStore } from '@/features/settings'
 import { DEFAULT_HISTORY_LIMIT } from '@shared/historyLimit'
+import '../scan.css'
 
 const ImageCopyPage = () => {
   const { showToast } = useToast()
