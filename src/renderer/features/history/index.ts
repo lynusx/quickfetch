@@ -1,2 +1,2 @@
-export { default as HistoryPanel } from './HistoryPanel'
+export { default as HistoryPanel } from './history-panel'
 export * from './historyStore'

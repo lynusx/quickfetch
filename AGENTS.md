@@ -25,7 +25,7 @@
    - 原生 `button` / `label` / `input` / `details` / `summary` 只在语义必需时使用（现有：历史摘要行、Excel 上传区、快捷方式折叠区），并保证可访问名称；图标按钮必须有 `aria-label`。
    - 不引入 shadcn/ui、Tailwind、其它组件库或第三方全局 reset；自定义样式只用 Radix 令牌。
 
-4. **样式跟着组件走。** 组件 CSS 与组件布局文件同目录（如 `components/Panel.tsx` + `Panel.css`、`features/scan/scan.css`、`layouts/AppLayout.css`），并在组件文件里 `import`。不要新建 `styles/app.css` 之类的汇总文件，也不要把所有样式聚在一个文件里。只有全局令牌、reset、共享工具类和跨组件/跨 feature 共享类放 `src/renderer/index.css`；新增组件时一并创建同名 CSS，没有样式就不建空文件。
+4. **样式跟着组件走。** 共享组件每个组件一个目录；渲染层的组件目录名、组件文件与样式文件统一 kebab-case（如 `components/panel/panel.tsx` + `components/panel/panel.css`、`layouts/app-layout.tsx` + `layouts/app-layout.css`），样式在组件文件里 `import`；`index.ts` 只做多组件导出，不放组件实现。业务 feature 的 CSS 与组件同目录（如 `features/scan/scan.css`）。不要新建 `styles/app.css` 之类的汇总文件，也不要把所有样式聚在一个文件里。只有全局令牌、reset、共享工具类和跨组件/跨 feature 共享类放 `src/renderer/index.css`；新增组件时一并创建同名 CSS，没有样式就不建空文件。
 
 ## 现场与文档底线
 

@@ -1,3 +1,3 @@
-export { default as CopyPanel } from './CopyPanel'
+export { default as CopyPanel } from './copy-panel'
 export * from './useImageCopy'
 export * from './copyStore'

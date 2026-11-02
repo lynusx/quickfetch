@@ -1,3 +1,3 @@
-export { default as SettingsPage } from './SettingsPage'
+export { default as SettingsPage } from './settings-page'
 export * from './settingsStore'
 export * from './userPreferencesStore'
