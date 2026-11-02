@@ -79,6 +79,9 @@ SKIP_VERSION=1 git commit -m "feat(pl): 利珀扫描入口"
 
 **提交信息**：Conventional Commits，由 commitlint 校验，格式 `type(scope): 描述`。
 
+**不要把 Claude Code 加为贡献者**：提交信息里不要出现 `Co-Authored-By: Claude Code <noreply@anthropic.com>`
+或任何等价的署名行；提交历史只保留仓库作者。
+
 ## 改完自检
 
 ```bash
