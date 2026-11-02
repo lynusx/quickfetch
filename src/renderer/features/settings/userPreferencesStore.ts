@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { unique } from 'radash'
 import { devtools, persist } from 'zustand/middleware'
 
 interface UserPreferencesState {
@@ -44,6 +43,8 @@ const sameList = (list: string[] | undefined, preset: string[]): boolean =>
   list.length === preset.length &&
   preset.every((item) => list.includes(item))
 
+const uniqueStrings = (list: string[]): string[] => [...new Set(list)]
+
 export const useUserPreferencesStore = create<
   UserPreferencesState & UserPreferencesAction
 >()(
@@ -54,14 +55,16 @@ export const useUserPreferencesStore = create<
         lxtTypes: [],
         plTypes: [],
         addNgType: (type: string) =>
-          set((state) => ({ ngTypes: unique([...state.ngTypes, type]) })),
+          set((state) => ({
+            ngTypes: uniqueStrings([...state.ngTypes, type]),
+          })),
         removeNgType: (type: string) =>
           set((state) => ({
             ngTypes: state.ngTypes.filter((t) => t !== type),
           })),
         addLxtType: (type: string) =>
           set((state) => ({
-            lxtTypes: unique([...(state.lxtTypes ?? []), type]),
+            lxtTypes: uniqueStrings([...(state.lxtTypes ?? []), type]),
           })),
         removeLxtType: (type: string) =>
           set((state) => ({
@@ -69,7 +72,7 @@ export const useUserPreferencesStore = create<
           })),
         addPlType: (type: string) =>
           set((state) => ({
-            plTypes: unique([...(state.plTypes ?? []), type]),
+            plTypes: uniqueStrings([...(state.plTypes ?? []), type]),
           })),
         removePlType: (type: string) =>
           set((state) => ({

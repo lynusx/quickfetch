@@ -27,34 +27,6 @@ export const useExcelViewer = () => {
     setSelectedDefects,
   } = useSheetFilterStore()
 
-  // 获取状态徽标样式
-  const getStatusVariant = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'secondary' as const
-      case 'processing':
-        return 'outline' as const
-      case 'error':
-        return 'destructive' as const
-      default:
-        return 'outline' as const
-    }
-  }
-
-  // 获取状态文本
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return '解析完成'
-      case 'processing':
-        return '处理中'
-      case 'error':
-        return '解析失败'
-      default:
-        return '未知状态'
-    }
-  }
-
   // 处理复制操作
   const handleCopyToClipboard = async (sheet: ExcelSheet) => {
     try {
@@ -166,8 +138,6 @@ export const useExcelViewer = () => {
   ])
 
   return {
-    getStatusVariant,
-    getStatusText,
     generateSheetDate,
     handleCopyToClipboard,
     handleExportToExcel,

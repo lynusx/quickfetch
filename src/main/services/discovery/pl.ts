@@ -1,4 +1,4 @@
-import type { PlMachine, PlSettings } from '../../../shared/ipc'
+import type { PlMachine } from '../../../shared/ipc'
 
 import { discoverShortcutEntry, machineKey, mergeDiscovered } from './shortcuts'
 import type { DiscoveredLink, Discovery, MergeResult } from './shortcuts'
@@ -16,13 +16,6 @@ export const PL_ENTRY_NAME = '利珀'
 /** 机台唯一键；历史记录、复制分组都按它走 */
 export const plKey = (plant: string, name: string): string =>
   machineKey(plant, name)
-
-export const defaultPlSettings = (): PlSettings => ({
-  entryRoot: null,
-  machines: [],
-  skipped: [],
-  updatedAt: null,
-})
 
 export const discoverPl = (entryRoot: string): Promise<Discovery> =>
   discoverShortcutEntry(entryRoot, PL_ENTRY_NAME)

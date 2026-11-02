@@ -1,8 +1,8 @@
 {
   "name": "shx-tools",
   "private": true,
-  "version": "1.16.0",
-  "description": "RCA EL 图片拷贝与 Excel 解析桌面工具",
+  "version": "1.16.1",
+  "description": "RCA EL、力禧特、利珀图片拷贝与 Excel 解析桌面工具",
   "author": "lynusx",
   "type": "module",
   "main": "out/main/index.cjs",
@@ -11,17 +11,15 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc -b",
-    "dist:win": "electron-vite build && electron-builder --win --x64",
+    "dist:win": "pnpm build && electron-builder --win --x64",
     "lint": "eslint .",
     "prestart": "node scripts/ensure-electron.cjs",
     "start": "electron-vite preview",
     "format": "prettier --check .",
+    "format:check": "prettier --check .",
     "format:fix": "prettier --write .",
     "prepare": "husky",
     "knip": "knip"
-  },
-  "dependencies": {
-    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.1.0",
@@ -36,28 +34,28 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
-    "clsx": "^2.1.1",
     "electron": "^45.1.0",
     "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
-    "framer-motion": "^12.23.25",
     "globals": "^16.5.0",
     "husky": "^9.1.7",
     "knip": "^5.71.0",
     "prettier": "^3.7.4",
-    "radash": "^12.1.1",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "react-router": "^7.10.0",
-    "react-use": "^17.6.0",
     "sonner": "^2.0.8",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.48.1",
     "vite": "^7.2.6",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zustand": "^5.0.9"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   },
   "packageManager": "pnpm@10.12.3+sha512.467df2c586056165580ad6dfb54ceaad94c5a30f80893ebdec5a44c5aa73c205ae4a5bb9d5ed6bb84ea7c249ece786642bbb49d06a307df218d03da41c317417",
   "pnpm": {

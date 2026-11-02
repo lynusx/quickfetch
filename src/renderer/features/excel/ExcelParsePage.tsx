@@ -12,13 +12,14 @@ import { Panel, PanelBody, PanelHeader } from '@/components/Panel'
 import { Step } from '@/components/Field'
 import ExcelUploadZone from './components/ExcelUploadZone'
 import ExcelViewer from './components/ExcelViewer'
+import { MAX_EXCEL_SIZE_LABEL } from './constants'
 import { useExcelStore } from './stores/excelStore'
 
 const GUIDE = [
   {
     icon: UploadIcon,
     title: '上传文件',
-    text: '拖拽或点击选择单个 .xlsx / .xls 文件，最大 50MB。',
+    text: `拖拽或点击选择单个 .xlsx / .xls 文件，最大 ${MAX_EXCEL_SIZE_LABEL}。`,
   },
   {
     icon: TableIcon,

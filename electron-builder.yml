@@ -13,22 +13,11 @@ electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/
 
 # 只打包构建产物，源码不进安装包。
-# 不给 files 列 node_modules：electron-builder 会自动按 package.json 的
-# dependencies 收依赖，但会把依赖的 dependencies 一起带上（shadcn 拉进
-# @babel、@ts-morph、@modelcontextprotocol 等构建期工具），asar 从 4MB 涨到 120MB。
-# 这里显式只放运行时真正 require 的包，其余都已由 vite 打进 out/renderer。
+# 渲染层依赖（含 xlsx）已由 Vite 打进 out/renderer；主进程/preload 不 require
+# 任何 npm 包，production dependencies 为空，因此 asar 里不需要 node_modules。
 files:
   - out/**/*
   - package.json
-  - '!node_modules/.cache'
-  - node_modules/xlsx/**/*
-  - node_modules/adler-32/**/*
-  - node_modules/cfb/**/*
-  - node_modules/codepage/**/*
-  - node_modules/crc-32/**/*
-  - node_modules/ssf/**/*
-  - node_modules/wmf/**/*
-  - node_modules/word/**/*
 
 asar: true
 

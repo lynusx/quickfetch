@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { randomUUID } from 'node:crypto'
 import { readdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 
@@ -338,13 +339,50 @@ export const readSettings = async (): Promise<AppSettings> => {
 /** 原子写：先写临时文件再 rename，避免断电留下半截 JSON */
 const writeSettings = async (settings: AppSettings): Promise<void> => {
   const target = settingsFile()
-  const temp = `${target}.tmp`
+  // 并发写时固定的 .tmp 会互相截断；唯一后缀保证每次写入各用各的临时文件
+  const temp = `${target}.${process.pid}.${randomUUID()}.tmp`
   // envOverrides 是运行时算出来的，写进文件没有意义
   const { envOverrides: _runtime, ...persisted } = settings
 
   await writeFile(temp, JSON.stringify(persisted, null, 2), 'utf-8')
   await rename(temp, target)
 }
+
+/**
+ * 设置文件的读改写串行队列。
+ *
+ * 所有 mutator 都是「读全量 → 改 → 写全量」，并发时后写会覆盖先写
+ * （扫描时多台机台同时回写探测结果就会丢缓存）。只在 writeSettings
+ * 外面排队不够，必须把读、改、写整体串起来。
+ */
+let settingsQueue: Promise<unknown> = Promise.resolve()
+
+const withSettingsLock = <T>(task: () => Promise<T>): Promise<T> => {
+  const run = settingsQueue.then(task, task)
+  settingsQueue = run.then(
+    () => undefined,
+    () => undefined,
+  )
+  return run
+}
+
+/**
+ * 在串行队列里完成一次读改写。
+ *
+ * mutator 内不能再调用其他导出 mutator 或 readSettings —— 锁不可重入。
+ * 返回同一个对象表示无需落盘（remember 的「值没变」分支依赖这一点）。
+ */
+const updateSettings = (
+  mutate: (current: AppSettings) => AppSettings | Promise<AppSettings>,
+): Promise<AppSettings> =>
+  withSettingsLock(async () => {
+    const current = await readSettings()
+    const next = await mutate(current)
+
+    if (next !== current) await writeSettings(next)
+
+    return next
+  })
 
 /** 设置根目录：校验通过后立即识别机台并落盘，失败时不写坏数据 */
 export const saveRootPath = async (rootPath: string): Promise<AppSettings> => {
@@ -354,88 +392,68 @@ export const saveRootPath = async (rootPath: string): Promise<AppSettings> => {
     throw new Error('根目录不能为空，请输入或选择 DC 目录')
   }
 
+  // 目录识别很慢，放在锁外；写回时再基于最新的 current 合并
   const machines = await discoverMachines(trimmed)
-  const current = await readSettings()
-  const settings: AppSettings = {
-    version: SETTINGS_VERSION,
+
+  return updateSettings((current) => ({
+    ...current,
     rootPath: trimmed,
     entry: ENTRY,
     machines,
     updatedAt: new Date().toISOString(),
-    // 换根目录不该把历史保留条数与偏好重置回默认值
-    historyLimit: current.historyLimit,
-    preferences: current.preferences,
-    lxt: current.lxt,
-    pl: current.pl,
-    envOverrides: current.envOverrides,
-  }
-
-  await writeSettings(settings)
-
-  return settings
+  }))
 }
 
 /** 重新识别机台；未配置根目录时直接返回当前配置 */
-export const refreshMachines = async (): Promise<AppSettings> => {
-  const current = await readSettings()
+export const refreshMachines = (): Promise<AppSettings> =>
+  updateSettings(async (current) => {
+    if (!current.rootPath) return current
 
-  if (!current.rootPath) return current
+    // 低频人工操作，锁住一次网络列目录可接受；避免识别期间被别的写覆盖
+    const machines = await discoverMachines(current.rootPath)
 
-  const machines = await discoverMachines(current.rootPath)
-  const settings: AppSettings = {
-    ...current,
-    machines,
-    updatedAt: new Date().toISOString(),
-  }
-
-  await writeSettings(settings)
-
-  return settings
-}
+    return {
+      ...current,
+      machines,
+      updatedAt: new Date().toISOString(),
+    }
+  })
 
 /** 调整历史保留条数并立即裁剪，超出的旧记录直接删掉 */
-export const saveHistoryLimit = async (limit: number): Promise<AppSettings> => {
-  const current = await readSettings()
-  const settings: AppSettings = {
+export const saveHistoryLimit = (limit: number): Promise<AppSettings> =>
+  updateSettings((current) => ({
     ...current,
     historyLimit: normalizeHistoryLimit(limit),
     updatedAt: new Date().toISOString(),
-  }
-
-  await writeSettings(settings)
-
-  return settings
-}
+  }))
 
 /** 局部更新偏好：只覆盖传进来的字段，其余保持原值 */
-export const savePreferences = async (
+export const savePreferences = (
   patch: Partial<AppPreferences>,
-): Promise<AppSettings> => {
-  const current = await readSettings()
-  const settings: AppSettings = {
+): Promise<AppSettings> =>
+  updateSettings((current) => ({
     ...current,
     preferences: normalizePreferences({ ...current.preferences, ...patch }),
     updatedAt: new Date().toISOString(),
-  }
-
-  await writeSettings(settings)
-
-  return settings
-}
+  }))
 
 /** 只替换力禧特那段配置，其余字段原样保留 */
-export const saveLxt = async (lxt: LxtSettings): Promise<AppSettings> => {
-  const current = await readSettings()
-  const settings: AppSettings = {
+export const saveLxt = (lxt: LxtSettings): Promise<AppSettings> =>
+  updateSettings((current) => ({
     ...current,
     lxt: normalizeLxt(lxt),
     updatedAt: new Date().toISOString(),
-  }
+  }))
 
-  await writeSettings(settings)
-
-  return settings
-}
+/** 在锁内基于最新配置修改力禧特那一段 */
+export const updateLxt = (
+  mutate: (lxt: LxtSettings) => LxtSettings,
+): Promise<AppSettings> =>
+  updateSettings((current) => ({
+    ...current,
+    lxt: normalizeLxt(mutate(current.lxt)),
+    updatedAt: new Date().toISOString(),
+  }))
 
 /**
  * 回写单台机台探测到的共享名。
@@ -450,38 +468,47 @@ export const rememberLxtShare = async (
   host: string,
 ): Promise<void> => {
   try {
-    const current = await readSettings()
-    const index = current.lxt.machines.findIndex((item) => item.key === key)
+    await updateSettings((current) => {
+      const index = current.lxt.machines.findIndex((item) => item.key === key)
 
-    if (index < 0) return
+      if (index < 0) return current
 
-    const machine = current.lxt.machines[index]
+      const machine = current.lxt.machines[index]
 
-    // 期间入口被重新识别、IP 变了，这次探测结果已经过期，不能写回去
-    if (machine.host !== host || machine.share === share) return
+      // 期间入口被重新识别、IP 变了，这次探测结果已经过期，不能写回去
+      if (machine.host !== host || machine.share === share) return current
 
-    const machines = [...current.lxt.machines]
-    machines[index] = { ...machine, share }
+      const machines = [...current.lxt.machines]
+      machines[index] = { ...machine, share }
 
-    await saveLxt({ ...current.lxt, machines })
+      return {
+        ...current,
+        lxt: normalizeLxt({ ...current.lxt, machines }),
+        updatedAt: new Date().toISOString(),
+      }
+    })
   } catch (error) {
     console.error('保存共享名探测结果失败:', error)
   }
 }
 
 /** 只替换利珀那段配置，其余字段原样保留 */
-export const savePl = async (pl: PlSettings): Promise<AppSettings> => {
-  const current = await readSettings()
-  const settings: AppSettings = {
+export const savePl = (pl: PlSettings): Promise<AppSettings> =>
+  updateSettings((current) => ({
     ...current,
     pl: normalizePl(pl),
     updatedAt: new Date().toISOString(),
-  }
+  }))
 
-  await writeSettings(settings)
-
-  return settings
-}
+/** 在锁内基于最新配置修改利珀那一段 */
+export const updatePl = (
+  mutate: (pl: PlSettings) => PlSettings,
+): Promise<AppSettings> =>
+  updateSettings((current) => ({
+    ...current,
+    pl: normalizePl(mutate(current.pl)),
+    updatedAt: new Date().toISOString(),
+  }))
 
 /**
  * 回写单台利珀机台探测到的标识目录。
@@ -495,20 +522,25 @@ export const rememberPlShare = async (
   host: string,
 ): Promise<void> => {
   try {
-    const current = await readSettings()
-    const index = current.pl.machines.findIndex((item) => item.key === key)
+    await updateSettings((current) => {
+      const index = current.pl.machines.findIndex((item) => item.key === key)
 
-    if (index < 0) return
+      if (index < 0) return current
 
-    const machine = current.pl.machines[index]
+      const machine = current.pl.machines[index]
 
-    // 期间入口被重新识别、IP 变了，这次探测结果已经过期，不能写回去
-    if (machine.host !== host || machine.share === share) return
+      // 期间入口被重新识别、IP 变了，这次探测结果已经过期，不能写回去
+      if (machine.host !== host || machine.share === share) return current
 
-    const machines = [...current.pl.machines]
-    machines[index] = { ...machine, share }
+      const machines = [...current.pl.machines]
+      machines[index] = { ...machine, share }
 
-    await savePl({ ...current.pl, machines })
+      return {
+        ...current,
+        pl: normalizePl({ ...current.pl, machines }),
+        updatedAt: new Date().toISOString(),
+      }
+    })
   } catch (error) {
     console.error('保存利珀标识目录探测结果失败:', error)
   }

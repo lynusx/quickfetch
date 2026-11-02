@@ -11,7 +11,7 @@ import type {
   PreferenceKey,
   ScanCategory,
 } from '../../../shared/ipc'
-import { DEFAULT_PREFERENCES, PREFERENCE_ENV } from '../../../shared/ipc'
+import { PREFERENCE_ENV } from '../../../shared/ipc'
 
 const toInt = (value: string | undefined, fallback: number): number => {
   const parsed = Number.parseInt(value ?? '', 10)
@@ -65,7 +65,3 @@ export const loadFrom = (
     copyBatchSize: pick('copyBatchSize', preferences.copyBatchSize),
   }
 }
-
-/** 没有配置时的兜底档位，与 DEFAULT_PREFERENCES 一致 */
-export const defaultLoad = (): LoadProfile =>
-  loadFrom({ ...DEFAULT_PREFERENCES })

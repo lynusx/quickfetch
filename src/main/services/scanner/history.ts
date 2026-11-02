@@ -152,6 +152,7 @@ const toItem = (record: HistoryRecord): ScanHistoryItem => ({
     (record.startedAt ?? record.createdAt),
   createdAt: record.createdAt,
   finishedAt: record.finishedAt,
+  diagnosed: record.branches.some((branch) => branch.status !== 'skipped'),
   restorable: true,
 })
 

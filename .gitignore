@@ -29,7 +29,12 @@ release
 .npm-cache
 
 # Electron 崩溃时留下的 core dump
-core.*
+core
+core.[0-9]*
+
+# 打包产物与截图由 AGENTS 要求放在工作区根目录
+*.zip
+shots/
 
 # Claude Code 的本地设置（skills 仍需入库，不整目录忽略）
 .claude/settings.local.json

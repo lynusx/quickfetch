@@ -515,6 +515,8 @@ export interface ScanHistoryItem {
   elapsedMs: number
   createdAt: number
   finishedAt: number | null
+  /** 是否至少有一个分支真正探测过；0 图但有诊断的记录靠它展示 */
+  diagnosed: boolean
   /** 结果明细文件是否存在；文件被删或损坏时加载会返回 null */
   restorable: boolean
 }

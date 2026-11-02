@@ -5,15 +5,17 @@ import type { ExcelSheet } from '../types'
 
 export const useExcelOperations = () => {
   const copyToClipboard = useCallback(async (sheet: ExcelSheet) => {
+    // 不可用时必须失败，否则界面会误报「已复制」
+    if (!navigator.clipboard || !window.isSecureContext) {
+      throw new Error('当前环境不支持剪贴板，请使用「导出 Excel」')
+    }
+
     try {
       // 将数据转换为制表符分割的文本格式
       const rows = sheet.data.map((row) => row.join('\t'))
       const textContent = [...rows].join('\n')
 
-      // 使用现代剪切板 API
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(textContent)
-      }
+      await navigator.clipboard.writeText(textContent)
 
       return true
     } catch (error) {

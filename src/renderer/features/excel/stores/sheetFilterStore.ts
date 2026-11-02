@@ -13,6 +13,7 @@ interface SheetFilterActions {
   setDefects: (defects: Set<string>) => void
   setSelectedLines: (lines: string[]) => void
   setSelectedDefects: (defects: string[]) => void
+  reset: () => void
 }
 
 /** 内容相同就不写回，避免解析结果每次重新生成时触发无限重渲染 */
@@ -44,5 +45,12 @@ export const useSheetFilterStore = create<
           ? state
           : { selectedDefects: defects },
       ),
+    reset: () =>
+      set({
+        lines: new Set<string>(),
+        defects: new Set<string>(),
+        selectedLines: [],
+        selectedDefects: [],
+      }),
   })),
 )

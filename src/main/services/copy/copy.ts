@@ -564,9 +564,14 @@ export class CopyTaskRunner {
     this.markSettled()
   }
 
+  /** 本次任务应复制的完整图片集合；清单与执行计划都从这里取 */
+  private taskImages(): ScannedImage[] {
+    return filterByMachines(this.source, this.params.machines)
+  }
+
   /** 规划目标路径：按布局建子目录，按重名策略决定改名 / 跳过 / 覆盖 */
   private async buildPlan(): Promise<void> {
-    const picked = filterByMachines(this.source, this.params.machines)
+    const picked = this.taskImages()
     const conflict = this.params.conflict ?? 'rename'
 
     // 三个名单各管一件事：
@@ -673,12 +678,15 @@ export class CopyTaskRunner {
    */
   private async writeManifest(): Promise<void> {
     const target = join(this.targetDir, MANIFEST_NAME)
+    // 清单永远取任务完整图片集合，不取 this.plan：
+    // 重试失败项时 plan 只剩失败子集，不能让它覆盖掉全量清单
+    const images = this.taskImages()
 
     try {
       await mkdir(toFsPath(this.targetDir), { recursive: true })
       await writeFile(
         toFsPath(target),
-        this.plan.map((item) => item.image.path).join('\n'),
+        images.map((image) => image.path).join('\n'),
         'utf-8',
       )
       this.manifestPath = target

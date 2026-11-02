@@ -798,6 +798,10 @@ export class ScanTaskRunner {
       if (this.unreachableStreak >= NETWORK_FAILURE_LIMIT) {
         this.pause('network')
       }
+    } else {
+      // missing / denied 是路径或权限问题，不是网络不可达；
+      // 不清零会让「网络×4 → 缺失目录 → 网络」被误判成连续断网
+      this.unreachableStreak = 0
     }
 
     this.touch(path)

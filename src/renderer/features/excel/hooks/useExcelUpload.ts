@@ -2,13 +2,18 @@ import { useCallback, useState } from 'react'
 import * as XLSX from 'xlsx'
 
 import type { ExcelFile, ExcelSheet } from '../types'
+import { MAX_EXCEL_SIZE_BYTES, MAX_EXCEL_SIZE_LABEL } from '../constants'
 import { useExcelStore } from '../stores/excelStore'
+import { useSheetFilterStore } from '../stores/sheetFilterStore'
+import { useToast } from '@/hooks/useToast'
 import { formatFileSize } from '@/utils/common'
 
 export const useExcelUpload = () => {
   const [isDrag, setIsDrag] = useState(false)
   const [isProcess, setIsProcess] = useState(false)
   const { setFile } = useExcelStore()
+  const resetFilters = useSheetFilterStore((state) => state.reset)
+  const { showToast } = useToast()
 
   const validateFile = (file: File): boolean => {
     const allowedTypes = [
@@ -16,18 +21,24 @@ export const useExcelUpload = () => {
       'application/vnd.ms-excel', // .xls
     ]
 
-    const maxSize = 40 * 1024 * 1024 // 50M
-
     if (
       !allowedTypes.includes(file.type) &&
       !file.name.match(/\.(xlsx|xls)$/i)
     ) {
-      alert('不支持的文件格式。请上传 .xlsx 或 .xls 格式的 Excel 文件。')
+      showToast(
+        '上传失败',
+        '不支持的文件格式，请上传 .xlsx 或 .xls 格式的 Excel 文件。',
+        'error',
+      )
       return false
     }
 
-    if (file.size > maxSize) {
-      alert('文件大小超过限制。请上传小于 50MB 的 Excel 文件。')
+    if (file.size > MAX_EXCEL_SIZE_BYTES) {
+      showToast(
+        '上传失败',
+        `文件大小超过限制，请上传小于 ${MAX_EXCEL_SIZE_LABEL} 的 Excel 文件。`,
+        'error',
+      )
       return false
     }
     return true
@@ -75,8 +86,7 @@ export const useExcelUpload = () => {
               sheets,
             }
 
-            // resolve(excelFile)
-            setTimeout(() => resolve(excelFile), 1000)
+            resolve(excelFile)
           } catch (error) {
             const excelFile: ExcelFile = {
               id:
@@ -135,6 +145,8 @@ export const useExcelUpload = () => {
 
     try {
       const processedFile = await processExcelFile(file)
+      // 换文件后清空上一份文件的筛选，让新文件重新全选
+      resetFilters()
       setFile(processedFile)
     } catch (error) {
       setFile({

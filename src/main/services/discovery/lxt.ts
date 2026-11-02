@@ -1,4 +1,4 @@
-import type { LxtMachine, LxtSettings } from '../../../shared/ipc'
+import type { LxtMachine } from '../../../shared/ipc'
 
 import { discoverShortcutEntry, machineKey, mergeDiscovered } from './shortcuts'
 import type { DiscoveredLink, Discovery, MergeResult } from './shortcuts'
@@ -15,13 +15,6 @@ export const LXT_ENTRY_NAME = '力禧特'
 /** 机台唯一键；历史记录、复制分组都按它走 */
 export const lxtKey = (plant: string, name: string): string =>
   machineKey(plant, name)
-
-export const defaultLxtSettings = (): LxtSettings => ({
-  entryRoot: null,
-  machines: [],
-  skipped: [],
-  updatedAt: null,
-})
 
 export const discoverLxt = (entryRoot: string): Promise<Discovery> =>
   discoverShortcutEntry(entryRoot, LXT_ENTRY_NAME)

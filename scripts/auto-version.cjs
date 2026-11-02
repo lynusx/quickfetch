@@ -69,6 +69,20 @@ const fail = (message) => {
   process.exit(1)
 }
 
+/** package.json 是否有未暂存改动；有的话 post-commit 会把它一起 amend 进提交 */
+const hasUnstagedPackageChange = () => {
+  try {
+    execFileSync('git', ['diff', '--quiet', '--', 'package.json'], {
+      stdio: 'ignore',
+    })
+    return false
+  } catch (error) {
+    // git diff --quiet：1 表示有差异，其它状态说明 git 本身出错
+    if (error.status === 1) return true
+    throw error
+  }
+}
+
 const readMessage = () => {
   const args = process.argv.slice(2)
   const fileIndex = args.indexOf('--file')
@@ -100,6 +114,16 @@ try {
   pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
 } catch (error) {
   fail(`读取 package.json 失败: ${error.message}`)
+}
+
+// commit-msg 写入版本号后，post-commit 会 git add package.json 并 amend。
+// 若提交前 package.json 本来就有未暂存改动，会被一起带进本次提交，必须先拦下。
+if (hasUnstagedPackageChange()) {
+  fail(
+    'package.json 有未暂存的改动，拒绝自动改版本号。\n' +
+      'post-commit 会把这些改动一起 amend 进本次提交。\n' +
+      '请先 git add package.json，或 git restore/stash 后再提交。',
+  )
 }
 
 const current = pkg.version

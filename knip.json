@@ -8,9 +8,7 @@
     "electron.vite.config.ts"
   ],
   "project": ["src/**/*.{ts,tsx}", "scripts/*.cjs"],
-  "ignoreDependencies": [
-    "@fontsource-variable/public-sans",
-    "@tailwindcss/vite",
-    "tw-animate-css"
-  ]
+  "ignoreDependencies": ["@fontsource-variable/public-sans"],
+  "ignoreFiles": ["src/renderer/vite-env.d.ts"],
+  "ignoreExportsUsedInFile": true
 }

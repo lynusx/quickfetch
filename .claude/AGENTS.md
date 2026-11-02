@@ -70,6 +70,10 @@ Windows 上实际位置是 `%APPDATA%\shx-tools\`，**和开发态是同一个�
 SKIP_VERSION=1 git commit -m "feat(pl): 利珀扫描入口"
 ```
 
+提交前确认 `package.json` 没有未暂存改动（`git diff -- package.json` 为空）。`commit-msg` 写版本号后，
+`post-commit` 会 `git add package.json` 并 amend；若工作区本来就有未暂存的 package.json 改动，
+会被一起带进本次提交。`SKIP_VERSION=1` 也要先把 package.json 完整 `git add`。
+
 **提交信息**：Conventional Commits，由 commitlint 校验，格式 `type(scope): 描述`。
 
 ## 改完自检
@@ -77,7 +81,7 @@ SKIP_VERSION=1 git commit -m "feat(pl): 利珀扫描入口"
 ```bash
 pnpm typecheck                    # 类型
 pnpm lint                         # ESLint
-pnpm format:fix                   # Prettier（检查用 pnpm exec prettier --check "src/**/*.{ts,tsx}"）
+pnpm format:check                 # Prettier（写入用 pnpm format:fix）
 pnpm build                        # 构建
 ```
 

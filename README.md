@@ -1,6 +1,6 @@
 # SHX Tools
 
-RCA EL 图片拷贝与 Excel 解析工具，基于 Electron + React 的桌面应用（Windows x64）。
+RCA EL、力禧特、利珀图片拷贝与 Excel 解析工具，基于 Electron + React 的桌面应用（Windows x64）。
 
 ## 使用需知
 
@@ -19,18 +19,22 @@ RCA EL 图片拷贝与 Excel 解析工具，基于 Electron + React 的桌面应
 - 扫描在主进程用 `fs.readdir` 完成（不再受浏览器 File System Access API 限制），分三段执行：
   探前缀（机台 → EL → 日期 → 班次）→ 列真实时段与类型后取交集 → 只对命中的类型目录收图。
   父级缺失的分支整段跳过，不发无效请求
-- 任务状态：待开始 / 进行中 / 已暂停 / 已完成 / 已取消 / 失败。暂停可断点续跑；
-  连续 5 个目录不可达会自动暂停并提示网络中断
-- 扫描结果会写入目标目录的 `source.txt`（相对路径清单），图片按文件名平铺拷贝；
-  遇到同名文件自动改名为 `name (2).jpg`，不覆盖已有文件
+- 任务状态：待开始 / 进行中 / 已暂停 / 已完成 / 已取消 / 已中断 / 失败。暂停可断点续跑；
+  连续 5 个目录不可达会自动暂停并提示网络中断。`已中断` 只出现在历史记录里，
+  是程序退出时抢救未完成任务的状态
+- 扫描结果会写入目标目录的 `source.txt`（相对路径清单）；图片按所选分组方式落盘
+  （默认按机台）。遇到同名文件自动编号（`img.jpg` → `img1.jpg` → `img2.jpg`），
+  默认不覆盖已有文件，也可在复制面板选择跳过或覆盖
 
 ## 开发
+
+Node.js >= 22.12.0（见 `engines` 与 `.nvmrc`），pnpm 10.12.3。
 
 ```bash
 pnpm install
 pnpm dev      # electron-vite 起渲染层 dev server 并拉起 Electron
 pnpm typecheck
-pnpm format:fix
+pnpm format:check   # 只检查；写入用 pnpm format:fix
 ```
 
 > 若启动报 `Electron uninstall`，说明依赖的安装脚本被 pnpm 跳过；
@@ -122,8 +126,10 @@ chmod +x node_modules/electron/dist/Electron.app/Contents/MacOS/Electron
 
 ```bash
 pnpm build                    # 产物输出到 out/（main、preload、renderer）
-pnpm dist:win                 # 在 out/ 基础上打 Windows x64 zip 免安装包，输出到 release/
+pnpm dist:win                 # 先 build，再打 Windows x64 zip 免安装包，输出到 release/
 ```
+
+`pnpm start` 使用上一次 `pnpm build` 的产物预览；改完源码要先重新构建。
 
 打包配置见 `electron-builder.yml`，应用图标为 `build/icon.png`（占位图，可替换为正式 256×256 图标）。
 
@@ -157,7 +163,7 @@ src/
     ├── components/       # 全局跨模块组件
     │   ├── ChoiceList/   # 基于 Radix Themes 的单选/多选组件
     │   └── DatePicker/   # 基于 Radix Popover + react-day-picker 的日期选择
-    ├── hooks/            # 全局 UI 辅助 Hook（useToast, use-mobile）
+    ├── hooks/            # 全局 UI 辅助 Hook（useToast）
     ├── lib/utils.ts      # cn()
     ├── utils/            # 全局通用工具函数
     └── public/img/       # 静态资源
@@ -189,17 +195,22 @@ src/
 
 现场电脑为 8G 内存 + 256G 盘，图片根目录在共享盘上，所以读取强度是刻意压低的：
 
-| 项           | 默认值 | 说明                                         |
-| ------------ | ------ | -------------------------------------------- |
-| 目录读取并发 | 4      | 每个并发约占一个句柄 + 一条 SMB 请求         |
-| 机台分批     | 2      | 一批机台跑完再开下一批，内存峰值只与单批相关 |
-| 复制并发     | 6      | Windows 上共享冲突高发，不宜再高             |
-| 复制分批     | 50 张  | 批之间让出事件循环，进度也可按批反馈         |
+| 项                  | 默认值 | 说明                                         |
+| ------------------- | ------ | -------------------------------------------- |
+| 目录读取并发        | 4      | 每个并发约占一个句柄 + 一条 SMB 请求         |
+| 机台分批            | 2      | 一批机台跑完再开下一批，内存峰值只与单批相关 |
+| 复制并发            | 6      | Windows 上共享冲突高发，不宜再高             |
+| 复制分批            | 50 张  | 批之间让出事件循环，进度也可按批反馈         |
+| 力禧特/利珀读取并发 | 6      | 两类共用一组档位，每个 IP 一条 SMB 请求      |
+| 力禧特/利珀机台分批 | 6      | 45 台量级下减少批次数                        |
 
 改档位在应用侧边栏底部的**设置页**里调，落盘到 `settings.json`，不必重新打包。
+力禧特/利珀两项目前未在设置页暴露，可用下面的环境变量或直接改 `settings.json`。
 临时压降仍可用环境变量 `SHX_READ_CONCURRENCY`、`SHX_MACHINE_BATCH`、
-`SHX_COPY_CONCURRENCY`、`SHX_COPY_BATCH`——**环境变量优先于设置页**，
-被接管的项在设置页会标出变量名并禁用输入。
+`SHX_COPY_CONCURRENCY`、`SHX_COPY_BATCH`、`SHX_LXT_READ_CONCURRENCY`、
+`SHX_LXT_MACHINE_BATCH`——**环境变量优先于设置页**，
+被接管的项在设置页会标出变量名并禁用输入。注意带 `LXT` 的两个变量同时作用于
+力禧特和利珀，两类扫描共用同一组档位。
 
 三条硬约束：
 
@@ -213,8 +224,9 @@ src/
 
 ## 历史记录
 
-每次扫描结束（完成 / 取消 / 失败）后，主进程把结果写入
+每次扫描结束（完成 / 取消 / 失败 / 退出时中断）后，主进程把结果写入
 `userData/history/<taskId>.json`，默认保留最近 **10 条**，可在界面上调整（1–50）。
+「0 张图但至少有一个分支真正探测过」的诊断记录也会保留，方便回看失败原因。
 
 - **存全量图片路径**，不是内存快照里的 200 条预览。历史任务要能再次复制，
   只存预览会让 200 条之后的结果静默消失。

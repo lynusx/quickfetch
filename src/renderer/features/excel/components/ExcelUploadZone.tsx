@@ -4,6 +4,7 @@ import { TableIcon, UploadIcon } from '@radix-ui/react-icons'
 import { Flex, Spinner, Text } from '@radix-ui/themes'
 
 import { useExcelUpload } from '../hooks/useExcelUpload'
+import { MAX_EXCEL_SIZE_LABEL } from '../constants'
 import { useExcelStore } from '../stores/excelStore'
 
 const ExcelUploadZone = () => {
@@ -96,7 +97,7 @@ const ExcelUploadZone = () => {
       <Text as="span" size="1" color="gray" className="upload-desc">
         {file
           ? `当前文件：${file.name}`
-          : '支持 .xlsx、.xls 格式，单次仅处理 1 个文件，最大 50MB'}
+          : `支持 .xlsx、.xls 格式，单次仅处理 1 个文件，最大 ${MAX_EXCEL_SIZE_LABEL}`}
       </Text>
 
       {!isProcess ? (

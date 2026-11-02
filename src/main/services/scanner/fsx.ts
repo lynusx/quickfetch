@@ -1,4 +1,4 @@
-import { readdir, stat } from 'node:fs/promises'
+import { readdir } from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 
 import { toFsPath } from '../../utils/pathx'
@@ -180,41 +180,6 @@ export const readDirSafe = async (
       (error as Error)?.message,
       codeOf(error),
     )
-  } finally {
-    if (timer) clearTimeout(timer)
-  }
-}
-
-/** 探测目录是否存在；任务开始前用它判断根目录是否可达 */
-export const probePath = async (
-  path: string,
-  options: ReadOptions = {},
-): Promise<{ ok: boolean; status: DirReadStatus }> => {
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
-  const request = stat(toFsPath(path))
-
-  let timer: ReturnType<typeof setTimeout> | undefined
-
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      const error = new Error(`探测超时（${timeoutMs} 毫秒）：${path}`)
-      ;(error as NodeJS.ErrnoException).code = 'ETIMEDOUT'
-      reject(error)
-    }, timeoutMs)
-  })
-
-  try {
-    const info = await Promise.race([request, timeout])
-
-    return {
-      ok: info.isDirectory(),
-      status: info.isDirectory() ? 'ok' : 'missing',
-    }
-  } catch (error) {
-    // 超时后底层 stat 仍会结束，这里吞掉结果避免未处理的 rejection
-    request.catch(() => undefined)
-
-    return { ok: false, status: toStatus(error) }
   } finally {
     if (timer) clearTimeout(timer)
   }
