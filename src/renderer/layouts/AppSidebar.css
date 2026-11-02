@@ -132,21 +132,6 @@
   font-weight: 600;
 }
 
-.nav-desc {
-  display: block;
-  margin-top: 1px;
-  font-size: 10.5px;
-  line-height: 1.35;
-  color: var(--gray-9);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.nav-item[aria-current='page'] .nav-desc {
-  color: var(--accent-10);
-}
-
 .sidebar-footer {
   padding: 12px;
   border-top: 1px solid var(--app-border);

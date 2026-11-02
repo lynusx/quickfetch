@@ -4,7 +4,7 @@ import { Box, Flex, Heading, Text } from '@radix-ui/themes'
 import './PageHeader.css'
 
 interface PageHeaderProps {
-  /** 侧边栏分组对应的短标签，如「一键找图 · EL」 */
+  /** 侧边栏分组对应的短标签，如「找图 · EL」 */
   eyebrow?: string
   title: ReactNode
   description?: ReactNode

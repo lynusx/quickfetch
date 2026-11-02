@@ -15,23 +15,20 @@ import './AppSidebar.css'
 
 const NAV_GROUPS = [
   {
-    label: '一键找图',
+    label: '找图',
     items: [
       {
         label: 'EL',
-        description: 'DC 共享盘扫描',
         to: ROUTES.EL,
         icon: CopyIcon,
       },
       {
         label: '力禧特',
-        description: '快捷方式识别机台',
         to: ROUTES.LXT_EL,
         icon: MagnifyingGlassIcon,
       },
       {
         label: '利珀',
-        description: '按等级与类型扫描',
         to: ROUTES.LP_PL,
         icon: TargetIcon,
       },
@@ -42,7 +39,6 @@ const NAV_GROUPS = [
     items: [
       {
         label: 'Excel 解析',
-        description: '筛选与导出缺陷数据',
         to: ROUTES.EXCEL_PARSE,
         icon: TableIcon,
       },
@@ -78,9 +74,6 @@ export const AppSidebar = () => (
               <Box as="span" className="nav-text">
                 <Text as="span" className="nav-label">
                   {item.label}
-                </Text>
-                <Text as="span" className="nav-desc">
-                  {item.description}
                 </Text>
               </Box>
             </NavLink>

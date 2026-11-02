@@ -22,9 +22,9 @@ import { DEFAULT_HISTORY_LIMIT } from '@shared/historyLimit'
 import '../scan.css'
 
 const EYEBROW: Record<ScanCategory, string> = {
-  el: '一键找图 · EL',
-  lxt: '一键找图 · 力禧特',
-  pl: '一键找图 · 利珀',
+  el: '找图 · EL',
+  lxt: '找图 · 力禧特',
+  pl: '找图 · 利珀',
 }
 
 interface PlantScanPageProps {

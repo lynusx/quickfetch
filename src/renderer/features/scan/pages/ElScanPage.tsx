@@ -90,7 +90,7 @@ const ElScanPage = () => {
   return (
     <Box>
       <PageHeader
-        eyebrow="一键找图 · EL"
+        eyebrow="找图 · EL"
         title="EL 图片批量拷贝"
         description="按日期、班次与类型从 DC 共享盘收集 EL 图片，支持暂停续跑，并把命中的图片批量复制到本地。"
         badge={task ? <ScanStatusBadge status={task.status} /> : null}
