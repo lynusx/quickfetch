@@ -12,8 +12,8 @@ import { PageHeader } from '@/components/PageHeader'
 import { Panel, PanelBody, PanelHeader } from '@/components/Panel'
 import { ScanStatusBadge } from '../components/ScanStatusBadge'
 import { ScanTaskPanel } from '../components/ScanTaskPanel'
-import ImageFilterPanel from '../components/ImageFilterPanel'
-import ScanSetupPanel from '../components/ScanSetupPanel'
+import ElFilterPanel from '../components/ElFilterPanel'
+import ElSetupPanel from '../components/ElSetupPanel'
 import { useHistoryRestore } from '../hooks/useHistoryRestore'
 import { useScanTask } from '../hooks/useScanTask'
 import { useToast } from '@/hooks/useToast'
@@ -23,7 +23,7 @@ import { useSettingsStore, useUserPreferencesStore } from '@/features/settings'
 import { DEFAULT_HISTORY_LIMIT } from '@shared/historyLimit'
 import '../scan.css'
 
-const ImageCopyPage = () => {
+const ElScanPage = () => {
   const { showToast } = useToast()
 
   const {
@@ -104,9 +104,9 @@ const ImageCopyPage = () => {
             description="按顺序选好根目录、机台、时间与类型"
           />
           <PanelBody>
-            <ScanSetupPanel />
+            <ElSetupPanel />
             <Box className="panel-section">
-              <ImageFilterPanel />
+              <ElFilterPanel />
             </Box>
           </PanelBody>
         </Panel>
@@ -169,4 +169,4 @@ const ImageCopyPage = () => {
   )
 }
 
-export default ImageCopyPage
+export default ElScanPage

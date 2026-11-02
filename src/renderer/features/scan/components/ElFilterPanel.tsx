@@ -25,7 +25,7 @@ import { useImageFilterStore } from '../stores/imageFilterStore'
 import { useUserPreferencesStore } from '@/features/settings'
 import { getAllAvailableTimes, getShiftInfo } from '@/utils/common'
 
-const ImageFilterPanel = () => {
+const ElFilterPanel = () => {
   const {
     date,
     shift,
@@ -265,4 +265,4 @@ const ImageFilterPanel = () => {
   )
 }
 
-export default ImageFilterPanel
+export default ElFilterPanel

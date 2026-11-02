@@ -151,7 +151,8 @@ src/
 └── renderer/             # 渲染层（Feature-First 特性优先架构）
     ├── index.html
     ├── main.tsx          # 挂载入口（HashRouter）
-    ├── App.tsx           # 路由表 + Radix <Theme> Provider
+    ├── App.tsx           # Radix <Theme> Provider + 全局 Toaster
+    ├── routes/           # 路径常量与懒加载路由表（paths.ts、AppRoutes.tsx）
     ├── index.css         # 全局基线：Radix/font 导入、令牌、reset、共享工具类、sonner
     ├── layouts/          # 框架布局（AppLayout、AppSidebar，样式与组件同目录）
     ├── features/         # 业务特性模块（高内聚，页面、组件、Hook、Store、样式在一起）

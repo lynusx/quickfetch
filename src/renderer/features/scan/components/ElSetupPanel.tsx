@@ -17,7 +17,7 @@ import { plantLabel } from '@shared/ipc'
 const compare = (a: string, b: string): number =>
   a.localeCompare(b, 'zh-CN', { numeric: true })
 
-const ScanSetupPanel = () => {
+const ElSetupPanel = () => {
   const { settings, saving, load, saveRoot, refresh } = useSettingsStore()
   const {
     plant,
@@ -235,4 +235,4 @@ const ScanSetupPanel = () => {
   )
 }
 
-export default ScanSetupPanel
+export default ElSetupPanel

@@ -28,6 +28,7 @@ import {
 
 import { Field } from '@/components/Field'
 import { EmptyState } from '@/components/EmptyState'
+import { ROUTES } from '@/routes/paths'
 import { useImageCopy } from './useImageCopy'
 import { copyStoreOf } from './copyStore'
 import { selectPreferences, useSettingsStore } from '@/features/settings'
@@ -129,7 +130,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
         {COPY_CONFLICT_LABEL[conflict]}
       </Text>
       <Button variant="ghost" size="1" color="gray" asChild>
-        <Link to="/settings">修改</Link>
+        <Link to={ROUTES.SETTINGS}>修改</Link>
       </Button>
     </Flex>
   )

@@ -1,4 +1,4 @@
-export { default as ImageCopyPage } from './pages/ImageCopyPage'
+export { default as ElScanPage } from './pages/ElScanPage'
 export { default as LxtScanPage } from './pages/LxtScanPage'
 export { default as PlScanPage } from './pages/PlScanPage'
 export * from './hooks/useScanTask'

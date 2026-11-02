@@ -9,6 +9,7 @@ import {
 import { Box, Flex, Text } from '@radix-ui/themes'
 
 import { BrandMark } from '@/components/BrandMark'
+import { ROUTES } from '@/routes/paths'
 import { getAppVersion } from '@/utils/common'
 import './AppSidebar.css'
 
@@ -19,19 +20,19 @@ const NAV_GROUPS = [
       {
         label: 'EL',
         description: 'DC 共享盘扫描',
-        to: '/image-copy',
+        to: ROUTES.EL,
         icon: CopyIcon,
       },
       {
         label: '力禧特',
         description: '快捷方式识别机台',
-        to: '/lxt',
+        to: ROUTES.LXT_EL,
         icon: MagnifyingGlassIcon,
       },
       {
         label: '利珀',
         description: '按等级与类型扫描',
-        to: '/pl',
+        to: ROUTES.LP_PL,
         icon: TargetIcon,
       },
     ],
@@ -42,14 +43,12 @@ const NAV_GROUPS = [
       {
         label: 'Excel 解析',
         description: '筛选与导出缺陷数据',
-        to: '/excel-parse',
+        to: ROUTES.EXCEL_PARSE,
         icon: TableIcon,
       },
     ],
   },
 ]
-
-const SETTINGS_PATH = '/settings'
 
 export const AppSidebar = () => (
   <Flex className="app-sidebar" direction="column">
@@ -91,7 +90,7 @@ export const AppSidebar = () => (
     </Box>
 
     <Box className="sidebar-footer">
-      <NavLink to={SETTINGS_PATH} className="nav-item">
+      <NavLink to={ROUTES.SETTINGS} className="nav-item">
         <Flex className="nav-icon" align="center" justify="center">
           <GearIcon width={15} height={15} />
         </Flex>
