@@ -1,4 +1,4 @@
-import { BrowserWindow, app, shell } from 'electron'
+import { BrowserWindow, app, screen, shell } from 'electron'
 import { join } from 'node:path'
 
 import { registerIpcHandlers } from './ipc'
@@ -7,12 +7,43 @@ import { persistUnfinished } from './services/scanner'
 // electron-vite 在开发模式下注入渲染层 dev server 地址
 const rendererDevUrl = process.env['ELECTRON_RENDERER_URL']
 
+const DEFAULT_WINDOW_WIDTH = 1280
+const DEFAULT_WINDOW_HEIGHT = 800
+const MIN_WINDOW_WIDTH = 1080
+const MIN_WINDOW_HEIGHT = 600
+/** 窗口与工作区边缘的留白，避免贴边或压住任务栏 */
+const WINDOW_EDGE_MARGIN = 64
+
+/**
+ * 按主屏工作区计算初始尺寸。
+ *
+ * workAreaSize 已排除任务栏，单位是 DIP，和 BrowserWindow 的宽高一致；
+ * 因此在 125%/150% 缩放下也按逻辑像素判断，不会把窗口算出屏幕。
+ */
+const resolveWindowSize = (): { width: number; height: number } => {
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize
+
+  return {
+    width: Math.max(
+      MIN_WINDOW_WIDTH,
+      Math.min(DEFAULT_WINDOW_WIDTH, width - WINDOW_EDGE_MARGIN),
+    ),
+    height: Math.max(
+      MIN_WINDOW_HEIGHT,
+      Math.min(DEFAULT_WINDOW_HEIGHT, height - WINDOW_EDGE_MARGIN),
+    ),
+  }
+}
+
 const createWindow = (): BrowserWindow => {
+  const { width, height } = resolveWindowSize()
+
   const window = new BrowserWindow({
-    width: 1360,
-    height: 900,
-    minWidth: 1080,
-    minHeight: 720,
+    width,
+    height,
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
+    center: true,
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#ffffff',
