@@ -2,12 +2,22 @@
 @import '@fontsource-variable/public-sans';
 @import './styles/app.css';
 
-:root {
+/*
+ * Radix 在 .radix-themes 上直接声明了 --default-font-family / --code-font-family，
+ * 只写 :root 会被它遮蔽，所以两个选择器都要覆盖。
+ * Public Sans 只覆盖拉丁字形；现场是离线 Windows，中文交给系统字体，
+ * 不自托管 CJK 字体，避免安装包多出几 MB。
+ */
+:root,
+.radix-themes {
   --default-font-family:
     'Public Sans Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI',
-    Roboto, sans-serif;
+    Roboto, 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC',
+    'Hiragino Sans GB', 'Noto Sans SC', 'Noto Sans CJK SC',
+    'Source Han Sans SC', 'WenQuanYi Micro Hei', sans-serif;
   --code-font-family:
-    'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, 'Microsoft YaHei UI',
+    'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', monospace;
 }
 
 * {

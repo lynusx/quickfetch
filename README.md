@@ -175,6 +175,7 @@ src/
 
 - 组件库：**Radix Themes**（`@radix-ui/themes`），根节点由 `<Theme>` 包裹
 - 样式：`@radix-ui/themes/styles.css`，使用 Radix 设计令牌
+- 字体：拉丁使用 `Public Sans Variable`，中文回退到系统字体（Windows 微软雅黑、macOS PingFang SC、Linux Noto Sans CJK）；不打包 CJK 字体。字体变量需同时覆盖 `:root` 与 `.radix-themes`，否则 Radix 组件会使用自己的默认栈
 - 布局与文本优先使用 `Box` / `Flex` / `Grid` / `Text` / `Heading`；原生标签只保留语义必需的 `button`、`label`、`input`、`details` 等
 - 设计层：`src/renderer/styles/app.css` 只基于 Radix 令牌定义外壳、面板、统计、选项与空状态，不引入 reset / 其它组件库
 - 页面标题统一由 `components/PageHeader` 渲染，`AppLayout` 不再重复标题栏；扫描页的任务进度、统计与控制按钮统一放在 `features/scan/components/ScanTaskPanel`
