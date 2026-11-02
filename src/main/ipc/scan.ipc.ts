@@ -81,7 +81,7 @@ const createLxtTask = (
     {
       category: 'lxt',
       resolver,
-      load: loadFrom(settings.preferences, 'lxt'),
+      load: loadFrom(settings.preferences),
     },
   )
 }
@@ -116,7 +116,7 @@ const createPlTask = (
     {
       category: 'pl',
       resolver,
-      load: loadFrom(settings.preferences, 'pl'),
+      load: loadFrom(settings.preferences),
     },
   )
 }
@@ -153,7 +153,7 @@ export const registerScanIpc = (): void => {
       {
         category: 'el',
         resolver,
-        load: loadFrom(settings.preferences, 'el'),
+        load: loadFrom(settings.preferences),
       },
     )
   })

@@ -6,11 +6,7 @@
  *
  * 优先级：环境变量 > 设置页 > 默认值
  */
-import type {
-  AppPreferences,
-  PreferenceKey,
-  ScanCategory,
-} from '../../../shared/ipc'
+import type { AppPreferences, PreferenceKey } from '../../../shared/ipc'
 import { PREFERENCE_ENV } from '../../../shared/ipc'
 
 const toInt = (value: string | undefined, fallback: number): number => {
@@ -42,26 +38,14 @@ const pick = (env: keyof typeof PREFERENCE_ENV, fallback: number): number =>
   toInt(process.env[PREFERENCE_ENV[env]], fallback)
 
 /**
- * 按类别取扫描档位。
+ * 取扫描与复制档位。
  *
- * 力禧特、利珀都是「每台机器一个 IP、走另一张专用内网」，跟 EL 的十台
- * 共享一个根完全不是一回事，所以它们共用一组更激进的档位；
- * 复制档位各类共用。
+ * EL / 力禧特 / 利珀共用同一套设置：三类扫描都从这份偏好读取，
+ * 现场只有一套机器资源，分开配反而容易出现一边过载、一边闲置。
  */
-export const loadFrom = (
-  preferences: AppPreferences,
-  category: ScanCategory = 'el',
-): LoadProfile => {
-  const perIp = category !== 'el'
-
-  return {
-    readConcurrency: perIp
-      ? pick('lxtScanConcurrency', preferences.lxtScanConcurrency)
-      : pick('scanConcurrency', preferences.scanConcurrency),
-    machineBatchSize: perIp
-      ? pick('lxtScanBatchSize', preferences.lxtScanBatchSize)
-      : pick('scanBatchSize', preferences.scanBatchSize),
-    copyConcurrency: pick('copyConcurrency', preferences.copyConcurrency),
-    copyBatchSize: pick('copyBatchSize', preferences.copyBatchSize),
-  }
-}
+export const loadFrom = (preferences: AppPreferences): LoadProfile => ({
+  readConcurrency: pick('scanConcurrency', preferences.scanConcurrency),
+  machineBatchSize: pick('scanBatchSize', preferences.scanBatchSize),
+  copyConcurrency: pick('copyConcurrency', preferences.copyConcurrency),
+  copyBatchSize: pick('copyBatchSize', preferences.copyBatchSize),
+})

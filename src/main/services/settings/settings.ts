@@ -114,16 +114,6 @@ export const normalizePreferences = (
       'copyBatchSize',
       DEFAULT_PREFERENCES.copyBatchSize,
     ),
-    lxtScanConcurrency: clampPreference(
-      merged.lxtScanConcurrency,
-      'lxtScanConcurrency',
-      DEFAULT_PREFERENCES.lxtScanConcurrency,
-    ),
-    lxtScanBatchSize: clampPreference(
-      merged.lxtScanBatchSize,
-      'lxtScanBatchSize',
-      DEFAULT_PREFERENCES.lxtScanBatchSize,
-    ),
   }
 }
 

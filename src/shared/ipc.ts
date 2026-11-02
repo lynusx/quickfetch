@@ -60,12 +60,7 @@ export type PlLevel = (typeof PL_LEVELS)[number]
 
 /** 偏好里能调数值的四项，用来标注「被环境变量接管」 */
 export type PreferenceKey =
-  | 'scanConcurrency'
-  | 'scanBatchSize'
-  | 'copyConcurrency'
-  | 'copyBatchSize'
-  | 'lxtScanConcurrency'
-  | 'lxtScanBatchSize'
+  'scanConcurrency' | 'scanBatchSize' | 'copyConcurrency' | 'copyBatchSize'
 
 /** 环境变量名 → 偏好字段，主进程解析与界面提示共用一份 */
 export const PREFERENCE_ENV: Record<PreferenceKey, string> = {
@@ -73,8 +68,6 @@ export const PREFERENCE_ENV: Record<PreferenceKey, string> = {
   scanBatchSize: 'SHX_MACHINE_BATCH',
   copyConcurrency: 'SHX_COPY_CONCURRENCY',
   copyBatchSize: 'SHX_COPY_BATCH',
-  lxtScanConcurrency: 'SHX_LXT_READ_CONCURRENCY',
-  lxtScanBatchSize: 'SHX_LXT_MACHINE_BATCH',
 }
 
 /**
@@ -374,6 +367,7 @@ export const COPY_CONFLICT_LABEL: Record<CopyConflictPolicy, string> = {
  *
  * 这六项以前散在三处：复制面板的 store（重启就丢）、主进程的常量、
  * 环境变量。集中到这里之后，界面只认这份值，环境变量仍可临时覆盖。
+ * EL / 力禧特 / 利珀共用同一套档位。
  */
 export interface AppPreferences {
   /** 复制到本地时按什么层级建子目录 */
@@ -388,24 +382,15 @@ export interface AppPreferences {
   copyConcurrency: number
   /** 每批复制的文件数 */
   copyBatchSize: number
-  /**
-   * 力禧特、利珀单独一组：每台机器一个 IP、又都在另一张专用内网，
-   * 跟 EL 共用一套档位时总有一边在将就。
-   */
-  lxtScanConcurrency: number
-  lxtScanBatchSize: number
 }
 
 export const DEFAULT_PREFERENCES: AppPreferences = {
-  copyLayout: 'machine',
+  copyLayout: 'flat',
   copyConflict: 'rename',
   scanConcurrency: 4,
   scanBatchSize: 2,
   copyConcurrency: 6,
   copyBatchSize: 50,
-  // 力禧特 45 台各一个 IP，走的是另一张网，批次开大些才不至于跑二十几批
-  lxtScanConcurrency: 6,
-  lxtScanBatchSize: 6,
 }
 
 /**
@@ -417,8 +402,6 @@ export const PREFERENCE_RANGE = {
   scanBatchSize: { min: 1, max: 4, step: 1 },
   copyConcurrency: { min: 1, max: 16, step: 1 },
   copyBatchSize: { min: 10, max: 500, step: 10 },
-  lxtScanConcurrency: { min: 1, max: 12, step: 1 },
-  lxtScanBatchSize: { min: 1, max: 12, step: 1 },
 } as const
 
 export interface CopyTaskParams {
