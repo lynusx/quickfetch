@@ -118,6 +118,23 @@ export const formatFileSize = (bytes: number): string => {
 export const formatDuration = (ms: number): string =>
   ms < 1000 ? `${ms} 毫秒` : `${(ms / 1000).toFixed(1)} 秒`
 
+/** 完成时刻：HH:mm；跨天时补上日期，避免「预计 02:10 完成」看不出是哪天 */
+export const formatClockTime = (timestamp: number): string => {
+  const date = new Date(timestamp)
+  const now = new Date()
+  const clock = `${String(date.getHours()).padStart(2, '0')}:${String(
+    date.getMinutes(),
+  ).padStart(2, '0')}`
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+
+  return sameDay
+    ? clock
+    : `${date.getMonth() + 1}月${date.getDate()}日 ${clock}`
+}
+
 /** 剩余时间：超过一分钟按分秒展示，避免「预计 143 秒」这种不好读的数字 */
 export const formatEta = (ms: number | null): string | null => {
   if (ms === null || !Number.isFinite(ms)) return null

@@ -34,7 +34,7 @@ import { copyStoreOf } from './copyStore'
 import { selectPreferences, useSettingsStore } from '@/features/settings'
 import type { CopyConflictPolicy, CopyStatus, ScanCategory } from '@shared/ipc'
 import { COPY_CONFLICT_LABEL, COPY_LAYOUT_LABEL } from '@shared/ipc'
-import { formatDuration, formatEta } from '@/utils/common'
+import { formatClockTime, formatDuration, formatEta } from '@/utils/common'
 import './copy.css'
 
 const STATUS_META: Record<
@@ -116,6 +116,18 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
 
   const eta =
     task && task.status === 'running' ? formatEta(task.progress.etaMs) : null
+
+  /**
+   * 预计完成时刻按「快照开始时间 + 已用时 + 剩余」推算，
+   * 不直接用 Date.now()，避免进度事件之间的空档让预计时间越漂越晚。
+   */
+  const finishAt =
+    task &&
+    task.status === 'running' &&
+    task.progress.etaMs !== null &&
+    task.progress.startedAt !== null
+      ? task.progress.startedAt + task.progress.elapsedMs + task.progress.etaMs
+      : null
 
   const activeDir = task?.progress.targetDir ?? targetDir
   const activeDirName = activeDir.split(/[\\/]/).filter(Boolean).pop() ?? ''
@@ -432,22 +444,50 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
               </Text>
             </Flex>
 
+            <Flex
+              className="copy-progress-head"
+              align="baseline"
+              justify="between"
+              gap="3"
+            >
+              <Text
+                as="span"
+                size="1"
+                color="gray"
+                className="copy-progress-label"
+              >
+                完成进度
+              </Text>
+              <Text as="span" className="copy-progress-value">
+                {percent}%
+              </Text>
+            </Flex>
+
             <Progress value={percent} size="2" />
 
-            <Flex wrap="wrap" gap="3">
-              <Text size="1" color="gray" className="tabular">
-                {formatDuration(task.progress.elapsedMs)}
-              </Text>
+            <Flex className="copy-progress-meta" wrap="wrap">
+              {task.progress.elapsedMs > 0 || finished ? (
+                <Text as="span" size="1" color="gray">
+                  {finished ? '总耗时' : '已用'}{' '}
+                  {formatDuration(task.progress.elapsedMs)}
+                </Text>
+              ) : null}
               {eta ? (
-                <Text size="1" color="gray" className="tabular">
+                <Text as="span" size="1" color="gray">
                   剩余 {eta}
                 </Text>
               ) : null}
+              {finishAt !== null ? (
+                <Text as="span" size="1" color="gray">
+                  预计 {formatClockTime(finishAt)} 完成
+                </Text>
+              ) : null}
               <Text
+                as="span"
                 size="1"
                 color="gray"
                 truncate
-                className="mono"
+                className="mono copy-progress-path"
                 title={task.progress.currentPath}
               >
                 {task.progress.currentPath}

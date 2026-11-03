@@ -81,6 +81,44 @@
   background: var(--gray-a2);
 }
 
+.copy-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+}
+
+.copy-progress-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--gray-11);
+}
+
+.copy-progress-value {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--gray-12);
+}
+
+.copy-progress-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 9px;
+  font-size: 10.5px;
+  color: var(--gray-10);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 文件路径可能很长：允许它在行内收缩，否则会把面板横向撑开 */
+.copy-progress-path {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .failure-list {
   max-height: 160px;
   border: 1px solid var(--app-border);
