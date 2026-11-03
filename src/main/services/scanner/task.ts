@@ -34,8 +34,34 @@ export const DEFAULT_MACHINE_BATCH_SIZE = 2
 /** 进度推送最小间隔，避免高频 IPC 压满渲染进程 */
 const PROGRESS_INTERVAL_MS = 120
 
-/** 连续不可达次数达到该值就怀疑网络盘断开，触发暂停而不是继续空转 */
-const NETWORK_FAILURE_LIMIT = 5
+/**
+ * 最近一段时间里「不可达」占比超过该值，才判定整片断网并暂停。
+ *
+ * 以前是「连续 5 次」的绝对值。真机上的问题：森标 AOI 一次批量 2 台、
+ * 每台 10 来个目录，里面只要连着碰上几台没认证的机器，5 次很快攒到，
+ * 任务就"卡住"（其实是自动暂停了）。而车间断网是整片发生的，比例远比
+ * 绝对值可靠 —— 90% 以上都读不通，才值得停下来让用户去接网络。
+ */
+const NETWORK_FAILURE_RATIO = 0.9
+/** 参与判定的最近样本数；窗口太长会让接回网络后迟迟不解除统计 */
+const NETWORK_FAILURE_WINDOW = 12
+/**
+ * 至少攒够这么多样本才下结论。
+ *
+ * 不能直接等窗口装满：整片断网时每台机台只贡献 1 个样本（解析就失败了），
+ * 而判定跑在"第一批机台批处理结束"这个批次边界上 —— 一批 10 台就是 10 个
+ * 样本，永远凑不满 12，断网反而不会被发现，任务继续逐台等超时。
+ * 8 是折中：低于此数比例噪声太大，高于此数整片断网要等太久才停。
+ */
+const NETWORK_FAILURE_MIN = 8
+/**
+ * 一批里至少有这么多台机台、且一台都没连上，就直接判定断网。
+ *
+ * 车间的断网是整片发生的。AOI 一批 2 台，靠滑动窗口要跑 4 批才攒够样本，
+ * 期间用户只看到进度条不动；整批不通是更早更准的信号。
+ * 门槛设 3 是因为 2 台的批太小（两台恰好都关机很正常），不足以说明是断网。
+ */
+const BATCH_UNREACHABLE_MIN = 3
 
 /** 回传给渲染层的预览条数，全量结果留在主进程 */
 const PREVIEW_LIMIT = 200
@@ -143,6 +169,7 @@ const emptyProgress = (): ScanTaskProgress => ({
   batchTotal: 0,
   detailTotal: 0,
   detailDone: 0,
+  machinesPending: 0,
   etaMs: null,
 })
 
@@ -190,8 +217,35 @@ export class ScanTaskRunner {
 
   private totalLeaves = 0
   private doneLeaves = 0
+  /**
+   * 已经下结论的机台数（探测完成、解析失败、中途断链都算）。
+   *
+   * 用来给"还要补读多少明细"和"还剩几台没下结论"提供确定的数字。
+   * 从进度数字倒推不行：断链时叶子记成"跳过"，从计数上看不出这台
+   * 机台其实已经处理完了。
+   */
+  private finishedMachines = 0
   private probedMachines = 0
-  private unreachableStreak = 0
+  /**
+   * 最近若干次读取结果（true = 不可达），判断整片断网用。
+   *
+   * 用它替代原来的「连续不可达计数」：两种失败会让计数器清零，
+   * 一是夹在中间的 missing / denied / unreadable，二是并发下别的泳道
+   * 刚好读到一台通的机器。结果就是明明整片断网，暂停却迟迟不触发；
+   * 反过来几台没认证的机器扎堆时，又会把好好的任务暂停掉 —— 现场看到的
+   * 「扫着扫着卡住」和「点继续立刻出结果」都是这两头造成的。
+   */
+  private readonly reachabilityWindow: boolean[] = []
+  /**
+   * 当前批次里已出结论的机台数，以及其中连得上 / 连不上的台数。
+   *
+   * 滑动窗口按"读取次数"采样，而整片断网时机台在解析阶段就失败、
+   * 每台只贡献 1 个样本；AOI 一批才 2 台，等窗口攒够 8 个样本要跑 4 批，
+   * 期间每台都要等满超时。批内整批不通是更灵敏的信号，单独计数。
+   */
+  private batchMachines = 0
+  private batchReachable = 0
+  private batchFailed = 0
   private lastEmitAt = 0
 
   /** 当前生效的并发档位与单次读取超时，会随失败率自动调整 */
@@ -322,7 +376,12 @@ export class ScanTaskRunner {
 
     this.paused = false
     this.pauseReason = null
-    this.unreachableStreak = 0
+    // 清空样本窗口：用户点「继续」就是在说「网络已经好了」，
+    // 带着旧样本继续统计，接回网络后的头几次读取仍然会被算成失败
+    this.reachabilityWindow.length = 0
+    this.batchMachines = 0
+    this.batchReachable = 0
+    this.batchFailed = 0
     this.status = 'running'
 
     const waiters = this.resumeWaiters.splice(0)
@@ -418,11 +477,25 @@ export class ScanTaskRunner {
         await this.checkpoint()
 
         this.progress.batchIndex = index + 1
+        // 每批开始前重置批内计数：批内整片不通要能立刻停下，
+        // 不必等跨批攒够滑动窗口的样本数（AOI 是 2 台一批，10 台要跑 5 批，
+        // 用户会觉得断网了却迟迟没提示）
+        this.batchMachines = 0
+        this.batchReachable = 0
+        this.batchFailed = 0
         this.touch('', true)
 
         await Promise.all(
           batches[index].map((machine) => this.scanMachine(machine, limiter)),
         )
+
+        // 本批全部有结论后再看一次整批的通断情况。
+        // 不能在单台失败时判：一批 8 台并发解析，前 3 台先失败的瞬间
+        // "失败数 === 已完成数"成立，会被误判成整片断网。
+        this.checkBatchUnreachable()
+
+        // 整批都不通就停下来等用户接网络，不必继续跑下一批去等超时
+        await this.checkpoint()
       }
 
       // 最后一批里触发的网络暂停也要生效：下面会把状态写成 completed，
@@ -446,6 +519,9 @@ export class ScanTaskRunner {
       }
     } finally {
       this.finishedAt = Date.now()
+      // 补一次强制推送：finally 只做落盘通知，不推快照的话，最后一个
+      // 进度事件可能被节流丢掉，界面停在 70% 而任务其实已经结束了 ——
+      // 现场看到的「卡住，点继续立刻出结果」有一部分就是这么来的
       this.touch('', true)
       // 通知等待方：快照已定稿，可以落盘了
       this.markSettled(true)
@@ -557,8 +633,9 @@ export class ScanTaskRunner {
     }
 
     this.probedMachines += 1
-
-    // 无时段层（森标 AOI）：班次目录下直接就是类型目录
+    this.finishedMachines += 1
+    // 这台机台一路读到了班次目录，网络是通的
+    this.noteMachineReachability(true)
     if (this.slotless) {
       this.collectSlotlessTypes(branch, machine, shiftDir, shiftRead.dirs)
       return
@@ -762,12 +839,18 @@ export class ScanTaskRunner {
    * 闸门上限同时约束探测和收尾，总并发不会叠加。
    */
   private async collectDetails(limiter: Limiter): Promise<void> {
-    if (!this.pendingDetails.length) return
-
-    this.progress.detailTotal = this.detailTotal
-    this.touch('', true)
+    // 没有待读目录也要走一遍兜底：探测阶段"类型目录为空"的分支已经
+    // 自己写过文案了，但"类型目录在、只是还没读"的分支要在这里才定性。
+    // 以前这里直接 return，全靠 run() 里的 phase 切换兜住，容易被后续
+    // 改动带偏成"明细读完了但状态还挂着探测阶段"。
 
     const queue = this.pendingDetails.splice(0)
+
+    // 切阶段要在开始读第一个明细之前：界面上"探测目录 / 收集图片"
+    // 与实际动作对不上，用户会以为卡在探测
+    this.progress.phase = queue.length ? 'collect' : 'probe'
+    this.progress.detailTotal = this.detailTotal
+    this.touch('', true)
 
     // 不用 Promise.all(queue.map(...))：那样会把整个队列一次性派发下去，
     // 取消后已排队的读取仍会全部跑完，用户看到的「取消」要等几十秒才生效。
@@ -798,16 +881,32 @@ export class ScanTaskRunner {
       if (branch.status === 'missing' || branch.status === 'unreachable')
         continue
 
+      // 探测阶段已经定性的「没有所选类型 / 该班次下没有类型」不要动：
+      // 这类分支压根没排进待读队列，一张图都没有是必然的，
+      // 硬改成「未命中」会把正确的诊断文案覆盖成"目录在、只是没图"，
+      // 用户照着去查那个类型目录，结果那里根本不存在。
+      if (branch.brokenAt === '类型') continue
+
       // 走到这里说明类型目录找到了、但逐目录读下来一张图都没有。
-      // 必须改写文案而不是沿用旧 message：探测阶段留下的「没有所选类型」
-      // 在这一步已经确定是错的（类型明明存在），留着就是误导。
-      //
-      // 数字要写人话：第一版写成「已匹配 0 个目录，共 0 张」，现场反馈
-      // 看了不知道是"目录没找到"还是"目录空"。但这里读的是文件、不是目录，
-      // 「检查了几个目录」得回探测阶段的 availableTypes 里算，不能拿
-      // matchedDirs（有图才算，这里必然为 0）。
+      // 必须改写而不是沿用旧状态：探测阶段留下的「未命中」只是占位，
+      // 在这一步才能确定是"目录在、没图"。
       branch.status = 'empty'
       branch.brokenAt = '未命中'
+    }
+
+    // 兜底文案统一在最后写，而不是塞在上面的循环里：
+    // 「到底检查了几个所选目录」只跟探测结果有关，单独一段算不容易漏，
+    // 也不会被后面新加的状态分支搅乱。
+    //
+    // 数字要写人话：第一版写成「已匹配 0 个目录，共 0 张」，现场反馈
+    // 看了不知道是"目录没找到"还是"目录空"；这里改用「已检查 N 个目录」
+    // 并附上实际存在的类型，一眼能看出目录是在的、只是没图。
+    for (const branch of this.branches) {
+      if (branch.status !== 'empty') continue
+      // 「类型目录不存在」「该班次下没有类型」这两类结论在探测阶段就定了，
+      // 与"目录在但没图"不是一回事，保持原样
+      if (branch.brokenAt !== '未命中') continue
+
       branch.message = noImageMessage(
         this.params.types.filter((type) =>
           branch.availableTypes?.includes(type),
@@ -897,26 +996,60 @@ export class ScanTaskRunner {
   }
 
   /**
-   * 维护连续不可达计数，达到阈值就暂停任务等用户接回网络。
+   * 按最近一段读取结果判断是否整片断网，是就暂停等用户接回网络。
    *
-   * 目录读取和解析器探测共用同一个计数：力禧特/利珀在解析阶段就可能
+   * 目录读取和解析器探测共用同一个窗口：力禧特/利珀在解析阶段就可能
    * 遇到整片断网，只统计 read() 的话任务会逐台等完超时才停。
+   *
+   * 注意只有「网络不可达」才算失败。未认证、无权限、目录不存在都只是
+   * 这一台的问题，混进来会把正常任务判成断网（真机 46 台里 31 台未认证，
+   * 按老逻辑早就该暂停了）。
    */
   private noteReachability(unreachable: boolean): void {
-    if (!unreachable) {
-      this.unreachableStreak = 0
-      return
+    this.reachabilityWindow.push(unreachable)
+
+    if (this.reachabilityWindow.length > NETWORK_FAILURE_WINDOW) {
+      this.reachabilityWindow.shift()
     }
 
-    this.unreachableStreak += 1
+    // 样本太少时不下结论：整片断网时前几台就会连续失败，
+    // 一凑够几个就判定会被"5 台不通、3 台正常"这种局部故障骗到
+    // （窗口里只有 5 个失败样本，比例 100%，实际整体才 62%）。
+    if (this.reachabilityWindow.length < NETWORK_FAILURE_MIN) return
 
-    // 力禧特各机台不同 IP，没有共同根可复探；连续不可达只能说明整批
-    // 都不在这张网里，直接暂停让用户接入专用内网后继续。
-    // EL 虽然共享一个根，但续探根目录会让每个批次多一次网络往返，
-    // 而现场的断网往往整片发生，直接暂停后由用户确认恢复更省事。
-    if (this.unreachableStreak >= NETWORK_FAILURE_LIMIT) {
-      this.pause('network')
-    }
+    const failed = this.reachabilityWindow.filter(Boolean).length
+    const ratio = failed / this.reachabilityWindow.length
+
+    if (ratio < NETWORK_FAILURE_RATIO) return
+
+    if (this.status === 'running') this.pause('network')
+  }
+
+  /**
+   * 按机台记账：这台机台最终是不是连不上。
+   *
+   * 与 noteReachability 分开是因为两者粒度不同 —— 前者按读取次数采样，
+   * 适合判"整片断网"；这里按机台计数，供 checkBatchUnreachable 在本批
+   * 跑完后做一次整批判定。
+   */
+  private noteMachineReachability(reachable: boolean): void {
+    this.batchMachines += 1
+    if (reachable) this.batchReachable += 1
+    else this.batchFailed += 1
+  }
+
+  /**
+   * 本批跑完后看一次：整批一台都没通，就直接判断网。
+   *
+   * 这条专门给小批量场景兜底。AOI 一批 2 台，滑动窗口要 8 个样本，
+   * 得跑 4 批才够；期间每台都要等满超时，用户看着进度条不动就会以为卡住。
+   * 判定条件是"整批一台都没通"而不是"连着几台不通"，这样
+   * "一批 8 台里 5 台关机、3 台正常"不会被误判 —— 那种情况网络是通的。
+   */
+  private checkBatchUnreachable(): void {
+    if (this.batchMachines < BATCH_UNREACHABLE_MIN) return
+    if (this.batchReachable > 0) return
+    if (this.status === 'running') this.pause('network')
   }
 
   /** 采样一次读取结果；降档的具体动作由 gate 的 onChange 回调完成 */
@@ -935,6 +1068,11 @@ export class ScanTaskRunner {
     const skipped = this.leavesPerBranch
     this.doneLeaves += skipped
     this.progress.dirsSkipped += skipped
+    this.finishedMachines += 1
+
+    // 能走到这里说明路径已经解析出来了，至少共享根是通的。
+    // 除非这一读本身就是网络超时，否则不算这台机台"连不上"。
+    this.noteMachineReachability(result.status !== 'unreachable')
 
     branch.brokenAt = brokenAt
 
@@ -999,8 +1137,10 @@ export class ScanTaskRunner {
       this.progress.dirsUnreachable += 1
     }
     this.noteReachability(resolved.unreachable === 'network')
+    this.noteMachineReachability(!resolved.unreachable)
 
     this.probedMachines += 1
+    this.finishedMachines += 1
     this.touch(branch.machine, true)
   }
 
@@ -1044,9 +1184,21 @@ export class ScanTaskRunner {
   private touch(currentPath: string, force = false): void {
     if (currentPath) this.progress.currentPath = currentPath
 
+    // 派生值放在这里算最省心：不必在每条执行路径上都记得更新一次。
+    // 界面靠它说明"还在等几台机台"，而不是只给一个百分比。
+    this.progress.machinesPending = Math.max(
+      0,
+      this.params.machines.length - this.finishedMachines,
+    )
+
     if (this.progress.phase !== 'done') {
+      // 判定用「已下结论」而不是「探测成功」：断链的机台永远到不了
+      // probedMachines，按后者算会一直挂着"探测目录"，
+      // 实际却已经在读明细了 —— 界面上就是"卡在探测"
       this.progress.phase =
-        this.probedMachines >= this.params.machines.length ? 'collect' : 'probe'
+        this.finishedMachines >= this.params.machines.length
+          ? 'collect'
+          : 'probe'
     }
 
     this.progress.percent = this.computePercent()

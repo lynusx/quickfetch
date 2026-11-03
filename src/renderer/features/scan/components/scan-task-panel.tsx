@@ -146,6 +146,7 @@ export const ScanTaskPanel = ({
     inaccessible.network + inaccessible.auth + inaccessible.denied > 0
   const eta =
     task && task.status === 'running' ? formatEta(task.progress.etaMs) : null
+  const runningPending = task?.progress.machinesPending ?? 0
 
   const phaseDescription = task
     ? task.status === 'interrupted'
@@ -239,6 +240,16 @@ export const ScanTaskPanel = ({
               {task && task.progress.detailsPending > 0 ? (
                 <Text as="span" size="1" color="gray">
                   待读明细 {task.progress.detailsPending}
+                </Text>
+              ) : null}
+              {/*
+                还剩几台没下结论。现场看到进度停在 70% 又显示"收集图片"，
+                分不清是卡住还是快好了，加这个数字就能判断。
+                运行态才显示：暂停时最想知道的是"还差多少"，已完成则没必要。
+              */}
+              {task && task.status === 'running' && runningPending > 0 ? (
+                <Text as="span" size="1" color="amber">
+                  正在等 {runningPending} 台机台
                 </Text>
               ) : null}
               {eta ? (

@@ -43,6 +43,9 @@ interface UseScanTaskProps {
   getParams: () => Omit<ScanTaskParams, 'category'>
 }
 
+/** 运行态下对账间隔：只兜底丢推送，不参与实时进度 */
+const STATUS_POLL_MS = 2000
+
 const isBusy = (status: ScanTaskStatus | undefined): boolean =>
   status === 'pending' || status === 'running' || status === 'paused'
 
@@ -83,7 +86,7 @@ export const useScanTask = ({
     let previousStatus: ScanTaskStatus | null =
       store.getState().task?.status ?? null
 
-    const unsubscribe = window.electronAPI.onScanTaskUpdate((next) => {
+    const apply = (next: ScanTask): void => {
       // 广播里混着两个类别的任务，只处理本类别的
       if ((next.params.category ?? 'el') !== category) return
 
@@ -117,9 +120,35 @@ export const useScanTask = ({
       }
 
       previousStatus = next.status
-    })
+    }
 
-    return unsubscribe
+    const unsubscribe = window.electronAPI.onScanTaskUpdate(apply)
+
+    /*
+     * 兜底拉一次：主进程的进度推送会按固定间隔节流，取消、暂停这类
+     * "状态变了但进度没变"的更新有可能贴着节流窗口被并掉；IPC 偶尔
+     * 丢一条，界面就会一直停在旧状态（现场看到的"卡住"）。
+     * 这里只做低频对账，不承担实时进度，开销可以忽略。
+     *
+     * 只在任务处于运行态时轮询：终态已经不会再变，继续拉纯属浪费。
+     */
+    const poll = window.setInterval(() => {
+      const current = store.getState().task
+
+      if (!current || !isBusy(current.status)) return
+
+      void window.electronAPI
+        .getScanTask(current.id)
+        .then((latest) => {
+          if (latest) apply(latest)
+        })
+        .catch(() => undefined)
+    }, STATUS_POLL_MS)
+
+    return () => {
+      unsubscribe()
+      window.clearInterval(poll)
+    }
   }, [category, store])
 
   // 重新进入页面时补一次同步，避免错过订阅空窗期的状态变更

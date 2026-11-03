@@ -382,6 +382,13 @@ export interface ScanTaskProgress {
   detailTotal: number
   /** 已读完备的明细目录数 */
   detailDone: number
+  /**
+   * 还没下结论的机台数（既没探测完、也没因断链被跳过）。
+   *
+   * 明细读完但机台还在跑时，界面能据此说清"在等哪些机台"，
+   * 而不是一个停在 70% 的进度条 —— 现场分不清那是卡住还是快好了。
+   */
+  machinesPending: number
   /** 预计剩余毫秒，样本不足时为 null */
   etaMs: number | null
 }

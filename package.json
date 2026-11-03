@@ -1,7 +1,7 @@
 {
   "name": "shx-tools",
   "private": true,
-  "version": "1.26.0",
+  "version": "1.26.1",
   "description": "RCA EL、力禧特EL、利珀PL、森标 AOI 图片拷贝与 Excel 解析桌面工具",
   "author": "lynusx",
   "type": "module",
@@ -13,6 +13,7 @@
     "typecheck": "tsc -b",
     "dist:win": "pnpm build && electron-builder --win --x64",
     "lint": "eslint .",
+    "verify": "node scripts/verify-run.mjs",
     "prestart": "node scripts/ensure-electron.cjs",
     "start": "electron-vite preview",
     "format": "prettier --check .",
