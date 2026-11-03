@@ -56,9 +56,9 @@ const PlScanPage = () => {
   return (
     <PlantScanPage
       category="pl"
-      title="利珀图片批量拷贝"
+      title="利珀PL图片批量拷贝"
       unconfigured={{
-        title: '先配置利珀入口',
+        title: '先配置利珀PL入口',
         description:
           '在左侧选择入口目录，应用会解析其中的快捷方式并识别各厂区机台',
       }}

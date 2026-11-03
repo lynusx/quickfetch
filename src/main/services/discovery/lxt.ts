@@ -10,7 +10,7 @@ import type { DiscoveredLink, Discovery, MergeResult } from './shortcuts'
  * 这里只保留力禧特自己的那部分：第二层是 el / SaveImages 二选一。
  */
 
-export const LXT_ENTRY_NAME = '力禧特'
+export const LXT_ENTRY_NAME = '力禧特EL'
 
 /** 机台唯一键；历史记录、复制分组都按它走 */
 export const lxtKey = (plant: string, name: string): string =>

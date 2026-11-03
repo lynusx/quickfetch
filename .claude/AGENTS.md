@@ -46,12 +46,12 @@ Windows 上实际位置是 `%APPDATA%\shx-tools\`，**和开发态是同一个�
 
 **网络错误判定**：只有 `src/main/services/scanner/fsx.ts` 里 `NETWORK_CODES` 列出的错误码才算「不可达」，其余一律按
 「目录不可用」处理。断网熔断全靠这个判定，把路径问题算成断网会直接暂停整个任务并提示
-「请接专用内网」，现场极难查。同理，探测第二层目录（力禧特的共享名、利珀的标识目录）
+「请接专用内网」，现场极难查。同理，探测第二层目录（力禧特EL的共享名、利珀PL的标识目录）
 不要读 `\\IP` 这种只有主机的 UNC 根——Windows 枚举它会返回 EINVAL/ERROR_BAD_NETPATH，
 跟断网的表现一模一样，要按已知候选名直接读子目录。森标 AOI 的第二层固定为
 `SaveImages`，不需要探测，但仍必须读 `\\IP\SaveImages` 而不是 `\\IP`。
 
-**扫描历史是四类页面的公共能力**：EL / 力禧特 / 利珀 / 森标 AOI 都必须挂 `HistoryPanel`，
+**扫描历史是四类页面的公共能力**：EL / 力禧特EL / 利珀PL / 森标 AOI 都必须挂 `HistoryPanel`，
 四处共用 `hooks/useHistoryRestore` 回填参数与载入快照。当前任务快照只存在内存里，
 重启后为空，历史是唯一的恢复入口——少挂一个页面，那一类扫描的结果就等于「扫完就没了」。
 新增扫描类别时先确认这一点。
@@ -71,7 +71,7 @@ Windows 上实际位置是 `%APPDATA%\shx-tools\`，**和开发态是同一个�
 并在那笔提交上加 `SKIP_VERSION=1`（否则钩子会在手工版本上再加一级，跟已经发出去的包对不上）：
 
 ```bash
-SKIP_VERSION=1 git commit -m "feat(pl): 利珀扫描入口"
+SKIP_VERSION=1 git commit -m "feat(pl): 利珀PL扫描入口"
 ```
 
 提交前确认 `package.json` 没有未暂存改动（`git diff -- package.json` 为空）。`commit-msg` 写版本号后，

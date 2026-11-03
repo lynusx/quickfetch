@@ -11,7 +11,7 @@ import type { DiscoveredLink, Discovery, MergeResult } from './shortcuts'
  * 名字不固定（pl-6a、东区pl-10b、pl-03c），只能拿线别名去探测。
  */
 
-export const PL_ENTRY_NAME = '利珀'
+export const PL_ENTRY_NAME = '利珀PL'
 
 /** 机台唯一键；历史记录、复制分组都按它走 */
 export const plKey = (plant: string, name: string): string =>

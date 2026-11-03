@@ -23,8 +23,8 @@ import '../scan.css'
 
 const EYEBROW: Record<ScanCategory, string> = {
   el: '找图 · EL',
-  lxt: '找图 · 力禧特',
-  pl: '找图 · 利珀',
+  lxt: '找图 · 力禧特EL',
+  pl: '找图 · 利珀PL',
   aoi: '找图 · 森标 AOI',
 }
 

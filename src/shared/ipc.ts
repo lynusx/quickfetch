@@ -43,8 +43,8 @@ export type ScanCategory = 'el' | 'lxt' | 'pl' | 'aoi'
 
 export const SCAN_CATEGORY_LABEL: Record<ScanCategory, string> = {
   el: 'EL',
-  lxt: '力禧特',
-  pl: '利珀',
+  lxt: '力禧特EL',
+  pl: '利珀PL',
   aoi: '森标 AOI',
 }
 

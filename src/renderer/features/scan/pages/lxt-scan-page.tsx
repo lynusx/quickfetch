@@ -53,9 +53,9 @@ const LxtScanPage = () => {
   return (
     <PlantScanPage
       category="lxt"
-      title="力禧特图片批量拷贝"
+      title="力禧特EL图片批量拷贝"
       unconfigured={{
-        title: '先配置力禧特入口',
+        title: '先配置力禧特EL入口',
         description:
           '在左侧选择入口目录，应用会解析其中的快捷方式并识别各厂区机台',
       }}

@@ -1,6 +1,6 @@
 # SHX Tools
 
-RCA EL、力禧特、利珀、森标 AOI 图片拷贝与 Excel 解析工具，基于 Electron + React 的桌面应用（Windows x64）。
+RCA EL、力禧特EL、利珀PL、森标 AOI 图片拷贝与 Excel 解析工具，基于 Electron + React 的桌面应用（Windows x64）。
 
 ## 使用需知
 
@@ -158,7 +158,7 @@ src/
     ├── index.css         # 全局基线：Radix/font 导入、令牌、reset、共享工具类、sonner
     ├── layouts/          # 框架布局（app-layout、app-sidebar，样式与组件同目录）
     ├── features/         # 业务特性模块（高内聚，页面、组件、Hook、Store、样式在一起）
-    │   ├── scan/         # 图片扫描（EL / 力禧特 / 利珀 / 森标 AOI 页面、组件与状态）
+    │   ├── scan/         # 图片扫描（EL / 力禧特EL / 利珀PL / 森标 AOI 页面、组件与状态）
     │   ├── copy/         # 复制管理（copy-panel、useImageCopy、copyStore）
     │   ├── history/      # 历史记录（history-panel、historyStore）
     │   ├── excel/        # Excel 解析（上传、解析、筛选、表格与状态）
@@ -207,7 +207,7 @@ src/
 | 复制分批     | 50 张  | 批之间让出事件循环，进度也可按批反馈         |
 
 改档位在应用侧边栏底部的**设置页**里调，落盘到 `settings.json`，不必重新打包。
-EL / 力禧特 / 利珀 / 森标 AOI 共用同一套设置，包括分组方式、重名策略与全部性能档位。
+EL / 力禧特EL / 利珀PL / 森标 AOI 共用同一套设置，包括分组方式、重名策略与全部性能档位。
 临时压降仍可用环境变量 `SHX_READ_CONCURRENCY`、`SHX_MACHINE_BATCH`、
 `SHX_COPY_CONCURRENCY`、`SHX_COPY_BATCH`——**环境变量优先于设置页**，
 被接管的项在设置页会标出变量名并禁用输入。

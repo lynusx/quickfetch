@@ -166,7 +166,7 @@ export const registerSettingsIpc = (): void => {
     const current = await readSettings()
 
     if (!current.lxt.entryRoot) {
-      throw new Error('尚未配置力禧特入口目录，请先选择入口')
+      throw new Error('尚未配置力禧特EL入口目录，请先选择入口')
     }
 
     return setupLxt(current.lxt.entryRoot)
@@ -180,7 +180,7 @@ export const registerSettingsIpc = (): void => {
     const current = await readSettings()
 
     if (!current.pl.entryRoot) {
-      throw new Error('尚未配置利珀入口目录，请先选择入口')
+      throw new Error('尚未配置利珀PL入口目录，请先选择入口')
     }
 
     return setupPl(current.pl.entryRoot)

@@ -181,7 +181,7 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
         set({ settings: result.settings })
         return result
       } catch (error) {
-        set({ error: toErrorMessage(error, '识别力禧特入口失败') })
+        set({ error: toErrorMessage(error, '识别力禧特EL入口失败') })
         return null
       } finally {
         set({ saving: false })
@@ -209,7 +209,7 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
         set({ settings: result.settings })
         return result
       } catch (error) {
-        set({ error: toErrorMessage(error, '识别利珀入口失败') })
+        set({ error: toErrorMessage(error, '识别利珀PL入口失败') })
         return null
       } finally {
         set({ saving: false })

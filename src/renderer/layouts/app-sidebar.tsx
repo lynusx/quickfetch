@@ -24,19 +24,19 @@ const NAV_GROUPS = [
         icon: CopyIcon,
       },
       {
-        label: '力禧特',
+        label: '森标 AOI',
+        to: ROUTES.AOI,
+        icon: CameraIcon,
+      },
+      {
+        label: '力禧特EL',
         to: ROUTES.LXT_EL,
         icon: MagnifyingGlassIcon,
       },
       {
-        label: '利珀',
+        label: '利珀PL',
         to: ROUTES.LP_PL,
         icon: TargetIcon,
-      },
-      {
-        label: '森标 AOI',
-        to: ROUTES.AOI,
-        icon: CameraIcon,
       },
     ],
   },
