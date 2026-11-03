@@ -32,6 +32,8 @@ const AoiMachinePicker = ({ machines, onChanged }: AoiMachinePickerProps) => {
       filter={useAoiFilterStore}
       onSetup={setupAoi}
       onRefresh={refreshAoi}
+      // 森标 AOI 的第二层固定为 SaveImages，没有共享名需要探测
+      onReprobe={async () => true}
       labels={{
         rootPlaceholder: '\\\\10.108.x.x\\share\\森标-在线AOI',
         rootHint:

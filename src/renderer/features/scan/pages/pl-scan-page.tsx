@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import PlFilterPanel from '../components/pl-filter-panel'
 import PlMachinePicker from '../components/pl-machine-picker'
 import PlantScanPage from '../components/plant-scan-page'
+import { NETWORK_HINT } from '@shared/networkHint'
 import { usePlFilterStore } from '../stores/plFilterStore'
 import {
   selectPl,
@@ -29,6 +30,7 @@ const PlScanPage = () => {
   const slots = usePlFilterStore((state) => state.slots)
   const types = usePlFilterStore((state) => state.types)
   const levels = usePlFilterStore((state) => state.levels)
+  const plant = usePlFilterStore((state) => state.plant)
   const selectedMachines = usePlFilterStore((state) => state.selectedMachines)
   const plTypes = useUserPreferencesStore((state) => state.plTypes)
 
@@ -62,7 +64,7 @@ const PlScanPage = () => {
         description:
           '在左侧选择入口目录，应用会解析其中的快捷方式并识别各厂区机台',
       }}
-      networkHint="接入利珀专用内网后点击「继续」，已扫描的结果不会丢失"
+      networkHint={`${NETWORK_HINT}；点「继续」即可接着扫，已扫到的结果不会丢`}
       configured={configured}
       activeMachines={active.length}
       ready={ready}
@@ -75,6 +77,15 @@ const PlScanPage = () => {
         types,
         levels,
       })}
+      filterSignature={[
+        plant,
+        date,
+        shift,
+        slots.join(','),
+        levels.join(','),
+        types.join(','),
+        selectedMachines.join(','),
+      ].join('|')}
       picker={<PlMachinePicker machines={pl.machines} />}
       filterPanel={<PlFilterPanel />}
     />

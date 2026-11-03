@@ -21,6 +21,7 @@ const PlMachinePicker = ({ machines, onChanged }: PlMachinePickerProps) => {
   const error = useSettingsStore((state) => state.error)
   const setupPl = useSettingsStore((state) => state.setupPl)
   const refreshPl = useSettingsStore((state) => state.refreshPl)
+  const reprobeShares = useSettingsStore((state) => state.reprobeShares)
 
   return (
     <PlantMachinePicker
@@ -32,6 +33,7 @@ const PlMachinePicker = ({ machines, onChanged }: PlMachinePickerProps) => {
       filter={usePlFilterStore}
       onSetup={setupPl}
       onRefresh={refreshPl}
+      onReprobe={() => reprobeShares('pl')}
       labels={{
         rootPlaceholder: '\\\\10.108.x.x\\share\\利珀',
         rootHint:

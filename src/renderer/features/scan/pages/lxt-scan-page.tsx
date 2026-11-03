@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import LxtFilterPanel from '../components/lxt-filter-panel'
 import LxtMachinePicker from '../components/lxt-machine-picker'
 import PlantScanPage from '../components/plant-scan-page'
+import { NETWORK_HINT } from '@shared/networkHint'
 import { useLxtFilterStore } from '../stores/lxtFilterStore'
 import {
   selectLxt,
@@ -28,6 +29,7 @@ const LxtScanPage = () => {
   const shift = useLxtFilterStore((state) => state.shift)
   const slots = useLxtFilterStore((state) => state.slots)
   const types = useLxtFilterStore((state) => state.types)
+  const plant = useLxtFilterStore((state) => state.plant)
   const selectedMachines = useLxtFilterStore((state) => state.selectedMachines)
   const lxtTypes = useUserPreferencesStore((state) => state.lxtTypes)
 
@@ -59,7 +61,7 @@ const LxtScanPage = () => {
         description:
           '在左侧选择入口目录，应用会解析其中的快捷方式并识别各厂区机台',
       }}
-      networkHint="接入力禧特专用内网后点击「继续」，已扫描的结果不会丢失"
+      networkHint={`${NETWORK_HINT}；点「继续」即可接着扫，已扫到的结果不会丢`}
       configured={configured}
       activeMachines={active.length}
       ready={ready}
@@ -71,6 +73,14 @@ const LxtScanPage = () => {
         slots,
         types,
       })}
+      filterSignature={[
+        plant,
+        date,
+        shift,
+        slots.join(','),
+        types.join(','),
+        selectedMachines.join(','),
+      ].join('|')}
       picker={<LxtMachinePicker machines={lxt.machines} />}
       filterPanel={<LxtFilterPanel />}
     />

@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import AoiFilterPanel from '../components/aoi-filter-panel'
 import AoiMachinePicker from '../components/aoi-machine-picker'
 import PlantScanPage from '../components/plant-scan-page'
+import { NETWORK_HINT } from '@shared/networkHint'
 import { useAoiFilterStore } from '../stores/aoiFilterStore'
 import {
   selectAoi,
@@ -28,6 +29,7 @@ const AoiScanPage = () => {
   const date = useAoiFilterStore((state) => state.date)
   const shift = useAoiFilterStore((state) => state.shift)
   const types = useAoiFilterStore((state) => state.types)
+  const plant = useAoiFilterStore((state) => state.plant)
   const selectedMachines = useAoiFilterStore((state) => state.selectedMachines)
   const aoiTypes = useUserPreferencesStore((state) => state.aoiTypes)
 
@@ -57,7 +59,7 @@ const AoiScanPage = () => {
         description:
           '在左侧选择入口目录，应用会解析其中的快捷方式并识别各厂区机台',
       }}
-      networkHint="接入森标 AOI 专用内网后点击「继续」，已扫描的结果不会丢失"
+      networkHint={`${NETWORK_HINT}；点「继续」即可接着扫，已扫到的结果不会丢`}
       configured={configured}
       activeMachines={active.length}
       ready={ready}
@@ -69,6 +71,13 @@ const AoiScanPage = () => {
         slots: [],
         types,
       })}
+      filterSignature={[
+        plant,
+        date,
+        shift,
+        types.join(','),
+        selectedMachines.join(','),
+      ].join('|')}
       picker={<AoiMachinePicker machines={aoi.machines} />}
       filterPanel={<AoiFilterPanel />}
     />

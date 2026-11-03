@@ -6,6 +6,8 @@ import {
 } from '@radix-ui/react-icons'
 import { Box, Callout, Flex, Grid, Strong } from '@radix-ui/themes'
 
+import { NETWORK_HINT } from '@shared/networkHint'
+
 import { CopyPanel } from '@/features/copy'
 import { HistoryPanel } from '@/features/history'
 import { PageHeader } from '@/components/page-header/page-header'
@@ -15,6 +17,7 @@ import { ScanTaskPanel } from '../components/scan-task-panel'
 import ElFilterPanel from '../components/el-filter-panel'
 import ElSetupPanel from '../components/el-setup-panel'
 import { useHistoryRestore } from '../hooks/useHistoryRestore'
+import { useResetOnParamChange } from '../hooks/useResetOnParamChange'
 import { useScanTask } from '../hooks/useScanTask'
 import { useToast } from '@/hooks/useToast'
 import { useImageFilterStore } from '../stores/imageFilterStore'
@@ -55,7 +58,6 @@ const ElScanPage = () => {
   const scanError = useElScanStore((state) => state.error)
 
   const restoreHistory = useHistoryRestore('el')
-
   const clearResult = useCallback(() => {
     useElScanStore.getState().setTask(null)
   }, [])
@@ -64,6 +66,20 @@ const ElScanPage = () => {
 
   const filters = useImageFilterStore()
   const ngTypes = useUserPreferencesStore((state) => state.ngTypes)
+
+  // 扫描范围一变，上一轮的结果就不再对应当前条件，收起来免得看串
+  useResetOnParamChange(
+    'el',
+    [
+      filters.plant,
+      filters.date,
+      filters.shift,
+      filters.slots.join(','),
+      filters.types.join(','),
+      filters.selectedMachines.join(','),
+    ].join('|'),
+  )
+
   const ready =
     filters.selectedMachines.length > 0 &&
     filters.slots.length > 0 &&
@@ -119,7 +135,7 @@ const ElScanPage = () => {
             error={scanError}
             other={other}
             otherLabel={otherLabel}
-            networkHint="恢复共享盘连接后点击「继续」，已扫描的结果不会丢失"
+            networkHint={`${NETWORK_HINT}；点「继续」即可接着扫，已扫到的结果不会丢`}
             notices={
               !configured ? (
                 <Callout.Root color="amber" size="1">
