@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { readdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { basename, dirname, join } from 'node:path'
 
 import type {
   AoiMachine,
@@ -405,6 +405,30 @@ const writeSettings = async (settings: AppSettings): Promise<void> => {
 
   await writeFile(temp, JSON.stringify(persisted, null, 2), 'utf-8')
   await rename(temp, target)
+}
+
+/**
+ * 清理上次进程被强杀时留下的 settings.json.*.tmp。
+ *
+ * 正常写入会 rename 掉临时文件；只有写盘途中进程消失才会残留。
+ * 只在启动时清一次，避免和正在进行的写入抢同一个临时文件。
+ */
+export const cleanupSettingsTempFiles = async (): Promise<void> => {
+  const target = settingsFile()
+  const dir = dirname(target)
+  const prefix = `${basename(target)}.`
+
+  try {
+    const names = await readdir(dir)
+    await Promise.all(
+      names
+        .filter((name) => name.startsWith(prefix) && name.endsWith('.tmp'))
+        .map((name) => rm(join(dir, name), { force: true })),
+    )
+  } catch (error) {
+    // 清理失败不影响启动，下次启动再试
+    console.error('清理设置临时文件失败:', error)
+  }
 }
 
 /**

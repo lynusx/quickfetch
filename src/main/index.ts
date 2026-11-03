@@ -2,6 +2,7 @@ import { BrowserWindow, app, screen, shell } from 'electron'
 import { join } from 'node:path'
 
 import { registerIpcHandlers } from './ipc'
+import { cleanupSettingsTempFiles } from './services/settings'
 import { persistUnfinished } from './services/scanner'
 
 // electron-vite 在开发模式下注入渲染层 dev server 地址
@@ -97,9 +98,12 @@ if (!hasSingleInstanceLock) {
     window.focus()
   })
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     // Windows 任务栏分组与通知标识
     app.setAppUserModelId('com.lynusx.shx-tools')
+
+    // 上次进程被强杀时可能留下 settings.json.*.tmp，先清掉再开放读写
+    await cleanupSettingsTempFiles()
 
     registerIpcHandlers()
     createWindow()

@@ -142,21 +142,21 @@ const probeShare = async (
 ): Promise<{ share: LxtShare | null; unreachable?: 'network' | 'denied' }> => {
   const found: LxtShare[] = []
   let denied = false
-  let unreachable = false
 
   for (const share of LXT_SHARES) {
     const result = await readDirSafe(join(host, share))
 
     if (result.status === 'ok') found.push(share)
     else if (result.status === 'denied') denied = true
-    else if (result.status === 'unreachable') unreachable = true
+    else if (result.status === 'unreachable') {
+      // 同一主机的共享要么都通、要么都不通；继续试只会再等一个超时。
+      // 现场断网时每台机器少等 20 秒，整批的等待时间直接减半。
+      return { share: null, unreachable: 'network' }
+    }
   }
 
   // 两个都读到才算「同时存在」，此时按优先级取 el
   if (found.length) return { share: found[0] }
-
-  // 一个都没读到，但其中一次是超时：主机层面就不通
-  if (unreachable) return { share: null, unreachable: 'network' }
 
   return { share: 'SaveImages', ...(denied ? { unreachable: 'denied' } : {}) }
 }

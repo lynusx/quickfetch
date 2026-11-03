@@ -415,6 +415,10 @@ export class ScanTaskRunner {
         )
       }
 
+      // 最后一批里触发的网络暂停也要生效：下面会把状态写成 completed，
+      // 少了这个检查点，刚暂停的任务会被“完成”覆盖，界面看不到断网提示
+      await this.checkpoint()
+
       // 探测完成后逐目录补读文件明细，同样走闸门，不再另开并发
       await this.collectDetails(limiter)
 
@@ -848,29 +852,44 @@ export class ScanTaskRunner {
 
     if (result.status === 'ok') {
       this.progress.dirsScanned += 1
-      this.unreachableStreak = 0
+      this.noteReachability(false)
       this.recordSample(false)
     } else if (isNetworkError(result.status)) {
       this.progress.dirsUnreachable += 1
-      this.unreachableStreak += 1
+      this.noteReachability(true)
       this.recordSample(true)
-
-      // 力禧特各机台不同 IP，没有共同根可复探；连续不可达只能说明整批
-      // 都不在这张网里，直接暂停让用户接入专用内网后继续。
-      // EL 虽然共享一个根，但续探根目录会让每个批次多一次网络往返，
-      // 而现场的断网往往整片发生，直接暂停后由用户确认恢复更省事。
-      if (this.unreachableStreak >= NETWORK_FAILURE_LIMIT) {
-        this.pause('network')
-      }
     } else {
       // missing / denied 是路径或权限问题，不是网络不可达；
       // 不清零会让「网络×4 → 缺失目录 → 网络」被误判成连续断网
-      this.unreachableStreak = 0
+      this.noteReachability(false)
     }
 
     this.touch(path)
 
     return result
+  }
+
+  /**
+   * 维护连续不可达计数，达到阈值就暂停任务等用户接回网络。
+   *
+   * 目录读取和解析器探测共用同一个计数：力禧特/利珀在解析阶段就可能
+   * 遇到整片断网，只统计 read() 的话任务会逐台等完超时才停。
+   */
+  private noteReachability(unreachable: boolean): void {
+    if (!unreachable) {
+      this.unreachableStreak = 0
+      return
+    }
+
+    this.unreachableStreak += 1
+
+    // 力禧特各机台不同 IP，没有共同根可复探；连续不可达只能说明整批
+    // 都不在这张网里，直接暂停让用户接入专用内网后继续。
+    // EL 虽然共享一个根，但续探根目录会让每个批次多一次网络往返，
+    // 而现场的断网往往整片发生，直接暂停后由用户确认恢复更省事。
+    if (this.unreachableStreak >= NETWORK_FAILURE_LIMIT) {
+      this.pause('network')
+    }
   }
 
   /** 采样一次读取结果；降档的具体动作由 gate 的 onChange 回调完成 */
@@ -894,19 +913,24 @@ export class ScanTaskRunner {
     branch.status = result.status === 'unreachable' ? 'unreachable' : 'missing'
 
     if (result.status === 'unreachable') {
+      branch.unreachableReason = 'network'
       // 带上原始错误码：现场报「明明能打开」时，ETIMEDOUT 和 EHOSTUNREACH
       // 的处理方向完全不同，少了这行只能靠猜
       branch.message = `「${where}」不可达，请检查网络连接${
         result.code ? `（${result.code}）` : ''
       }`
     } else if (result.status === 'denied') {
+      branch.unreachableReason = 'denied'
       branch.message = `没有读取「${where}」的权限`
     } else if (detail) {
       branch.message = `「${where}」下没有「${detail.expected}」，实际存在：${summarize(detail.actual)}`
     } else {
-      branch.message = `「${where}」不可访问${
-        result.code ? `（${result.code}）` : ''
-      }`
+      // UNKNOWN 这类错误码本身没有信息量，把系统返回的原始信息带出来，
+      // 现场才能区分是目录不存在、权限问题还是 SMB 瞬时故障
+      const failure = result.error?.split('\n')[0]?.trim() || result.code
+      branch.message = failure
+        ? `「${where}」不可访问：${failure}`
+        : `「${where}」不可访问`
     }
 
     this.probedMachines += 1
@@ -935,6 +959,12 @@ export class ScanTaskRunner {
     branch.status = resolved.unreachable ? 'unreachable' : 'missing'
     branch.unreachableReason = resolved.unreachable
     branch.message = resolved.reason
+
+    // 解析阶段的不可达也要计入熔断；否则整片断网时会逐台等超时
+    if (resolved.unreachable === 'network') {
+      this.progress.dirsUnreachable += 1
+    }
+    this.noteReachability(resolved.unreachable === 'network')
 
     this.probedMachines += 1
     this.touch(branch.machine, true)

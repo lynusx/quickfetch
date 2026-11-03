@@ -251,6 +251,12 @@ const HistoryPanel = ({
                             >
                               {meta.label}
                             </Badge>
+                            {item.status === 'completed' &&
+                            item.totalImages === 0 ? (
+                              <Badge color="amber" variant="soft" size="1">
+                                未命中
+                              </Badge>
+                            ) : null}
                           </Flex>
                           <button
                             type="button"

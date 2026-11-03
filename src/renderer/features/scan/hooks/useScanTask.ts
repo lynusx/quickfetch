@@ -90,11 +90,19 @@ export const useScanTask = ({
 
       if (next.status !== previousStatus) {
         if (next.status === 'completed') {
-          toastRef.current(
-            '扫描完成',
-            `共 ${next.totalImages} 张图片，耗时 ${formatDuration(next.elapsedMs)}`,
-            'success',
-          )
+          if (next.totalImages > 0) {
+            toastRef.current(
+              '扫描完成',
+              `共 ${next.totalImages} 张图片，耗时 ${formatDuration(next.elapsedMs)}`,
+              'success',
+            )
+          } else {
+            toastRef.current(
+              '扫描完成，未命中图片',
+              '已完成探测，但没有找到图片；请查看各机台结果里的断链原因。',
+              'info',
+            )
+          }
         } else if (next.status === 'failed' && next.error) {
           toastRef.current('扫描失败', next.error, 'error')
         } else if (next.status === 'paused' && next.pauseReason === 'network') {

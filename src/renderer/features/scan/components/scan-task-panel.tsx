@@ -269,7 +269,8 @@ export const ScanTaskPanel = ({
           {(other ||
             notices ||
             (error ?? task?.error) ||
-            task?.status === 'paused') && (
+            task?.status === 'paused' ||
+            (task?.status === 'completed' && task.totalImages === 0)) && (
             <Flex className="callout-stack" direction="column" gap="2">
               {other && otherLabel ? (
                 <Callout.Root color="blue" size="1">
@@ -283,6 +284,18 @@ export const ScanTaskPanel = ({
               ) : null}
 
               {notices}
+
+              {task?.status === 'completed' && task.totalImages === 0 ? (
+                <Callout.Root color="amber" size="1">
+                  <Callout.Icon>
+                    <InfoCircledIcon width={14} height={14} />
+                  </Callout.Icon>
+                  <Callout.Text>
+                    <Strong>没有命中图片：</Strong>
+                    请检查机台、日期、班次与类型；各机台结果里保留了断链原因。
+                  </Callout.Text>
+                </Callout.Root>
+              ) : null}
 
               {task?.status === 'paused' && task.pauseReason === 'network' ? (
                 <Callout.Root color="red" size="1">
