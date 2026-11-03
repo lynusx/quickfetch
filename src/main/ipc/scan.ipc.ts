@@ -109,6 +109,7 @@ const createPlTask = (
   const resolver: MachineResolver = createPlResolver({
     hosts,
     shares,
+    date: params.date,
     onShare: (machine, share, host) => {
       void rememberPlShare(machine, share, host)
     },

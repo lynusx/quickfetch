@@ -605,12 +605,12 @@ export const updateAoi = (
 /**
  * 回写单台利珀机台探测到的标识目录。
  *
- * 与力禧特同理：边扫边写，中途崩了不该把已探测的结果全丢掉；
- * 写失败只记日志，探测缓存丢失只是下次多探一次。
+ * `share` 为 null 表示缓存已确认不可用，需要下次扫描重新探测；写失败只记
+ * 日志，探测缓存丢失只是下次多探一次，不该让正在跑的扫描失败。
  */
 export const rememberPlShare = async (
   key: string,
-  share: string,
+  share: string | null,
   host: string,
 ): Promise<void> => {
   try {
