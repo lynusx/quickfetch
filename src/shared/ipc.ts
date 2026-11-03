@@ -48,7 +48,7 @@ export const SCAN_CATEGORY_LABEL: Record<ScanCategory, string> = {
   aoi: '森标 AOI',
 }
 
-/** 力禧特第二层的两个候选共享名，探测顺序即优先级 */
+/** 力禧特第二层的两个候选共享名；探测时两个都会验证，不再按顺序取第一个 */
 export const LXT_SHARES = ['el', 'SaveImages'] as const
 
 export type LxtShare = (typeof LXT_SHARES)[number]
@@ -124,10 +124,10 @@ export interface LxtMachine {
   /** .lnk 解析出的目标，形如 \\10.108.8.220 */
   host: string
   /**
-   * 该机台实际使用的共享名，第一次扫描时探测并缓存。
+   * 该机台实际使用的共享名。
    *
-   * el 与 SaveImages 不同机台可能不一样，只能逐台探；为 null 表示还没探过，
-   * 下次扫描该机台时补探。
+   * el 与 SaveImages 不同机台可能不一样，只能逐台探。null 表示尚未确定
+   * 或已确认不可用，下次扫描会重新探测；不要把它当成 SaveImages 默认值。
    */
   share: LxtShare | null
   /**

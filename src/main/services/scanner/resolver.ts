@@ -122,118 +122,19 @@ export const createElResolver = (
 export interface LxtResolverOptions {
   /** 机台复合键 → 入口里解析出的目标主机 */
   hosts: Map<string, string>
-  /** 已缓存的共享名；探到新值时通过 onShare 回写配置 */
+  /** 已缓存的共享名；null 表示尚未确定，成功探测或确认失效时通过 onShare 回写 */
   shares: Map<string, LxtShare | null>
-  onShare: (machine: string, share: LxtShare, host: string) => void
+  /** 本次扫描日期 YYYYMMDD，用于比较 A-01-B 下的日期目录 */
+  date: string
+  /** 共享名发生变化（包括清空为 null）时回写配置 */
+  onShare: (machine: string, share: LxtShare | null, host: string) => void
 }
 
 /** 力禧特：每台机器一个 IP，第二层的共享名逐台探测 */
 export const LXT_FIXED_DIR = 'A-01-B'
 
 /**
- * 探测一台机器用的是 el 还是 SaveImages。
- *
- * 规则来自现场说明：el 优先；两个都在或都不在都回落 SaveImages。
- * 主机完全不通时返回 network —— 这是最常见的失败（在 EL 网络下扫描），
- * 界面要能把它跟「路径变了」区分开，否则现场只会看到一片「无图片」。
- */
-const probeShare = async (
-  host: string,
-): Promise<{ share: LxtShare | null; unreachable?: 'network' | 'denied' }> => {
-  const found: LxtShare[] = []
-  let denied = false
-
-  for (const share of LXT_SHARES) {
-    const result = await readDirSafe(join(host, share))
-
-    if (result.status === 'ok') found.push(share)
-    else if (result.status === 'denied') denied = true
-    else if (result.status === 'unreachable') {
-      // 同一主机的共享要么都通、要么都不通；继续试只会再等一个超时。
-      // 现场断网时每台机器少等 20 秒，整批的等待时间直接减半。
-      return { share: null, unreachable: 'network' }
-    }
-  }
-
-  // 两个都读到才算「同时存在」，此时按优先级取 el
-  if (found.length) return { share: found[0] }
-
-  return { share: 'SaveImages', ...(denied ? { unreachable: 'denied' } : {}) }
-}
-
-export const createLxtResolver = (
-  options: LxtResolverOptions,
-): MachineResolver => ({
-  category: 'lxt',
-  validate: () =>
-    options.hosts.size ? null : '尚未识别力禧特入口，请先选择并识别入口目录',
-  resolve: async (machine) => {
-    const host = options.hosts.get(machine)
-
-    if (!host) {
-      return {
-        ok: false,
-        base: '',
-        reason: '该机台已不在入口目录中，请重新识别入口',
-        brokenAt: '共享名',
-      }
-    }
-
-    let share = options.shares.get(machine) ?? null
-    let unreachable: 'network' | 'denied' | undefined
-
-    if (!share) {
-      const probed = await probeShare(host)
-
-      share = probed.share
-      unreachable = probed.unreachable
-
-      if (!share) {
-        return {
-          ok: false,
-          base: '',
-          reason:
-            unreachable === 'network'
-              ? `${host} 不可达，需要接入力禧特专用内网`
-              : `${host} 上没有找到 el 或 SaveImages 目录`,
-          brokenAt: '共享名',
-          unreachable: unreachable ?? 'share',
-        }
-      }
-
-      // 探到了就记下来，下次不用再探
-      options.shares.set(machine, share)
-      options.onShare(machine, share, host)
-    }
-
-    return {
-      ok: true,
-      base: join(host, share, LXT_FIXED_DIR),
-      reason: '',
-    }
-  },
-  // 厂区/机台/日期/班次/时段/类型/x.jpg
-  // base 是 \\IP\share\A-01-B，路径上带不了厂区，只能从机台复合键里补
-  segments: (machine, dir) => {
-    const [plant, name] = splitMachine(machine)
-    const host = options.hosts.get(machine) ?? ''
-    const share = options.shares.get(machine) ?? ''
-    const base = host && share ? join(host, share, LXT_FIXED_DIR) : ''
-
-    return [plant, name, ...(base ? tailOf(base, dir) : [])].filter(Boolean)
-  },
-})
-
-export interface PlResolverOptions {
-  /** 机台复合键 → 入口里解析出的目标主机 */
-  hosts: Map<string, string>
-  /** 已缓存的标识目录名；探到新值时通过 onShare 回写配置 */
-  shares: Map<string, string | null>
-  onShare: (machine: string, share: string, host: string) => void
-}
-
-/**
- * 探测超时。比扫描阶段的 20 秒短：逐台探标识目录时，每台卡 20 秒
+ * 探测超时。比扫描阶段的 20 秒短：逐台探共享名时，每台卡 20 秒
  * 会让「接错网」和「有几台没开机」看起来一模一样。
  */
 const PROBE_TIMEOUT_MS = 8_000
@@ -252,6 +153,245 @@ const probeRead = async (path: string): Promise<DirReadResult> => {
   await new Promise((resolve) => setTimeout(resolve, 600))
 
   return readDirSafe(path, { timeoutMs: PROBE_TIMEOUT_MS })
+}
+
+/** 日期目录名；A-01-B 下除日期外可能还有别的目录，只认这种 */
+const LXT_DATE_DIR = /^\d{8}$/
+
+/** 近 30 天窗口，按任务日期往前推 */
+const LXT_RECENT_DAYS = 30
+const DAY_MS = 86_400_000
+
+/** 把 YYYYMMDD 解析成 UTC 时间戳；非法日期返回 null，避免本地时区偏移 */
+const parseLxtDate = (value: string): number | null => {
+  if (!LXT_DATE_DIR.test(value)) return null
+
+  const year = Number(value.slice(0, 4))
+  const month = Number(value.slice(4, 6))
+  const day = Number(value.slice(6, 8))
+  const stamp = Date.UTC(year, month - 1, day)
+  const date = new Date(stamp)
+  const valid =
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+
+  return valid ? stamp : null
+}
+
+interface LxtCandidate {
+  share: LxtShare
+  status: DirReadResult['status']
+  /** 是否包含本次扫描日期 */
+  hasTaskDate: boolean
+  /** 是否在任务日期往前 30 天内有数据 */
+  hasRecentDate: boolean
+}
+
+/**
+ * 读一次 `\\host\<share>\A-01-B`。
+ *
+ * 共享根存在不代表路径可用：现场出现过 SaveImages 根可读、A-01-B 不存在，
+ * 而 el 下正常的情况。这里直接读固定层，读到的子目录就是日期。
+ */
+const readLxtCandidate = async (
+  host: string,
+  share: LxtShare,
+  taskDate: string,
+): Promise<LxtCandidate> => {
+  const result = await probeRead(join(host, share, LXT_FIXED_DIR))
+  const dates =
+    result.status === 'ok'
+      ? result.dirs.filter((name) => LXT_DATE_DIR.test(name))
+      : []
+
+  const taskStamp = parseLxtDate(taskDate)
+  const floor = taskStamp === null ? null : taskStamp - LXT_RECENT_DAYS * DAY_MS
+  const hasRecentDate =
+    taskStamp !== null &&
+    floor !== null &&
+    dates.some((name) => {
+      const stamp = parseLxtDate(name)
+      return stamp !== null && stamp >= floor && stamp <= taskStamp
+    })
+
+  return {
+    share,
+    status: result.status,
+    hasTaskDate: dates.includes(taskDate),
+    hasRecentDate,
+  }
+}
+
+/**
+ * 两个候选都可用时的选择：
+ * 本次日期优先 → 只有一边近 30 天有数据就选它 → 否则（都近、都旧、都没有）
+ * 固定为 SaveImages。
+ */
+const pickLxtShare = (candidates: LxtCandidate[]): LxtShare | null => {
+  const usable = candidates.filter((item) => item.status === 'ok')
+
+  if (!usable.length) return null
+  if (usable.length === 1) return usable[0].share
+
+  const withTaskDate = usable.filter((item) => item.hasTaskDate)
+  if (withTaskDate.length === 1) return withTaskDate[0].share
+  if (withTaskDate.length === 2) return 'SaveImages'
+
+  const recent = usable.filter((item) => item.hasRecentDate)
+  if (recent.length === 1) return recent[0].share
+
+  return 'SaveImages'
+}
+
+/** 没有可用候选时，按网络 / 权限 / 路径缺失的优先级给出可读原因 */
+const lxtFailure = (
+  host: string,
+  candidates: LxtCandidate[],
+  cached?: LxtShare,
+): ResolveResult => {
+  if (candidates.some((item) => item.status === 'unreachable')) {
+    return {
+      ok: false,
+      base: '',
+      reason: `${host} 不可达，需要接入力禧特专用内网`,
+      brokenAt: '共享名',
+      unreachable: 'network',
+    }
+  }
+
+  if (candidates.some((item) => item.status === 'denied')) {
+    return {
+      ok: false,
+      base: '',
+      reason: `没有读取 ${host} 的权限`,
+      brokenAt: '共享名',
+      unreachable: 'denied',
+    }
+  }
+
+  return {
+    ok: false,
+    base: '',
+    reason: cached
+      ? `缓存的共享名 ${cached} 已不可用，且没有找到 el / SaveImages 的 ${LXT_FIXED_DIR} 目录`
+      : `${host} 上 el 与 SaveImages 都没有 ${LXT_FIXED_DIR} 目录`,
+    brokenAt: '共享名',
+    unreachable: 'share',
+  }
+}
+
+export const createLxtResolver = (
+  options: LxtResolverOptions,
+): MachineResolver => {
+  const ok = (host: string, share: LxtShare): ResolveResult => ({
+    ok: true,
+    base: join(host, share, LXT_FIXED_DIR),
+    reason: '',
+  })
+
+  const persist = (
+    machine: string,
+    host: string,
+    share: LxtShare | null,
+  ): void => {
+    options.shares.set(machine, share)
+    options.onShare(machine, share, host)
+  }
+
+  return {
+    category: 'lxt',
+    shape: { baseBrokenAt: '共享名' },
+    validate: () =>
+      options.hosts.size ? null : '尚未识别力禧特入口，请先选择并识别入口目录',
+    resolve: async (machine) => {
+      const host = options.hosts.get(machine)
+
+      if (!host) {
+        return {
+          ok: false,
+          base: '',
+          reason: '该机台已不在入口目录中，请重新识别入口',
+          brokenAt: '共享名',
+        }
+      }
+
+      const cached = options.shares.get(machine) ?? null
+
+      if (!cached) {
+        const candidates = await Promise.all(
+          LXT_SHARES.map((share) =>
+            readLxtCandidate(host, share, options.date),
+          ),
+        )
+        const picked = pickLxtShare(candidates)
+
+        if (!picked) return lxtFailure(host, candidates)
+
+        persist(machine, host, picked)
+        return ok(host, picked)
+      }
+
+      const current = await readLxtCandidate(host, cached, options.date)
+
+      // 缓存可用且包含本次日期：固定使用，不再为另一边多付一次探测
+      if (current.status === 'ok' && current.hasTaskDate) {
+        return ok(host, cached)
+      }
+
+      const otherShare: LxtShare = cached === 'el' ? 'SaveImages' : 'el'
+      const other = await readLxtCandidate(host, otherShare, options.date)
+
+      if (current.status === 'ok') {
+        if (other.status === 'ok') {
+          const picked = pickLxtShare([current, other])
+          if (!picked) return lxtFailure(host, [current, other], cached)
+          if (picked !== cached) persist(machine, host, picked)
+          return ok(host, picked)
+        }
+
+        // 另一边不可用，缓存是唯一可用的一边
+        return ok(host, cached)
+      }
+
+      // 缓存暂时不可达：优先尝试另一边，但不要急着清掉缓存
+      if (current.status === 'unreachable') {
+        if (other.status === 'ok') {
+          persist(machine, host, other.share)
+          return ok(host, other.share)
+        }
+
+        return lxtFailure(host, [current, other], cached)
+      }
+
+      // missing / denied / 其它路径错误：缓存确认失效，清空后重探另一边
+      if (other.status === 'ok') {
+        persist(machine, host, other.share)
+        return ok(host, other.share)
+      }
+
+      persist(machine, host, null)
+      return lxtFailure(host, [current, other], cached)
+    },
+    // 厂区/机台/日期/班次/时段/类型/x.jpg
+    // base 是 \\IP\share\A-01-B，路径上带不了厂区，只能从机台复合键里补
+    segments: (machine, dir) => {
+      const [plant, name] = splitMachine(machine)
+      const host = options.hosts.get(machine) ?? ''
+      const share = options.shares.get(machine) ?? ''
+      const base = host && share ? join(host, share, LXT_FIXED_DIR) : ''
+
+      return [plant, name, ...(base ? tailOf(base, dir) : [])].filter(Boolean)
+    },
+  }
+}
+
+export interface PlResolverOptions {
+  /** 机台复合键 → 入口里解析出的目标主机 */
+  hosts: Map<string, string>
+  /** 已缓存的标识目录名；探到新值时通过 onShare 回写配置 */
+  shares: Map<string, string | null>
+  onShare: (machine: string, share: string, host: string) => void
 }
 
 /**

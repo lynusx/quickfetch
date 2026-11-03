@@ -73,6 +73,7 @@ const createLxtTask = (
   const resolver: MachineResolver = createLxtResolver({
     hosts,
     shares,
+    date: params.date,
     onShare: (machine, share, host) => {
       void rememberLxtShare(machine, share, host)
     },
