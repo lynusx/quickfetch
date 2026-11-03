@@ -6,10 +6,12 @@ import {
   ReloadIcon,
 } from '@radix-ui/react-icons'
 import {
+  Box,
   Button,
   Callout,
   Flex,
   IconButton,
+  Spinner,
   Text,
   TextField,
 } from '@radix-ui/themes'
@@ -30,8 +32,27 @@ export interface PickableMachine {
   name: string
   key: string
   host: string
-  share: unknown
+  /**
+   * 第二层目录的探测状态：null 未探测、'' 探过但没有、其余为名字。
+   * 力禧特是 el / SaveImages，利珀是 pl-6a 这类标识目录名。
+   */
+  share: string | null
   stale: boolean
+}
+
+/**
+ * 共享探测状态的徽标文案与颜色。
+ *
+ * 三态必须能一眼分开：以前 share 只有 null 与名字两种，"没探过"和
+ * "探过但没有"长得一样，现场根本无法判断该不该点重探。
+ */
+const shareBadge = (
+  share: string | null,
+): { label: string; tone: 'muted' | 'ready' | 'missing' } => {
+  if (share === null) return { label: '未探测', tone: 'muted' }
+  if (share === '') return { label: '无共享', tone: 'missing' }
+
+  return { label: share, tone: 'ready' }
 }
 
 interface PlantMachinePickerProps {
@@ -45,6 +66,8 @@ interface PlantMachinePickerProps {
   filter: PlantFilterStore
   onSetup: (entryRoot: string) => Promise<EntrySetupResult | null>
   onRefresh: () => Promise<EntrySetupResult | null>
+  /** 强制重新探测各机台的共享目录；力禧特与利珀各走各的通道 */
+  onReprobe: () => Promise<boolean>
   /** 只有文案不同，结构与交互两类完全一致 */
   labels: {
     rootPlaceholder: string
@@ -70,6 +93,7 @@ const PlantMachinePicker = ({
   filter,
   onSetup,
   onRefresh,
+  onReprobe,
   labels,
   onChanged,
 }: PlantMachinePickerProps) => {
@@ -84,6 +108,8 @@ const PlantMachinePicker = ({
 
   const [draft, setDraft] = useState(entryRoot ?? '')
   const [prevEntryRoot, setPrevEntryRoot] = useState(entryRoot)
+  /** 探测共享进行中：46 台要跑几十秒，按钮必须置灰防连点 */
+  const [probing, setProbing] = useState(false)
 
   // 配置变更或保存成功后，同步输入框
   if (entryRoot !== prevEntryRoot) {
@@ -281,6 +307,32 @@ const PlantMachinePicker = ({
                   >
                     <ReloadIcon width={13} height={13} />
                   </IconButton>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    color="gray"
+                    size="1"
+                    disabled={saving || probing}
+                    title="重新探测各机台的共享目录，现场换了共享名或当初没连上网时用"
+                    onClick={async () => {
+                      setProbing(true)
+                      try {
+                        const ok = await onReprobe()
+                        if (ok) {
+                          showToast(
+                            '共享探测完成',
+                            '机台列表尾部的徽标已更新，可以开始扫描',
+                            'info',
+                          )
+                        }
+                      } finally {
+                        setProbing(false)
+                      }
+                    }}
+                  >
+                    {probing ? <Spinner size="1" /> : null}
+                    重新探测共享
+                  </Button>
                 </>
               }
             >
@@ -302,17 +354,29 @@ const PlantMachinePicker = ({
                   scroll
                   value={selectedMachines}
                   onValueChange={setSelectedMachines}
-                  options={visible.map((machine) => ({
-                    value: machine.key,
-                    label: (
-                      <Text as="span" size="2" className="mono">
-                        {machine.name}
-                      </Text>
-                    ),
-                    title: `${machine.host}${
-                      machine.share ? ` · ${String(machine.share)}` : ''
-                    }`,
-                  }))}
+                  options={visible.map((machine) => {
+                    const badge = shareBadge(machine.share)
+
+                    return {
+                      value: machine.key,
+                      label: (
+                        <Flex align="center" gap="1" className="machine-label">
+                          <Text as="span" size="2" className="mono">
+                            {machine.name}
+                          </Text>
+                          <Box
+                            as="span"
+                            className="share-badge"
+                            data-tone={badge.tone}
+                            title={`共享：${badge.label}`}
+                          >
+                            {badge.label}
+                          </Box>
+                        </Flex>
+                      ),
+                      title: `${machine.host} · 共享 ${badge.label}`,
+                    }
+                  })}
                 />
               ) : (
                 <Text size="1" color="gray">

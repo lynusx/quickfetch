@@ -42,6 +42,13 @@ interface SettingsAction {
   setupAoi: (entryRoot: string) => Promise<AoiSetupResult | null>
   /** 按当前入口重新识别森标 AOI 机台 */
   refreshAoi: () => Promise<AoiSetupResult | null>
+  /**
+   * 强制重新探测共享目录并写回配置。
+   *
+   * 现场换了共享名、或当初添加机台时没连上网络，都靠这个动作补救；
+   * 自动探测只在 share 为 null 时跑一次，不会自己重来。
+   */
+  reprobeShares: (category: 'lxt' | 'pl') => Promise<boolean>
   clearError: () => void
 }
 
@@ -253,6 +260,20 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
       } catch (error) {
         set({ error: toErrorMessage(error, '重新识别入口失败') })
         return null
+      } finally {
+        set({ saving: false })
+      }
+    },
+
+    reprobeShares: async (category) => {
+      set({ saving: true, error: null })
+      try {
+        const settings = await window.electronAPI.reprobeShares(category)
+        set({ settings })
+        return true
+      } catch (error) {
+        set({ error: toErrorMessage(error, '重新探测共享失败') })
+        return false
       } finally {
         set({ saving: false })
       }

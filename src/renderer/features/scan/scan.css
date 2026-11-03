@@ -166,10 +166,19 @@
   min-width: 0;
 }
 
-.data-row-status span:last-child {
+/* 状态文案可能很长（含"请去资源管理器输密码"），单行省略 + title 看全文 */
+.data-row-message {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+
+/* 「打开共享」按需出现：只在读不通的行上渲染，这里保证它不被文本挤掉 */
+.data-row-action {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 10.5px;
 }
 
 .data-row-value {
@@ -182,6 +191,12 @@
 .data-row[data-state='network'] .data-row-status {
   color: var(--red-11);
   font-weight: 600;
+}
+
+/* 未认证 / 无权限：不是红色（网是通的），用琥珀色区别于"目录不存在" */
+.data-row[data-state='auth'] .data-row-status,
+.data-row[data-state='denied'] .data-row-status {
+  color: var(--amber-11);
 }
 
 .callout-stack {

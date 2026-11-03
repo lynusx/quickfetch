@@ -13,6 +13,7 @@ import { Panel, PanelBody, PanelHeader } from '@/components/panel'
 import { ScanStatusBadge } from './scan-status-badge'
 import { ScanTaskPanel } from './scan-task-panel'
 import { useHistoryRestore } from '../hooks/useHistoryRestore'
+import { useResetOnParamChange } from '../hooks/useResetOnParamChange'
 import { useScanTask } from '../hooks/useScanTask'
 import { useToast } from '@/hooks/useToast'
 import { scanStoreOf } from '../stores/scanStore'
@@ -36,6 +37,11 @@ interface PlantScanPageProps {
   ready: boolean
   missing?: string[]
   getParams: () => Omit<ScanTaskParams, 'category'>
+  /**
+   * 当前扫描范围的指纹。任一项变化就收起上一轮的结果，
+   * 避免"切了日期，右边还挂着上一次的结论"。
+   */
+  filterSignature: string
   picker: ReactNode
   filterPanel: ReactNode
 }
@@ -50,11 +56,14 @@ const PlantScanPage = ({
   ready,
   missing,
   getParams,
+  filterSignature,
   picker,
   filterPanel,
 }: PlantScanPageProps) => {
   const { showToast } = useToast()
   const store = scanStoreOf(category)
+
+  useResetOnParamChange(category, filterSignature)
 
   const {
     task,

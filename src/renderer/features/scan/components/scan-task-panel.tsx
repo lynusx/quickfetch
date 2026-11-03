@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useCallback, type ReactNode } from 'react'
 import {
   ActivityLogIcon,
   ExclamationTriangleIcon,
@@ -23,9 +23,15 @@ import {
 
 import { Panel, PanelBody, PanelHeader } from '@/components/panel'
 import { Stat, StatGrid } from '@/components/stat'
+import { useToast } from '@/hooks/useToast'
 import type { ScanBranch, ScanTask } from '@shared/ipc'
 import { formatDuration, formatEta } from '@/utils/common'
-import { SCAN_STATUS_META, branchState } from './scanStatus'
+import {
+  SCAN_STATUS_META,
+  branchState,
+  inaccessibleKindOf,
+  shareUrlOf,
+} from './scanStatus'
 import { ScanStatusBadge } from './scan-status-badge'
 
 const PHASE_LABEL: Record<string, string> = {
@@ -97,12 +103,47 @@ export const ScanTaskPanel = ({
 }: ScanTaskPanelProps) => {
   const status = task ? SCAN_STATUS_META[task.status] : null
   const branches = task?.branches ?? []
+  const { showToast } = useToast()
+
+  /**
+   * 交给系统资源管理器打开共享。
+   *
+   * 未认证时 Windows 会在这一步弹凭据框，用户输入一次并勾上
+   * 「记住我的凭据」后，本应用后续读取就通了 —— 比在应用里再造一个
+   * 账号密码表单安全得多，也不会绕开系统的凭据管理。
+   */
+  const openShare = useCallback(
+    async (target: string): Promise<void> => {
+      const failure = await window.electronAPI.openShare(target)
+
+      if (failure) {
+        showToast('打开共享失败', failure, 'error')
+        return
+      }
+
+      showToast(
+        '已打开共享',
+        '若弹出凭据框，请输入账号密码并勾选「记住我的凭据」，然后重新扫描',
+        'info',
+      )
+    },
+    [showToast],
+  )
   const abnormal = branches.filter(
     (branch) => branch.status !== 'hit' && branch.status !== 'empty',
   )
-  const unreachable = branches.filter(
-    (branch) => branch.unreachableReason === 'network',
-  ).length
+  // 按「下一步该做什么」分类统计。以前只统计 unreachableReason === 'network'，
+  // 现场 23 台失败只显示「不可达 3 台」，剩下 20 台去哪了没人知道。
+  const inaccessible = branches.reduce(
+    (acc, branch) => {
+      const kind = inaccessibleKindOf(branch)
+      if (kind) acc[kind] += 1
+      return acc
+    },
+    { network: 0, auth: 0, denied: 0 },
+  )
+  const hasInaccessible =
+    inaccessible.network + inaccessible.auth + inaccessible.denied > 0
   const eta =
     task && task.status === 'running' ? formatEta(task.progress.etaMs) : null
 
@@ -205,10 +246,24 @@ export const ScanTaskPanel = ({
                   剩余 {eta}
                 </Text>
               ) : null}
-              {unreachable > 0 ? (
-                <Text as="span" size="1" color="red">
-                  不可达 {unreachable} 台
-                </Text>
+              {hasInaccessible ? (
+                <Flex as="span" align="center" gap="2" wrap="wrap">
+                  {inaccessible.network > 0 ? (
+                    <Text as="span" size="1" color="red">
+                      不可达 {inaccessible.network} 台
+                    </Text>
+                  ) : null}
+                  {inaccessible.auth > 0 ? (
+                    <Text as="span" size="1" color="amber">
+                      未认证 {inaccessible.auth} 台
+                    </Text>
+                  ) : null}
+                  {inaccessible.denied > 0 ? (
+                    <Text as="span" size="1" color="amber">
+                      无权限 {inaccessible.denied} 台
+                    </Text>
+                  ) : null}
+                </Flex>
               ) : null}
             </Flex>
 
@@ -368,16 +423,15 @@ export const ScanTaskPanel = ({
                 </Grid>
                 {branches.map((branch) => {
                   const tone = branchState(branch)
+                  const kind = inaccessibleKindOf(branch)
+                  // 只有"读不通"才需要去认证；网络不通、没有目录点了也没用
+                  const share = kind ? shareUrlOf(branch) : null
 
                   return (
                     <Grid
                       className="data-row"
                       key={branch.machine}
-                      data-state={
-                        branch.unreachableReason === 'network'
-                          ? 'network'
-                          : undefined
-                      }
+                      data-state={kind ?? undefined}
                     >
                       <Text
                         as="span"
@@ -392,16 +446,31 @@ export const ScanTaskPanel = ({
                         className="data-row-status"
                         align="center"
                         gap="1"
-                        title={branchText(branch)}
+                        title={
+                          branch.detail
+                            ? `${branchText(branch)}\n${branch.detail}`
+                            : branchText(branch)
+                        }
                       >
                         <Box
                           as="span"
                           className="status-dot"
                           data-tone={DOT_TONE[tone] || undefined}
                         />
-                        <Text as="span" size="1">
+                        <Text as="span" size="1" className="data-row-message">
                           {branchText(branch)}
                         </Text>
+                        {share ? (
+                          <Button
+                            size="1"
+                            variant="ghost"
+                            color="amber"
+                            className="data-row-action"
+                            onClick={() => void openShare(share)}
+                          >
+                            打开共享
+                          </Button>
+                        ) : null}
                       </Flex>
                       <Text
                         as="span"

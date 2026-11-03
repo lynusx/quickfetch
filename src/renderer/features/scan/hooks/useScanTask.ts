@@ -7,6 +7,7 @@ import type {
   ScanTaskStatus,
 } from '@shared/ipc'
 import { SCAN_CATEGORY_LABEL } from '@shared/ipc'
+import { NETWORK_HINT } from '@shared/networkHint'
 import { copyStoreOf } from '@/features/copy'
 import {
   scanStoreOf,
@@ -18,12 +19,17 @@ import {
 import { formatDuration } from '@/utils/common'
 import { toErrorMessage } from '@/utils/error'
 
-/** 断网自动暂停时的提示，各类网络环境不同，说法也不一样 */
-const NETWORK_HINT: Record<ScanCategory, string> = {
-  el: '共享盘连接中断，任务已暂停，恢复连接后点击继续',
-  lxt: '连不上机台，请确认已接入力禧特专用内网后点击继续',
-  pl: '连不上机台，请确认已接入利珀专用内网后点击继续',
-  aoi: '连不上机台，请确认已接入森标 AOI 专用内网后点击继续',
+/**
+ * 断网自动暂停时的提示，各类网络环境不同，说法也不一样。
+ *
+ * 但"该连哪张网"这件事只有一份答案：四类机台都在 JA-PDA 上。
+ * 所以具体网名统一从 NETWORK_HINT 取，这里只补当前这一类的上下文。
+ */
+const NETWORK_HINT_OF: Record<ScanCategory, string> = {
+  el: `共享盘连接中断，任务已暂停。${NETWORK_HINT}`,
+  lxt: `连不上力禧特机台，任务已暂停。${NETWORK_HINT}`,
+  pl: `连不上利珀机台，任务已暂停。${NETWORK_HINT}`,
+  aoi: `连不上森标 AOI 机台，任务已暂停。${NETWORK_HINT}`,
 }
 
 interface UseScanTaskProps {
@@ -106,7 +112,7 @@ export const useScanTask = ({
         } else if (next.status === 'failed' && next.error) {
           toastRef.current('扫描失败', next.error, 'error')
         } else if (next.status === 'paused' && next.pauseReason === 'network') {
-          toastRef.current('网络不通', NETWORK_HINT[category], 'error')
+          toastRef.current('网络不通', NETWORK_HINT_OF[category], 'error')
         }
       }
 

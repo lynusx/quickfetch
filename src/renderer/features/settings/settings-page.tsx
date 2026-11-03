@@ -48,7 +48,7 @@ const LAYOUT_SAMPLE: Record<CopyLayout, string> = {
 
 const CONFLICT_HINT: Record<CopyConflictPolicy, string> = {
   rename: '目标占用的名字自动编号，一张不少',
-  skip: '有同名就整组不复制',
+  skip: '只有同名的那一张跳过，其余照常复制',
   overwrite: '顶掉目标文件，无法撤销',
 }
 

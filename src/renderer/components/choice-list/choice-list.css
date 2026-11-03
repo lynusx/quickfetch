@@ -75,3 +75,46 @@
   color: var(--gray-9);
   font-variant-numeric: tabular-nums;
 }
+
+/**
+ * 机台行尾的共享探测徽标。
+ *
+ * 三态必须能一眼分开，所以用颜色而不是文字位置：
+ * 灰=未探测、蓝=已探到、红=探过但没有。
+ */
+.machine-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+.share-badge {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 1px 5px;
+  border-radius: var(--radius-1);
+  font-size: 9.5px;
+  line-height: 1.5;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 84px;
+}
+
+.share-badge[data-tone='muted'] {
+  color: var(--gray-9);
+  background: var(--gray-a3);
+}
+
+.share-badge[data-tone='ready'] {
+  color: var(--accent-11);
+  background: var(--accent-a3);
+}
+
+.share-badge[data-tone='missing'] {
+  color: var(--red-11);
+  background: var(--red-a3);
+}
