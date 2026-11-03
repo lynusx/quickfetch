@@ -10,10 +10,12 @@ import type {
   AppSettings,
   LxtMachine,
   LxtSettings,
+  LxtShare,
   MachineInfo,
   Plant,
   PlMachine,
   PlSettings,
+  ShareState,
 } from '../../../shared/ipc'
 
 import {
@@ -121,11 +123,18 @@ export const normalizePreferences = (
   }
 }
 
-/** 只认 el / SaveImages，认不出就当没探过，下次扫描补探 */
-const normalizeShare = (value: unknown): LxtMachine['share'] =>
-  LXT_SHARES.includes(value as (typeof LXT_SHARES)[number])
-    ? (value as LxtMachine['share'])
-    : null
+/**
+ * 共享名三态归一化：
+ * - 'el' / 'SaveImages' → 原样
+ * - '' → 保留，表示"探过了，两边都没有"（不能折回 null，否则每次扫描重探一遍）
+ * - 其余（含 null / 老配置里没有该字段）→ null，表示未探测
+ */
+const normalizeShare = (value: unknown): ShareState<LxtShare> => {
+  if (value === '') return ''
+  if (LXT_SHARES.includes(value as LxtShare)) return value as LxtShare
+
+  return null
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
@@ -219,8 +228,13 @@ export const normalizePl = (raw: unknown): PlSettings => {
       name,
       key,
       host,
+      // 三态：null 未探测、'' 探过但没有、其余为标识目录名
       share:
-        typeof item.share === 'string' && item.share.trim() ? item.share : null,
+        item.share === ''
+          ? ''
+          : typeof item.share === 'string' && item.share.trim()
+            ? item.share
+            : null,
       stale: item.stale === true,
     })
   }
@@ -546,7 +560,7 @@ export const updateLxt = (
  */
 export const rememberLxtShare = async (
   key: string,
-  share: LxtSettings['machines'][number]['share'],
+  share: ShareState<LxtShare>,
   host: string,
 ): Promise<void> => {
   try {
@@ -610,7 +624,7 @@ export const updateAoi = (
  */
 export const rememberPlShare = async (
   key: string,
-  share: string | null,
+  share: ShareState,
   host: string,
 ): Promise<void> => {
   try {

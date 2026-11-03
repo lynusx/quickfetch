@@ -11,15 +11,15 @@ import type {
 } from '../../../shared/ipc'
 
 import { PL_LEVELS } from '../../../shared/ipc'
+import { AUTH_HINT, NETWORK_HINT } from '../../../shared/networkHint'
 import { timeoutForConcurrency, createAdaptiveGate } from '../../utils/adaptive'
 import type { AdaptiveGate } from '../../utils/adaptive'
 import { isNetworkError, readDirSafe } from './fsx'
 import type { DirReadResult } from './fsx'
+import { isImageFile } from './imageFiles'
 import { createLimiter } from './limiter'
 import type { Limiter } from './limiter'
 import type { MachineResolver, PathShape } from './resolver'
-
-const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif'])
 
 /**
  * 并发上限的默认值，按现场机器（8G 内存 + 256G 盘）定的保守档：
@@ -76,11 +76,6 @@ const timeoutFor = (concurrency: number): number =>
     MAX_TIMEOUT_MS,
   )
 
-const isImageFile = (name: string): boolean => {
-  const dot = name.lastIndexOf('.')
-  return dot > 0 && IMAGE_EXTENSIONS.has(name.slice(dot).toLowerCase())
-}
-
 /** 期望值过长时截断，避免提示文案撑满面板 */
 const summarize = (values: string[], max = 6): string =>
   values.length === 0
@@ -88,6 +83,21 @@ const summarize = (values: string[], max = 6): string =>
     : values.length > max
       ? `${values.slice(0, max).join('、')} 等 ${values.length} 项`
       : values.join('、')
+
+/**
+ * 「类型目录在、但里面没有图片」的提示。
+ *
+ * 现场第一版写的是「已匹配 0 个目录，共 0 张」，两个数字都是 0，
+ * 看不出到底是目录没找到还是目录空。这里的 checked 是「查过几个所选类型目录」，
+ * 并附上实际探测到的类型，用户一眼就能判断该去翻哪里。
+ */
+const noImageMessage = (checked: number, available: string[]): string => {
+  const actual = available.length ? `，实际存在：${summarize(available)}` : ''
+
+  return checked
+    ? `所选类型目录存在，但里面没有图片文件：已检查 ${checked} 个目录，一张图都没有${actual}`
+    : `所选类型目录存在，但里面没有图片文件${actual}`
+}
 
 const abortError = (): Error => {
   const error = new Error('任务已取消')
@@ -732,6 +742,12 @@ export class ScanTaskRunner {
       branch.message = seen.size
         ? `该班次下没有所选类型，实际存在：${summarize(typeDirs)}`
         : '该班次下没有类型目录'
+    } else {
+      // 类型目录确实找到了，只是还没读文件明细。
+      // 这里必须把 brokenAt 标成「未命中」，否则下面 collectDetails 的兜底
+      // 会把这一格留在「类型」上，界面显示成"没有所选类型"——
+      // 现场看到的"明明有色斑B- 却说没有这个类型"就是这么来的。
+      branch.brokenAt = '未命中'
     }
 
     this.touch(shiftDir, true)
@@ -782,11 +798,22 @@ export class ScanTaskRunner {
       if (branch.status === 'missing' || branch.status === 'unreachable')
         continue
 
+      // 走到这里说明类型目录找到了、但逐目录读下来一张图都没有。
+      // 必须改写文案而不是沿用旧 message：探测阶段留下的「没有所选类型」
+      // 在这一步已经确定是错的（类型明明存在），留着就是误导。
+      //
+      // 数字要写人话：第一版写成「已匹配 0 个目录，共 0 张」，现场反馈
+      // 看了不知道是"目录没找到"还是"目录空"。但这里读的是文件、不是目录，
+      // 「检查了几个目录」得回探测阶段的 availableTypes 里算，不能拿
+      // matchedDirs（有图才算，这里必然为 0）。
       branch.status = 'empty'
-      branch.brokenAt = branch.brokenAt ?? '类型'
-      branch.message =
-        branch.message ??
-        `${this.slotless ? '该班次' : '所选时段'}存在，但没有读到图片，实际存在：${summarize(branch.availableTypes ?? [])}`
+      branch.brokenAt = '未命中'
+      branch.message = noImageMessage(
+        this.params.types.filter((type) =>
+          branch.availableTypes?.includes(type),
+        ).length,
+        branch.availableTypes ?? [],
+      )
     }
   }
 
@@ -910,27 +937,34 @@ export class ScanTaskRunner {
     this.progress.dirsSkipped += skipped
 
     branch.brokenAt = brokenAt
-    branch.status = result.status === 'unreachable' ? 'unreachable' : 'missing'
+
+    // 原始报错单独存：现场要的是「哪台机器什么错」，而文案要的是人话。
+    // 以前把 result.error 首行直接拼进 message，界面上就是
+    // 「UNKNOWN: unknown error, scandir '\\10.108.8.203\SaveImages\'」——
+    // 用户看完不知道这是没认证还是没这个目录。
+    const raw = result.code ?? result.error?.split('\n')[0]?.trim()
+    if (raw) branch.detail = raw
 
     if (result.status === 'unreachable') {
+      branch.status = 'unreachable'
       branch.unreachableReason = 'network'
-      // 带上原始错误码：现场报「明明能打开」时，ETIMEDOUT 和 EHOSTUNREACH
-      // 的处理方向完全不同，少了这行只能靠猜
-      branch.message = `「${where}」不可达，请检查网络连接${
-        result.code ? `（${result.code}）` : ''
-      }`
+      branch.message = `「${where}」不可达（${raw ?? '网络超时'}），${NETWORK_HINT}`
     } else if (result.status === 'denied') {
+      branch.status = 'unreachable'
       branch.unreachableReason = 'denied'
-      branch.message = `没有读取「${where}」的权限`
+      branch.message = `没有读取「${where}」的权限，请联系 IT 开通该共享的读权限`
+    } else if (result.status === 'unreadable') {
+      // 未认证在 Windows 上就是这个样子：码是 UNKNOWN，没有更细的信息。
+      // 与其猜成「目录不存在」，不如直接说清楚要做什么。
+      branch.status = 'unreachable'
+      branch.unreachableReason = 'auth'
+      branch.message = `「${where}」读取失败，多半是未认证：${AUTH_HINT}，然后重新扫描`
     } else if (detail) {
+      branch.status = 'missing'
       branch.message = `「${where}」下没有「${detail.expected}」，实际存在：${summarize(detail.actual)}`
     } else {
-      // UNKNOWN 这类错误码本身没有信息量，把系统返回的原始信息带出来，
-      // 现场才能区分是目录不存在、权限问题还是 SMB 瞬时故障
-      const failure = result.error?.split('\n')[0]?.trim() || result.code
-      branch.message = failure
-        ? `「${where}」不可访问：${failure}`
-        : `「${where}」不可访问`
+      branch.status = 'missing'
+      branch.message = `「${where}」不存在`
     }
 
     this.probedMachines += 1

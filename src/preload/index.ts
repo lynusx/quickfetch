@@ -98,6 +98,11 @@ const api: ElectronAPI = {
 
   revealCopyTarget: (targetDir) => ipcRenderer.invoke('copy:reveal', targetDir),
 
+  openShare: (path) => ipcRenderer.invoke('share:open', path),
+
+  reprobeShares: (category, keys) =>
+    ipcRenderer.invoke('share:reprobe', category, keys),
+
   saveExcel: (params) => ipcRenderer.invoke('fs:save-excel', params),
 }
 

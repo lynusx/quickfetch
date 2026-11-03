@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 
-import type { LxtShare, ScanCategory } from '../../../shared/ipc'
+import type { LxtShare, ScanCategory, ShareState } from '../../../shared/ipc'
 
 import {
   AOI_SHARE,
@@ -10,6 +10,7 @@ import {
 } from '../../../shared/ipc'
 import { pickPlShare } from '../discovery/pl'
 import { splitMachine } from '../discovery/shortcuts'
+import { AUTH_HINT, NETWORK_HINT } from '../../../shared/networkHint'
 import { readDirSafe } from './fsx'
 import type { DirReadResult } from './fsx'
 
@@ -31,11 +32,12 @@ export interface ResolveResult {
   brokenAt?: 'EL' | '共享名' | '机台标识'
   /**
    * 网络层面的不可达原因：
-   * - network：主机不通，多半是没接专用内网
+   * - network：主机不通，多半是没连 JA-PDA
+   * - auth：读得到主机但读不到共享，多半是没认证
    * - share：主机通了但这台机器上没有可用的共享名
    * - denied：没有访问权限
    */
-  unreachable?: 'network' | 'share' | 'denied'
+  unreachable?: 'network' | 'share' | 'denied' | 'auth'
 }
 
 /**
@@ -103,16 +105,44 @@ export const createElResolver = (
 
     if (result.status === 'ok') return { ok: true, base, reason: '' }
 
+    // 三种失败方向完全不同：没连网、没认证、目录真的不在。
+    // 以前后两种都走同一个「不可用」，现场分不清该去连网还是去认证。
+    if (result.status === 'unreachable') {
+      return {
+        ok: false,
+        base: '',
+        reason: `「${machine}」不可达，${NETWORK_HINT}`,
+        brokenAt: 'EL',
+        unreachable: 'network',
+      }
+    }
+
+    if (result.status === 'unreadable') {
+      return {
+        ok: false,
+        base: '',
+        reason: `「${base}」读取失败，多半是未认证：${AUTH_HINT}`,
+        brokenAt: 'EL',
+        unreachable: 'auth',
+      }
+    }
+
+    if (result.status === 'denied') {
+      return {
+        ok: false,
+        base: '',
+        reason: `没有读取「${machine}/${entry}」的权限，请联系 IT 开通`,
+        brokenAt: 'EL',
+        unreachable: 'denied',
+      }
+    }
+
     return {
       ok: false,
       base: '',
-      reason:
-        result.status === 'unreachable'
-          ? `「${machine}」不可达，请检查共享盘连接`
-          : `「${machine}/${entry}」不可用`,
+      reason: `「${machine}/${entry}」不存在`,
       // EL 的路径结构由机台目录决定，共享名缺失就是 EL 目录缺失
       brokenAt: 'EL',
-      unreachable: result.status === 'unreachable' ? 'network' : undefined,
     }
   },
   // 机台/EL/日期/班次/时段/类型/x.jpg
@@ -122,12 +152,15 @@ export const createElResolver = (
 export interface LxtResolverOptions {
   /** 机台复合键 → 入口里解析出的目标主机 */
   hosts: Map<string, string>
-  /** 已缓存的共享名；null 表示尚未确定，成功探测或确认失效时通过 onShare 回写 */
-  shares: Map<string, LxtShare | null>
+  /**
+   * 已缓存的共享名。三态：null 未探测、'' 探过但两边都没有、其余为名字。
+   * 探测结果（包括空串）通过 onShare 回写配置。
+   */
+  shares: Map<string, ShareState<LxtShare>>
   /** 本次扫描日期 YYYYMMDD，用于比较 A-01-B 下的日期目录 */
   date: string
-  /** 共享名发生变化（包括清空为 null）时回写配置 */
-  onShare: (machine: string, share: LxtShare | null, host: string) => void
+  /** 共享名发生变化（包括清空）时回写配置 */
+  onShare: (machine: string, share: ShareState<LxtShare>, host: string) => void
 }
 
 /** 力禧特：每台机器一个 IP，第二层的共享名逐台探测 */
@@ -182,6 +215,8 @@ const parseLxtDate = (value: string): number | null => {
 interface LxtCandidate {
   share: LxtShare
   status: DirReadResult['status']
+  /** 共享根 \\host\share 单独一次的读取状态；它才是判「没认证」的依据 */
+  rootStatus: DirReadResult['status']
   /** 是否包含本次扫描日期 */
   hasTaskDate: boolean
   /** 是否在任务日期往前 30 天内有数据 */
@@ -189,17 +224,27 @@ interface LxtCandidate {
 }
 
 /**
- * 读一次 `\\host\<share>\A-01-B`。
+ * 读一次 `\\host\<share>\A-01-B`，先验共享根再验固定层。
  *
- * 共享根存在不代表路径可用：现场出现过 SaveImages 根可读、A-01-B 不存在，
- * 而 el 下正常的情况。这里直接读固定层，读到的子目录就是日期。
+ * 分两步的必要性：直接读 `\\host\share\A-01-B` 时，共享根本没认证、
+ * 路径不存在、网络断这三种情况全都报同一个错，代码没办法区分，
+ * 于是把「没认证」说成了「这台机器上没有 A-01-B 目录」——
+ * 现场拿着这句话去翻目录，当然翻不到问题。
+ *
+ * 先读共享根，就能把「共享这一层就没读通」和「共享通了但没有 A-01-B」
+ * 分开说，前者引导去认证，后者才是真的目录缺失。
  */
 const readLxtCandidate = async (
   host: string,
   share: LxtShare,
   taskDate: string,
 ): Promise<LxtCandidate> => {
-  const result = await probeRead(join(host, share, LXT_FIXED_DIR))
+  const root = await probeRead(join(host, share))
+  const result =
+    root.status === 'ok'
+      ? await probeRead(join(host, share, LXT_FIXED_DIR))
+      : { ...root, dirs: [] as string[] }
+
   const dates =
     result.status === 'ok'
       ? result.dirs.filter((name) => LXT_DATE_DIR.test(name))
@@ -218,6 +263,7 @@ const readLxtCandidate = async (
   return {
     share,
     status: result.status,
+    rootStatus: root.status,
     hasTaskDate: dates.includes(taskDate),
     hasRecentDate,
   }
@@ -244,38 +290,110 @@ const pickLxtShare = (candidates: LxtCandidate[]): LxtShare | null => {
   return 'SaveImages'
 }
 
-/** 没有可用候选时，按网络 / 权限 / 路径缺失的优先级给出可读原因 */
+/**
+ * 单独探一台力禧特机台的共享名，供"重新探测共享"按钮使用。
+ *
+ * 与扫描里的调用同一个函数，保证手动重探与自动探测的判定完全一致 ——
+ * 两套逻辑各写一遍迟早会分叉，那时用户点按钮得到的结果和扫描对不上。
+ *
+ * 返回 null 表示两个候选都不可用（保留给界面提示"无共享"）。
+ */
+export const probeLxtShare = async (
+  host: string,
+  date: string,
+): Promise<LxtShare | null> => {
+  const candidates = await Promise.all(
+    LXT_SHARES.map((share) => readLxtCandidate(host, share, date)),
+  )
+
+  return pickLxtShare(candidates)
+}
+
+/**
+ * 单独探一台利珀机台的标识目录。
+ *
+ * 与 probePlCandidates 走同一套候选与挑选规则；cached 传 null 表示
+ * 完全重探，不拿旧值参与平局判断。
+ */
+export const probePlShare = async (
+  host: string,
+  machineName: string,
+  plant: string,
+  date: string,
+): Promise<string | null> => {
+  const names = plShareCandidates(machineName, plant)
+  const probed = await Promise.all(
+    names.map((name, index) => readPlCandidate(host, name, date, index)),
+  )
+
+  const picked = pickPlCandidate(probed)
+  if (picked) return picked
+
+  // 名字都没猜中时列一次主机根，兼容现场改过名的标识目录
+  const listing = await probeRead(host)
+
+  if (listing.status !== 'ok') return null
+
+  const fallback = pickPlShare(listing.dirs, machineName)
+  if (!fallback) return null
+
+  const candidate = await readPlCandidate(host, fallback, date, probed.length)
+
+  return candidate.status === 'ok' ? fallback : null
+}
+
+/**
+ * 没有可用候选时给出可读原因。
+ *
+ * 顺序按「问题出在哪一层」排，越靠近主机越优先：
+ * 主机不通 → 共享没认证/没权限 → 共享通了但没有 A-01-B。
+ * 关键是最后一条只有在**共享根确实读通了**时才敢说，
+ * 否则就是拿猜测冒充结论。
+ */
 const lxtFailure = (
   host: string,
   candidates: LxtCandidate[],
-  cached?: LxtShare,
+  cached?: LxtShare | null,
 ): ResolveResult => {
-  if (candidates.some((item) => item.status === 'unreachable')) {
+  if (candidates.some((item) => item.rootStatus === 'unreachable')) {
     return {
       ok: false,
       base: '',
-      reason: `${host} 不可达，需要接入力禧特专用内网`,
+      reason: `${host} 不可达，${NETWORK_HINT}`,
       brokenAt: '共享名',
       unreachable: 'network',
     }
   }
 
-  if (candidates.some((item) => item.status === 'denied')) {
+  if (candidates.some((item) => item.rootStatus === 'unreadable')) {
     return {
       ok: false,
       base: '',
-      reason: `没有读取 ${host} 的权限`,
+      reason: `${host} 的共享读不通，多半是未认证：${AUTH_HINT}`,
+      brokenAt: '共享名',
+      unreachable: 'auth',
+    }
+  }
+
+  if (candidates.some((item) => item.rootStatus === 'denied')) {
+    return {
+      ok: false,
+      base: '',
+      reason: `没有读取 ${host} 共享的权限，请联系 IT 开通`,
       brokenAt: '共享名',
       unreachable: 'denied',
     }
   }
 
+  // 走到这里说明至少有一个共享根是通的，才有资格说「没有 A-01-B」
+  const tried = candidates.map((item) => item.share).join(' / ')
+
   return {
     ok: false,
     base: '',
     reason: cached
-      ? `缓存的共享名 ${cached} 已不可用，且没有找到 el / SaveImages 的 ${LXT_FIXED_DIR} 目录`
-      : `${host} 上 el 与 SaveImages 都没有 ${LXT_FIXED_DIR} 目录`,
+      ? `${host} 上缓存的共享名 ${cached} 已不可用，${tried} 下都没有 ${LXT_FIXED_DIR} 目录`
+      : `${host} 上 ${tried} 都没有 ${LXT_FIXED_DIR} 目录`,
     brokenAt: '共享名',
     unreachable: 'share',
   }
@@ -293,7 +411,7 @@ export const createLxtResolver = (
   const persist = (
     machine: string,
     host: string,
-    share: LxtShare | null,
+    share: ShareState<LxtShare>,
   ): void => {
     options.shares.set(machine, share)
     options.onShare(machine, share, host)
@@ -318,6 +436,19 @@ export const createLxtResolver = (
 
       const cached = options.shares.get(machine) ?? null
 
+      // 已探过并确认两边都没有：不再重复探测。
+      // 以前空缓存会被当成"没探过"，46 台每次扫描都白等一轮超时，
+      // 结论却还是同一个 —— 现场的感受就是"每次都要卡好几分钟"。
+      if (cached === '') {
+        return {
+          ok: false,
+          base: '',
+          reason: `${host} 上 el 与 SaveImages 都没有 ${LXT_FIXED_DIR} 目录；若共享名近期改过，请点「重新探测共享」`,
+          brokenAt: '共享名',
+          unreachable: 'share',
+        }
+      }
+
       if (!cached) {
         const candidates = await Promise.all(
           LXT_SHARES.map((share) =>
@@ -325,8 +456,15 @@ export const createLxtResolver = (
           ),
         )
         const picked = pickLxtShare(candidates)
+        const failure = lxtFailure(host, candidates)
 
-        if (!picked) return lxtFailure(host, candidates)
+        if (!picked) {
+          // 只有"共享读通了但没有 A-01-B"这个结论才值得落盘；
+          // 没认证 / 断网只是暂时的，写死空串会让用户连好网后也扫不出来
+          if (failure.unreachable === 'share') persist(machine, host, '')
+
+          return failure
+        }
 
         persist(machine, host, picked)
         return ok(host, picked)
@@ -364,14 +502,18 @@ export const createLxtResolver = (
         return lxtFailure(host, [current, other], cached)
       }
 
-      // missing / denied / 其它路径错误：缓存确认失效，清空后重探另一边
       if (other.status === 'ok') {
         persist(machine, host, other.share)
         return ok(host, other.share)
       }
 
-      persist(machine, host, null)
-      return lxtFailure(host, [current, other], cached)
+      const failure = lxtFailure(host, [current, other], cached)
+
+      // 缓存确认失效：只有"两边都真的没有 A-01-B"才写成空串。
+      // 没认证时保持 null，下次扫描（认证之后）还会再探一次。
+      persist(machine, host, failure.unreachable === 'share' ? '' : cached)
+
+      return failure
     },
     // 厂区/机台/日期/班次/时段/类型/x.jpg
     // base 是 \\IP\share\A-01-B，路径上带不了厂区，只能从机台复合键里补
@@ -389,12 +531,14 @@ export const createLxtResolver = (
 export interface PlResolverOptions {
   /** 机台复合键 → 入口里解析出的目标主机 */
   hosts: Map<string, string>
-  /** 已缓存的标识目录；null 表示尚未确定，成功探测或确认失效时通过 onShare 回写 */
-  shares: Map<string, string | null>
+  /**
+   * 已缓存的标识目录。三态同力禧特：null 未探测、'' 探过但没有、其余为名字。
+   */
+  shares: Map<string, ShareState>
   /** 本次扫描日期 YYYYMMDD，用于比较 Matting 下的日期目录 */
   date: string
-  /** 标识目录发生变化（包括清空为 null）时回写配置 */
-  onShare: (machine: string, share: string | null, host: string) => void
+  /** 标识目录发生变化（包括清空）时回写配置 */
+  onShare: (machine: string, share: ShareState, host: string) => void
 }
 
 /**
@@ -448,6 +592,8 @@ interface PlCandidate {
   /** 候选优先级，越小越优先：缓存 0，候选名按 plShareCandidates 顺序，主机根兜底最后 */
   order: number
   status: DirReadResult['status']
+  /** 标识目录本身（不含 Matting）的读取状态，用来区分「没认证」与「没这个目录」 */
+  rootStatus: DirReadResult['status']
   hasTaskDate: boolean
   hasRecentDate: boolean
 }
@@ -459,7 +605,15 @@ const readPlCandidate = async (
   taskDate: string,
   order: number,
 ): Promise<PlCandidate> => {
-  const result = await probeRead(join(host, share, PL_FIXED.matting))
+  // 与力禧特同样的两步：先确认标识目录能进去，再看 Matting。
+  // 少了这一步，没认证的机器会被报成「没有匹配的标识目录」，
+  // 而那句话会让现场去改 .lnk，方向完全错了。
+  const root = await probeRead(join(host, share))
+  const result =
+    root.status === 'ok'
+      ? await probeRead(join(host, share, PL_FIXED.matting))
+      : { ...root, dirs: [] as string[] }
+
   const dates = result.status === 'ok' ? result.dirs : []
   const taskStamp = parsePlDate(taskDate)
   const floor = taskStamp === null ? null : taskStamp - PL_RECENT_DAYS * DAY_MS
@@ -477,6 +631,7 @@ const readPlCandidate = async (
     share,
     order,
     status: result.status,
+    rootStatus: root.status,
     hasTaskDate,
     hasRecentDate,
   }
@@ -531,7 +686,9 @@ const probePlCandidates = async (
     candidates.push(current)
     tried.push(cached)
 
-    // 缓存可用且含本次日期：固定使用，不再探测其他候选
+    // 缓存命中所选日期：直接采信，不再探测其他候选。
+    // 以前即使命中也要把所有候选跑一遍，46 台 × 4 个候选 = 184 次网络往返，
+    // 现场感受就是"扫描起步要等半分钟"。
     if (current.status === 'ok' && current.hasTaskDate) {
       return { candidates, tried, listingDirs, listingStatus }
     }
@@ -581,39 +738,52 @@ const probePlCandidates = async (
   return { candidates, tried, listingDirs, listingStatus }
 }
 
-/** 没有可用候选时，按网络 / 权限 / 路径缺失的优先级给出原因 */
+/** 没有可用候选时，按「主机 → 认证 → 权限 → 目录缺失」的层级给出原因 */
 const plFailure = (
   host: string,
   machineName: string,
   probe: PlProbeResult,
   cached: string | null,
 ): ResolveResult => {
+  const rootStates = probe.candidates.map((item) => item.rootStatus)
+
   if (
-    probe.candidates.some((item) => item.status === 'unreachable') ||
+    rootStates.includes('unreachable') ||
     probe.listingStatus === 'unreachable'
   ) {
     return {
       ok: false,
       base: '',
-      reason: `${host} 不可达，需要接入利珀专用内网`,
+      reason: `${host} 不可达，${NETWORK_HINT}`,
       brokenAt: '机台标识',
       unreachable: 'network',
     }
   }
 
   if (
-    probe.candidates.some((item) => item.status === 'denied') ||
-    probe.listingStatus === 'denied'
+    rootStates.includes('unreadable') ||
+    probe.listingStatus === 'unreadable'
   ) {
     return {
       ok: false,
       base: '',
-      reason: `没有读取 ${host} 的权限`,
+      reason: `${host} 的共享读不通，多半是未认证：${AUTH_HINT}`,
+      brokenAt: '机台标识',
+      unreachable: 'auth',
+    }
+  }
+
+  if (rootStates.includes('denied') || probe.listingStatus === 'denied') {
+    return {
+      ok: false,
+      base: '',
+      reason: `没有读取 ${host} 的权限，请联系 IT 开通`,
       brokenAt: '机台标识',
       unreachable: 'denied',
     }
   }
 
+  // 只有标识目录确实能进去、里面却没有 Matting 或日期时，才说「没找到」
   const tried = probe.tried.length ? `已试：${probe.tried.join('、')}；` : ''
   const actual = probe.listingDirs.length
     ? probe.listingDirs.slice(0, 6).join('、')
@@ -640,11 +810,7 @@ export const createPlResolver = (
     reason: '',
   })
 
-  const persist = (
-    machine: string,
-    host: string,
-    share: string | null,
-  ): void => {
+  const persist = (machine: string, host: string, share: ShareState): void => {
     options.shares.set(machine, share)
     options.onShare(machine, share, host)
   }
@@ -679,6 +845,19 @@ export const createPlResolver = (
 
       const [plant, name] = splitMachine(machine)
       const cached = options.shares.get(machine) ?? null
+
+      // 已探过并确认没有可用的标识目录：不再重探，只提示可能改名了。
+      // 真机 46 台里 4 台是这种情况，以前每次扫描都要为它们多等一轮。
+      if (cached === '') {
+        return {
+          ok: false,
+          base: '',
+          reason: `${host} 上没有找到与「${name}」匹配的标识目录；若目录近期改过名，请点「重新探测共享」`,
+          brokenAt: '机台标识',
+          unreachable: 'share',
+        }
+      }
+
       const probe = await probePlCandidates(
         host,
         name,
@@ -696,16 +875,21 @@ export const createPlResolver = (
         return ok(host, picked)
       }
 
-      // 缓存确认失效（missing/denied）且没有替代：清空为 null；
-      // 缓存只是暂时 unreachable 时保留，下次扫描重试
-      if (
+      const failure = plFailure(host, name, probe, cached)
+
+      // 只有"标识目录确实能进去、里面确实没有"才落盘空串；
+      // 暂时性的断网 / 未认证保持原值，下次扫描再试
+      if (failure.unreachable === 'share') {
+        persist(machine, host, '')
+      } else if (
         cachedResult &&
         (cachedResult.status === 'missing' || cachedResult.status === 'denied')
       ) {
+        // 缓存名已不存在，回退为"未探测"，下次按候选名重猜一遍
         persist(machine, host, null)
       }
 
-      return plFailure(host, name, probe, cached)
+      return failure
     },
     // 厂区/机台/日期/机台名/班次/时段/等级/类型/x.jpg
     // base 是 \\IP\{标识}\Matting，路径上带不了厂区，只能从机台复合键里补；

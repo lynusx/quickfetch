@@ -53,6 +53,19 @@ export const LXT_SHARES = ['el', 'SaveImages'] as const
 
 export type LxtShare = (typeof LXT_SHARES)[number]
 
+/**
+ * 第二层目录的探测状态，力禧特与利珀共用这套语义。
+ *
+ * - null：还没探过（新加的机台、或探测时没连上网）→ 下次扫描会再探
+ * - ''：探过了，这台机器上 el 与 SaveImages（利珀是标识目录）都没有 → 不再瞎探
+ * - 具体名字：探到了，直接用
+ *
+ * 三态分开的意义：以前 null 既表示"没探过"又表示"探不到"，
+ * 结果每次扫描都重探一遍 46 台，探不到的还是探不到，白等几分钟。
+ * 空串落盘就是「已经给过结论了」的标记。
+ */
+export type ShareState<T extends string = string> = T | '' | null
+
 /** 森标 AOI 第二层固定共享名，不需要逐台探测 */
 export const AOI_SHARE = 'SaveImages'
 
@@ -124,12 +137,14 @@ export interface LxtMachine {
   /** .lnk 解析出的目标，形如 \\10.108.8.220 */
   host: string
   /**
-   * 该机台实际使用的共享名。
+   * 该机台实际使用的共享名，三态：
+   * - null：尚未探测 → 首次扫描会探一次并落盘
+   * - ''：探过了，el 与 SaveImages 都没有 → 不再重复探
+   * - 'el' / 'SaveImages'：探到了，直接用
    *
-   * el 与 SaveImages 不同机台可能不一样，只能逐台探。null 表示尚未确定
-   * 或已确认不可用，下次扫描会重新探测；不要把它当成 SaveImages 默认值。
+   * 不要把它当成「null 就默认 SaveImages」。
    */
-  share: LxtShare | null
+  share: ShareState<LxtShare>
   /**
    * 入口里已找不到这个 .lnk。
    * 不直接删除，是因为历史记录和复制分组还引用着它。
@@ -187,10 +202,10 @@ export interface PlMachine {
   /** .lnk 解析出的目标，形如 \\10.108.9.153 */
   host: string
   /**
-   * 该机台实际使用的标识目录名，第一次扫描时按线别名探测并缓存。
-   * null 表示尚未确定或已确认不可用，下次扫描会重新探测。
+   * 该机台实际使用的标识目录名，三态同力禧特：
+   * null 未探测、'' 探过但没有、其余为目录名。
    */
-  share: string | null
+  share: ShareState
   /** 入口里已找不到这个 .lnk；不删除是因为历史记录与复制分组还引用着它 */
   stale: boolean
 }
@@ -296,11 +311,16 @@ export interface ScanBranch {
     | '时段'
     | '等级'
     | '类型'
+    /** 类型目录都找到了，但里面没图片文件 */
+    | '未命中'
   /**
    * 不可达的具体原因。仅 unreachable 时有值，界面按它给出不同提示：
-   * 接入专用内网、共享名变了、还是没权限。
+   * - network：网络不通（没连 JA-PDA）
+   * - auth：读不了，多半是没认证（Windows 只给 UNKNOWN，只能给方向）
+   * - denied：明确的权限拒绝
+   * - share：主机通了但没有可用的共享名 / 标识目录
    */
-  unreachableReason?: 'network' | 'share' | 'denied'
+  unreachableReason?: 'network' | 'share' | 'denied' | 'auth'
   /** 实际读到图片的类型目录数 */
   matchedDirs: number
   images: number
@@ -309,6 +329,11 @@ export interface ScanBranch {
   /** 该时段目录下真实存在的类型，用于提示「选了但目录里没有」；森标 AOI 即班次目录下的类型 */
   availableTypes?: string[]
   message?: string
+  /**
+   * 原始错误码 / 系统报错原文。
+   * message 是给人看的话，这里留着给现场排查（界面上折叠显示）。
+   */
+  detail?: string
 }
 
 export type ScanTaskStatus =
@@ -398,7 +423,11 @@ export type CopyStatus =
 /**
  * 目标目录已有同名文件时的策略。
  * rename 是默认：目标占着的名字自动编号让开，img.jpg → img1.jpg，
- * 同名的这一组一张不少全部落盘；skip 才会整组不写。
+ * 同名的这一组一张不少全部落盘。
+ *
+ * skip 只跳过「目标里已经有同名的那一张」，同组其余照常复制 ——
+ * 早些时候是整组跳过，9 张 img.jpg 遇到 1 张已存在就丢 8 张。
+ * overwrite 会顶掉目标文件。
  */
 export type CopyConflictPolicy = 'rename' | 'skip' | 'overwrite'
 
@@ -487,7 +516,12 @@ export interface CopyProgress {
   layout: CopyLayout
   /** 自动改名的数量（目标目录已有同名文件） */
   renamed: number
-  /** 因目标已存在而被跳过的数量（仅 skip 策略会产生） */
+  /**
+   * 因目标目录已有同名文件而被跳过的张数（仅 skip 策略会产生）。
+   * 这是正常结果：文件本来就在那儿，不是错误。
+   */
+  alreadyExists: number
+  /** 因源目录内部重名、当前策略又选跳过而放弃的张数 */
   skipped: number
   /** 重名策略 */
   conflict: CopyConflictPolicy
@@ -662,6 +696,25 @@ export interface ElectronAPI {
   ) => Promise<CopyTask | null>
   /** 在系统文件管理器里打开目标目录；失败时返回可读错误，成功返回 null */
   revealCopyTarget: (targetDir: string) => Promise<string | null>
+
+  /**
+   * 用资源管理器打开一个网络地址（如 \\10.108.8.203\SaveImages）。
+   *
+   * 未认证时这是唯一可靠的办法：Windows 会在打开时弹凭据框，
+   * 用户输入一次、勾上「记住我的凭据」之后，后续扫描就能直接读。
+   * 应用本身不代填密码 —— 那需要明文保管凭据，得不偿失。
+   * 返回 null 表示已交给系统，返回字符串表示失败原因。
+   */
+  openShare: (path: string) => Promise<string | null>
+
+  /**
+   * 强制重新探测力禧特 / 利珀机台的共享目录并写回配置。
+   * 不传 keys 表示重探全部未删除的机台；返回更新后的完整配置。
+   */
+  reprobeShares: (
+    category: 'lxt' | 'pl',
+    keys?: string[],
+  ) => Promise<AppSettings>
 
   /** 弹出另存为对话框并写入 xlsx；用户取消时返回 null */
   saveExcel: (params: {

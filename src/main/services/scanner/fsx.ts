@@ -3,8 +3,18 @@ import type { Dirent } from 'node:fs'
 
 import { toFsPath } from '../../utils/pathx'
 
-/** 目录读取结果：把「不存在」「无权限」「不可达」区分开，避免一律报「未找到」 */
-export type DirReadStatus = 'ok' | 'missing' | 'denied' | 'unreachable'
+/**
+ * 目录读取结果：把「不存在」「无权限」「不可达」「读不了」区分开，
+ * 避免一律报「未找到」。
+ *
+ * unreadable 是现场最常见也最容易被误判的一类：Windows 在凭据失败、
+ * 共享未挂载、SMB 会话异常时都只返回 `UNKNOWN: unknown error, scandir`，
+ * 拿不到 1326/5 这类具体码。它既不是「目录不存在」，也不该算断网，
+ * 所以单列一档 —— 界面据此提示「可能是未认证，先去资源管理器输一次密码」，
+ * 而不是让用户去翻一个根本不缺的目录。
+ */
+export type DirReadStatus =
+  'ok' | 'missing' | 'denied' | 'unreachable' | 'unreadable'
 
 export interface DirReadResult {
   status: DirReadStatus
@@ -72,10 +82,13 @@ const codeOf = (error: unknown): string | undefined =>
 /**
  * 错误码 → 状态。
  *
- * 只有明确列出的网络错误才算「不可达」。其余一律当「这个目录用不了」：
- * 断网的表现里，能让人误判成「路径不对」的极少，反过来把路径问题
- * 当成断网的却很常见（UNC 根不可枚举的 EINVAL 就是典型），
- * 一误判就会熔断整个任务并提示「请接专用内网」，比漏报难查得多。
+ * 只有明确列出的网络错误才算「不可达」。明确的路径错误算「不存在」，
+ * 明确的权限错误算「无权限」。剩下的未知码（现场最常见的
+ * `UNKNOWN: unknown error, scandir`）单独记为 unreadable。
+ *
+ * 以前未知码一律归 missing，结果是现场看到「目录不存在」就去翻目录，
+ * 实际上那台机器只是没认证 —— 结论错得很彻底。宁可承认「读不了，
+ * 原因待定」，也不要给一个看起来确定、实际是猜的答案。
  */
 const toStatus = (error: unknown): DirReadStatus => {
   const code = codeOf(error)
@@ -84,12 +97,22 @@ const toStatus = (error: unknown): DirReadStatus => {
   if (code === 'EACCES' || code === 'EPERM') return 'denied'
   if (code && NETWORK_CODES.has(code)) return 'unreachable'
 
-  return 'missing'
+  return 'unreadable'
 }
 
 /** 判断是否为「网络链路问题」而非「目录本身不存在」，用于断连熔断 */
 export const isNetworkError = (status: DirReadStatus): boolean =>
   status === 'unreachable'
+
+/**
+ * 判断是否「这台机器压根没读通」。
+ *
+ * 与 isNetworkError 的区别：unreadable 多半是没认证，接回网络解决不了，
+ * 所以不进断网熔断（否则整批没认证的机台会把任务暂停掉）。
+ * 但界面上它必须算「不可访问」，不能像 missing 那样混进「目录不存在」。
+ */
+export const isInaccessible = (status: DirReadStatus): boolean =>
+  status === 'unreachable' || status === 'denied' || status === 'unreadable'
 
 const compareName = (a: string, b: string): number =>
   a.localeCompare(b, 'zh-CN', { numeric: true })
@@ -161,7 +184,10 @@ export const readDirSafe = async (
     const elapsedMs = Date.now() - startedAt
 
     if (status !== 'missing') {
-      console.error(`读取目录 ${path} 失败:`, (error as Error)?.message)
+      console.error(
+        `读取目录 ${path} 失败（${status}）:`,
+        (error as Error)?.message,
+      )
     }
 
     // 尽力收回底层请求，减少超时任务在后台堆积

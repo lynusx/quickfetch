@@ -5,6 +5,7 @@ import type {
   LxtShare,
   ScanTask,
   ScanTaskParams,
+  ShareState,
 } from '../../shared/ipc'
 import {
   createAoiResolver,
@@ -66,7 +67,7 @@ const createLxtTask = (
   }
 
   const hosts = new Map(active.map((item) => [item.key, item.host]))
-  const shares = new Map<string, LxtShare | null>(
+  const shares = new Map<string, ShareState<LxtShare>>(
     active.map((item) => [item.key, item.share]),
   )
 
@@ -102,7 +103,7 @@ const createPlTask = (
   }
 
   const hosts = new Map(active.map((item) => [item.key, item.host]))
-  const shares = new Map<string, string | null>(
+  const shares = new Map<string, ShareState>(
     active.map((item) => [item.key, item.share]),
   )
 
