@@ -9,6 +9,7 @@ import { DEFAULT_ROUTE, ROUTES } from './paths'
 const ElScanPage = lazy(() => import('@/features/scan/pages/el-scan-page'))
 const LxtScanPage = lazy(() => import('@/features/scan/pages/lxt-scan-page'))
 const PlScanPage = lazy(() => import('@/features/scan/pages/pl-scan-page'))
+const AoiScanPage = lazy(() => import('@/features/scan/pages/aoi-scan-page'))
 const ExcelParsePage = lazy(() => import('@/features/excel/excel-parse-page'))
 const SettingsPage = lazy(() => import('@/features/settings/settings-page'))
 
@@ -30,6 +31,7 @@ export const AppRoutes = () => (
         <Route path={ROUTES.EL} element={<ElScanPage />} />
         <Route path={ROUTES.LXT_EL} element={<LxtScanPage />} />
         <Route path={ROUTES.LP_PL} element={<PlScanPage />} />
+        <Route path={ROUTES.AOI} element={<AoiScanPage />} />
         <Route path={ROUTES.EXCEL_PARSE} element={<ExcelParsePage />} />
         <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
 

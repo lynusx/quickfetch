@@ -32,19 +32,22 @@ const formatTime = (timestamp: number): string => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-/** 参数摘要：机台数量 + 日期/班次 + 时段/类型数量 */
+/** 参数摘要：机台数量 + 日期/班次 + 时段/类型数量（无时段类别只显示类型） */
 const summarize = (item: ScanHistoryItem): string => {
   const { machines, date, shift, slots, types } = item.params
   const day =
     date.length === 8
       ? `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6)}`
       : date
+  const scope = slots.length
+    ? `${slots.length} 时段 × ${types.length} 类型`
+    : `${types.length} 类型`
 
-  return `${machines.length} 台机台 · ${day} ${shift} · ${slots.length} 时段 × ${types.length} 类型`
+  return `${machines.length} 台机台 · ${day} ${shift} · ${scope}`
 }
 
 interface HistoryPanelProps {
-  /** 只列出这个类别的历史；三类扫描的结果互不混排 */
+  /** 只列出这个类别的历史；各类扫描的结果互不混排 */
   category: ScanCategory
   /** 载入某次历史任务，由页面负责把快照塞进 scanStore */
   onRestore: (item: ScanHistoryItem) => void

@@ -3,6 +3,8 @@ import { devtools } from 'zustand/middleware'
 
 import { DEFAULT_PREFERENCES } from '@shared/ipc'
 import type {
+  AoiSettings,
+  AoiSetupResult,
   AppPreferences,
   AppSettings,
   LxtSettings,
@@ -36,6 +38,10 @@ interface SettingsAction {
   setupPl: (entryRoot: string) => Promise<PlSetupResult | null>
   /** 按当前入口重新识别利珀机台 */
   refreshPl: () => Promise<PlSetupResult | null>
+  /** 设置森标 AOI 入口并解析其中的 .lnk */
+  setupAoi: (entryRoot: string) => Promise<AoiSetupResult | null>
+  /** 按当前入口重新识别森标 AOI 机台 */
+  refreshAoi: () => Promise<AoiSetupResult | null>
   clearError: () => void
 }
 
@@ -44,25 +50,46 @@ export const selectPreferences = (state: {
   settings: AppSettings | null
 }): AppPreferences => state.settings?.preferences ?? DEFAULT_PREFERENCES
 
+/**
+ * 各类入口配置的稳定空值。
+ *
+ * 必须用模块级常量：settings 为空时若每次返回一个新对象，
+ * useSyncExternalStore 会认为快照一直在变，直接在首屏触发无限更新。
+ */
+const EMPTY_LXT: LxtSettings = {
+  entryRoot: null,
+  machines: [],
+  skipped: [],
+  updatedAt: null,
+}
+
+const EMPTY_PL: PlSettings = {
+  entryRoot: null,
+  machines: [],
+  skipped: [],
+  updatedAt: null,
+}
+
+const EMPTY_AOI: AoiSettings = {
+  entryRoot: null,
+  machines: [],
+  skipped: [],
+  updatedAt: null,
+}
+
 /** 力禧特配置，未读回配置时给空值 */
 export const selectLxt = (state: {
   settings: AppSettings | null
-}): LxtSettings =>
-  state.settings?.lxt ?? {
-    entryRoot: null,
-    machines: [],
-    skipped: [],
-    updatedAt: null,
-  }
+}): LxtSettings => state.settings?.lxt ?? EMPTY_LXT
 
 /** 利珀配置，未读回配置时给空值 */
 export const selectPl = (state: { settings: AppSettings | null }): PlSettings =>
-  state.settings?.pl ?? {
-    entryRoot: null,
-    machines: [],
-    skipped: [],
-    updatedAt: null,
-  }
+  state.settings?.pl ?? EMPTY_PL
+
+/** 森标 AOI 配置，未读回配置时给空值 */
+export const selectAoi = (state: {
+  settings: AppSettings | null
+}): AoiSettings => state.settings?.aoi ?? EMPTY_AOI
 
 /** 被环境变量接管、设置页里改了也不生效的项 */
 export const selectEnvOverrides = (state: {
@@ -193,6 +220,34 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
       set({ saving: true, error: null })
       try {
         const result = await window.electronAPI.refreshPlMachines()
+        set({ settings: result.settings })
+        return result
+      } catch (error) {
+        set({ error: toErrorMessage(error, '重新识别入口失败') })
+        return null
+      } finally {
+        set({ saving: false })
+      }
+    },
+
+    setupAoi: async (entryRoot) => {
+      set({ saving: true, error: null })
+      try {
+        const result = await window.electronAPI.setupAoiRoot(entryRoot)
+        set({ settings: result.settings })
+        return result
+      } catch (error) {
+        set({ error: toErrorMessage(error, '识别森标 AOI 入口失败') })
+        return null
+      } finally {
+        set({ saving: false })
+      }
+    },
+
+    refreshAoi: async () => {
+      set({ saving: true, error: null })
+      try {
+        const result = await window.electronAPI.refreshAoiMachines()
         set({ settings: result.settings })
         return result
       } catch (error) {

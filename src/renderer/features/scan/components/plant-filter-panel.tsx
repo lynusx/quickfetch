@@ -36,6 +36,8 @@ interface PlantFilterPanelProps {
   onRemoveType: (type: string) => void
   levelOptions?: readonly string[]
   paddedSlots?: boolean
+  /** 是否渲染时段层；森标 AOI 的路径没有时段，传 false */
+  hasSlots?: boolean
   typePlaceholder: string
   typeExample: string
 }
@@ -47,6 +49,7 @@ const PlantFilterPanel = ({
   onRemoveType,
   levelOptions,
   paddedSlots = false,
+  hasSlots = true,
   typePlaceholder,
   typeExample,
 }: PlantFilterPanelProps) => {
@@ -82,7 +85,7 @@ const PlantFilterPanel = ({
   useEffect(() => {
     setDate(currentDate)
     setShift(currentShift)
-    setSlots(shapeSlot(currentSlots))
+    if (hasSlots) setSlots(shapeSlot(currentSlots))
     if (levelOptions?.length && levels.length === 0) {
       setLevels([...levelOptions])
     }
@@ -99,7 +102,7 @@ const PlantFilterPanel = ({
     if (!value) return
     const next = value as '白班' | '夜班'
     setShift(next)
-    setSlots(next === currentShift ? shapeSlot(currentSlots) : [])
+    if (hasSlots) setSlots(next === currentShift ? shapeSlot(currentSlots) : [])
   }
 
   const handleAddType = () => {
@@ -178,49 +181,51 @@ const PlantFilterPanel = ({
         </Flex>
       </Step>
 
-      <Step index={4} done={slots.length > 0}>
-        <Field
-          label="时段"
-          icon={<ClockIcon width={13} height={13} />}
-          count={`${slots.length}/${availableSlots.length}`}
-          actions={
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                color="gray"
-                size="1"
-                disabled={slots.length === 0}
-                onClick={() => setSlots([])}
-              >
-                清空
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                color="gray"
-                size="1"
-                onClick={() => setSlots(availableSlots)}
-              >
-                <CheckIcon width={13} height={13} />
-                全选
-              </Button>
-            </>
-          }
-        >
-          <ChoiceList
-            columns={3}
-            value={slots}
-            onValueChange={setSlots}
-            options={availableSlots.map((slot) => ({
-              value: slot,
-              label: slot,
-            }))}
-          />
-        </Field>
-      </Step>
+      {hasSlots ? (
+        <Step index={4} done={slots.length > 0}>
+          <Field
+            label="时段"
+            icon={<ClockIcon width={13} height={13} />}
+            count={`${slots.length}/${availableSlots.length}`}
+            actions={
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  color="gray"
+                  size="1"
+                  disabled={slots.length === 0}
+                  onClick={() => setSlots([])}
+                >
+                  清空
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  color="gray"
+                  size="1"
+                  onClick={() => setSlots(availableSlots)}
+                >
+                  <CheckIcon width={13} height={13} />
+                  全选
+                </Button>
+              </>
+            }
+          >
+            <ChoiceList
+              columns={3}
+              value={slots}
+              onValueChange={setSlots}
+              options={availableSlots.map((slot) => ({
+                value: slot,
+                label: slot,
+              }))}
+            />
+          </Field>
+        </Step>
+      ) : null}
 
-      <Step index={5} done={selectedTypes.length > 0}>
+      <Step index={hasSlots ? 5 : 4} done={selectedTypes.length > 0}>
         <Field
           label="类型"
           icon={<LayersIcon width={13} height={13} />}

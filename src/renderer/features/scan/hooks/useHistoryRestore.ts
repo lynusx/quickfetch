@@ -2,13 +2,30 @@ import { useCallback } from 'react'
 
 import { useToast } from '@/hooks/useToast'
 import { useImageFilterStore } from '../stores/imageFilterStore'
+import { useAoiFilterStore } from '../stores/aoiFilterStore'
 import { useLxtFilterStore } from '../stores/lxtFilterStore'
 import { usePlFilterStore } from '../stores/plFilterStore'
+import type { PlantFilterStore } from '../stores/plantFilterStore'
 import { copyStoreOf } from '@/features/copy'
 import { scanStoreOf } from '../stores/scanStore'
 import { useSettingsStore } from '@/features/settings'
 import type { Plant, ScanCategory, ScanHistoryItem } from '@shared/ipc'
 import { toErrorMessage } from '@/utils/error'
+
+/**
+ * 非 EL 类别各自的筛选 store。
+ *
+ * 用显式映射而不是「不是利珀就用力禧特」的回落：新增类别时漏写会直接报错，
+ * 不会把参数静默写进另一个类别的 store。
+ */
+const plantFilterStores: Record<
+  Exclude<ScanCategory, 'el'>,
+  PlantFilterStore
+> = {
+  lxt: useLxtFilterStore,
+  pl: usePlFilterStore,
+  aoi: useAoiFilterStore,
+}
 
 /**
  * 把历史参数回填到对应页面的筛选面板。
@@ -44,9 +61,7 @@ const fillFilters = (category: ScanCategory, item: ScanHistoryItem): void => {
     return
   }
 
-  const filters = (
-    category === 'pl' ? usePlFilterStore : useLxtFilterStore
-  ).getState()
+  const filters = plantFilterStores[category].getState()
 
   // 复合键「厂区/机台」的第一段就是厂区。
   // 顺序不能反：setPlant 会清空已选机台，先选后切会把选中全冲掉。
@@ -57,7 +72,8 @@ const fillFilters = (category: ScanCategory, item: ScanHistoryItem): void => {
   filters.setSelectedMachines(picked)
   filters.setDate(date)
   filters.setShift(shift)
-  filters.setSlots(slots)
+  // 森标 AOI 没有时段层，历史里即使残留了值也不带回去
+  filters.setSlots(category === 'aoi' ? [] : slots)
   filters.setTypes(types)
 
   // 等级只有利珀有；力禧特的路径里没有这一层，传了也没意义
@@ -67,7 +83,7 @@ const fillFilters = (category: ScanCategory, item: ScanHistoryItem): void => {
 /**
  * 载入一条历史记录：还原参数、清掉上一轮的复制状态、替换当前任务快照。
  *
- * 三类扫描共用同一套动作，差别只在参数往哪个 store 回填。
+ * 各类扫描共用同一套动作，差别只在参数往哪个 store 回填。
  * 重启后当前任务快照是空的，历史就是唯一的入口，所以这个动作
  * 必须在每个扫描页都可用。
  */

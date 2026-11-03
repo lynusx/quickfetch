@@ -26,6 +26,10 @@ const api: ElectronAPI = {
 
   refreshPlMachines: () => ipcRenderer.invoke('pl:refresh'),
 
+  setupAoiRoot: (entryRoot) => ipcRenderer.invoke('aoi:setup-root', entryRoot),
+
+  refreshAoiMachines: () => ipcRenderer.invoke('aoi:refresh'),
+
   createScanTask: (params) => ipcRenderer.invoke('scan:create', params),
 
   startScanTask: (taskId) => ipcRenderer.invoke('scan:start', taskId),

@@ -7,6 +7,7 @@ import type {
   ScanTaskParams,
 } from '../../shared/ipc'
 import {
+  createAoiResolver,
   createElResolver,
   createLxtResolver,
   createPlResolver,
@@ -43,7 +44,8 @@ const validateParams = (params: ScanTaskParams): void => {
   if (!/^\d{8}$/.test(params.date)) {
     throw new Error('日期格式不正确，应为 YYYYMMDD')
   }
-  if (!params.slots.length) {
+  // 森标 AOI 的路径没有时段层，允许传空数组
+  if ((params.category ?? 'el') !== 'aoi' && !params.slots.length) {
     throw new Error('请至少选择一个时段')
   }
   if (!params.types.length) {
@@ -121,6 +123,32 @@ const createPlTask = (
   )
 }
 
+const createAoiTask = (
+  settings: AppSettings,
+  params: ScanTaskParams,
+): ScanTask => {
+  const active = settings.aoi.machines.filter((item) => !item.stale)
+  const known = new Set(active.map((item) => item.key))
+  const machines = params.machines.filter((key) => known.has(key))
+
+  if (!machines.length) {
+    throw new Error('所选机台已不在入口目录中，请点击「重新识别」刷新机台列表')
+  }
+
+  const hosts = new Map(active.map((item) => [item.key, item.host]))
+  const resolver: MachineResolver = createAoiResolver({ hosts })
+
+  return createTask(
+    // 森标 AOI 没有时段层，强制清空，避免调用方误传后多探一层目录
+    { ...params, category: 'aoi', machines, slots: [] },
+    {
+      category: 'aoi',
+      resolver,
+      load: loadFrom(settings.preferences),
+    },
+  )
+}
+
 export const registerScanIpc = (): void => {
   ipcMain.handle('scan:create', async (_event, params: ScanTaskParams) => {
     validateParams(params)
@@ -133,6 +161,10 @@ export const registerScanIpc = (): void => {
 
     if (category === 'pl') {
       return createPlTask(settings, params)
+    }
+
+    if (category === 'aoi') {
+      return createAoiTask(settings, params)
     }
 
     if (!settings.rootPath) {

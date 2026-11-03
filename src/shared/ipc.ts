@@ -36,19 +36,31 @@ export interface MachineInfo {
  * - lxt：每台机器一个 IP，入口是一堆 .lnk 快捷方式，第二层是 el / SaveImages
  * - pl：同样每台机器一个 IP、同样从 .lnk 取地址，但第二层是「机台标识」目录
  *   （名字不固定，按线别名探测），再往下多出机台名与 Fail/等级两层
+ * - aoi：同样每台机器一个 IP、同样从 .lnk 取地址，第二层固定 SaveImages，
+ *   再往下是日期 → 班次目录（8.5/20.5）→ 类型，没有时段与等级层
  */
-export type ScanCategory = 'el' | 'lxt' | 'pl'
+export type ScanCategory = 'el' | 'lxt' | 'pl' | 'aoi'
 
 export const SCAN_CATEGORY_LABEL: Record<ScanCategory, string> = {
   el: 'EL',
   lxt: '力禧特',
   pl: '利珀',
+  aoi: '森标 AOI',
 }
 
 /** 力禧特第二层的两个候选共享名，探测顺序即优先级 */
 export const LXT_SHARES = ['el', 'SaveImages'] as const
 
 export type LxtShare = (typeof LXT_SHARES)[number]
+
+/** 森标 AOI 第二层固定共享名，不需要逐台探测 */
+export const AOI_SHARE = 'SaveImages'
+
+/** 森标 AOI 班次目录映射；参数与历史里仍保存「白班/夜班」 */
+export const AOI_SHIFT_DIRS: Record<'白班' | '夜班', string> = {
+  白班: '8.5',
+  夜班: '20.5',
+}
 
 /** 利珀路径里两段固定目录名，写死在协议里，只有拼路径的地方用得到 */
 export const PL_FIXED = { matting: 'Matting', fail: 'Fail' } as const
@@ -90,6 +102,8 @@ export interface AppSettings {
   lxt: LxtSettings
   /** 利珀配置；未配置过时为默认空值 */
   pl: PlSettings
+  /** 森标 AOI 配置；未配置过时为默认空值 */
+  aoi: AoiSettings
   /**
    * 被环境变量接管的偏好项。
    *
@@ -154,6 +168,7 @@ export interface EntrySetupResult {
 
 export type LxtSetupResult = EntrySetupResult
 export type PlSetupResult = EntrySetupResult
+export type AoiSetupResult = EntrySetupResult
 
 /**
  * 利珀的一台机台：入口里的一个 .lnk 解析出来的结果。
@@ -190,6 +205,35 @@ export interface PlSettings {
   updatedAt: string | null
 }
 
+/** 森标 AOI 的一台机台：入口里的一个 .lnk 解析出来的结果 */
+export interface AoiMachine {
+  /** 厂区标签，取自入口目录下的子文件夹名，如 东区 */
+  plant: Plant
+  /** .lnk 文件名（去扩展名），如 1A正检、1A背检 */
+  name: string
+  /** 复合键「厂区/机台」；东西区都有同名线别，必须带厂区才唯一 */
+  key: string
+  /** .lnk 解析出的目标，形如 \\10.108.230.116 */
+  host: string
+  /**
+   * 森标 AOI 的第二层固定为 SaveImages，没有探测缓存。
+   * 保留该字段只是为了复用入口识别/合并逻辑，恒为 null。
+   */
+  share: null
+  /** 入口里已找不到这个 .lnk；不删除是因为历史记录与复制分组还引用着它 */
+  stale: boolean
+}
+
+export interface AoiSettings {
+  /** 森标 AOI 入口根目录，其下每个含 .lnk 的子文件夹算一个厂区 */
+  entryRoot: string | null
+  machines: AoiMachine[]
+  /** 最近一次识别时被跳过的 .lnk 清单，供界面展示 */
+  skipped: LxtSkippedLink[]
+  /** 最近一次识别时间，ISO 字符串 */
+  updatedAt: string | null
+}
+
 export interface ScanTaskParams {
   /** 选中的机台目录名，允许多选 */
   machines: string[]
@@ -201,9 +245,9 @@ export interface ScanTaskParams {
   /** YYYYMMDD，当前仅支持单日 */
   date: string
   shift: '白班' | '夜班'
-  /** 时段，个位数不补零，如 '8'、'19' */
+  /** 时段，个位数不补零，如 '8'、'19'；森标 AOI 没有时段层，传空数组 */
   slots: string[]
-  /** 不良类型目录名，如 NG_脏污_B */
+  /** 不良类型目录名，如 NG_脏污_B、色差 */
   types: string[]
   /**
    * 缺陷等级，仅利珀使用（路径里的 A/B/C 层）。
@@ -220,6 +264,7 @@ export interface ScannedImage {
    * - 力禧特：每台机器一个 IP，没有共同根，所以按「厂区/机台/日期/…」
    *   拼成展示路径
    * - 利珀：同理按「厂区/机台/日期/机台名/班次/时段/等级/类型」拼
+   * - 森标 AOI：按「厂区/机台/日期/8.5|20.5/类型」拼
    */
   path: string
   /** 真实绝对路径，仅用于主进程复制，不展示 */
@@ -228,15 +273,16 @@ export interface ScannedImage {
   /**
    * 机台标识，与 ScanBranch.machine 完全一致。
    *
-   * 复制时要按机台筛选/分组，而 path 的第 0 段对力禧特、利珀来说是厂区，
-   * 直接从 path 里切会切错；老历史记录没有这个字段，读出来时回落到第 0 段。
+   * 复制时要按机台筛选/分组，而 path 的第 0 段对力禧特、利珀、森标 AOI
+   * 来说是厂区，直接从 path 里切会切错；老历史记录没有这个字段，读出来时
+   * 回落到第 0 段。
    */
   machine?: string
 }
 
 /** 单个机台分支的执行结果，界面诊断面板的数据来源 */
 export interface ScanBranch {
-  /** 机台标识。EL 是机台目录名；力禧特、利珀是「厂区/机台」复合键 */
+  /** 机台标识。EL 是机台目录名；力禧特、利珀、森标 AOI 是「厂区/机台」复合键 */
   machine: string
   status: 'hit' | 'empty' | 'missing' | 'unreachable' | 'skipped'
   /** 断链发生在哪一层，用于精确提示 */
@@ -258,9 +304,9 @@ export interface ScanBranch {
   /** 实际读到图片的类型目录数 */
   matchedDirs: number
   images: number
-  /** 该班次目录下真实存在的时段，与勾选值取交集后才是扫描目标 */
+  /** 该班次目录下真实存在的时段，与勾选值取交集后才是扫描目标；森标 AOI 无此时段层 */
   availableSlots?: string[]
-  /** 该时段目录下真实存在的类型，用于提示「选了但目录里没有」 */
+  /** 该时段目录下真实存在的类型，用于提示「选了但目录里没有」；森标 AOI 即班次目录下的类型 */
   availableTypes?: string[]
   message?: string
 }
@@ -367,7 +413,7 @@ export const COPY_CONFLICT_LABEL: Record<CopyConflictPolicy, string> = {
  *
  * 这六项以前散在三处：复制面板的 store（重启就丢）、主进程的常量、
  * 环境变量。集中到这里之后，界面只认这份值，环境变量仍可临时覆盖。
- * EL / 力禧特 / 利珀共用同一套档位。
+ * EL / 力禧特 / 利珀 / 森标 AOI 共用同一套档位。
  */
 export interface AppPreferences {
   /** 复制到本地时按什么层级建子目录 */
@@ -539,6 +585,14 @@ export interface ElectronAPI {
   setupPlRoot: (entryRoot: string) => Promise<PlSetupResult>
   /** 按当前入口重新识别利珀机台 */
   refreshPlMachines: () => Promise<PlSetupResult>
+
+  /**
+   * 设置森标 AOI 入口根目录并解析其中的 .lnk。
+   * 与力禧特/利珀一样只读入口目录，机台网络留到扫描时再连。
+   */
+  setupAoiRoot: (entryRoot: string) => Promise<AoiSetupResult>
+  /** 按当前入口重新识别森标 AOI 机台 */
+  refreshAoiMachines: () => Promise<AoiSetupResult>
 
   /** 创建扫描任务（状态 pending），创建瞬间即可拿到进度快照 */
   createScanTask: (params: ScanTaskParams) => Promise<ScanTask>

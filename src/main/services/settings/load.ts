@@ -40,7 +40,7 @@ const pick = (env: keyof typeof PREFERENCE_ENV, fallback: number): number =>
 /**
  * 取扫描与复制档位。
  *
- * EL / 力禧特 / 利珀共用同一套设置：三类扫描都从这份偏好读取，
+ * EL / 力禧特 / 利珀 / 森标 AOI 共用同一套设置：四类扫描都从这份偏好读取，
  * 现场只有一套机器资源，分开配反而容易出现一边过载、一边闲置。
  */
 export const loadFrom = (preferences: AppPreferences): LoadProfile => ({

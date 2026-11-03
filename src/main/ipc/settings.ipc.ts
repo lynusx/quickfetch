@@ -2,14 +2,17 @@ import { BrowserWindow, app, dialog, ipcMain } from 'electron'
 import { basename } from 'node:path'
 
 import type {
+  AoiSetupResult,
   AppPreferences,
   DirectoryInfo,
   LxtSetupResult,
   PlSetupResult,
 } from '../../shared/ipc'
 import {
+  discoverAoi,
   discoverLxt,
   discoverPl,
+  mergeAoiMachines,
   mergeLxtMachines,
   mergePlMachines,
 } from '../services/discovery'
@@ -18,6 +21,7 @@ import {
   refreshMachines,
   savePreferences,
   saveRootPath,
+  updateAoi,
   updateLxt,
   updatePl,
 } from '../services/settings'
@@ -65,6 +69,35 @@ const setupPl = async (entryRoot: string): Promise<PlSetupResult> => {
 
   const settings = await updatePl((pl) => {
     const merged = mergePlMachines(pl.machines, discovered)
+    added = merged.added
+    removed = merged.removed
+    relocated = merged.relocated
+
+    return {
+      entryRoot,
+      machines: merged.machines,
+      skipped,
+      updatedAt: new Date().toISOString(),
+    }
+  })
+
+  return {
+    settings,
+    added,
+    removed,
+    relocated,
+  }
+}
+
+const setupAoi = async (entryRoot: string): Promise<AoiSetupResult> => {
+  // 识别在锁外跑，合并放到锁内，基于最新配置进行
+  const { machines: discovered, skipped } = await discoverAoi(entryRoot)
+  let added = 0
+  let removed = 0
+  let relocated = 0
+
+  const settings = await updateAoi((aoi) => {
+    const merged = mergeAoiMachines(aoi.machines, discovered)
     added = merged.added
     removed = merged.removed
     relocated = merged.relocated
@@ -151,5 +184,19 @@ export const registerSettingsIpc = (): void => {
     }
 
     return setupPl(current.pl.entryRoot)
+  })
+
+  ipcMain.handle('aoi:setup-root', (_event, entryRoot: string) =>
+    setupAoi(entryRoot.trim()),
+  )
+
+  ipcMain.handle('aoi:refresh', async () => {
+    const current = await readSettings()
+
+    if (!current.aoi.entryRoot) {
+      throw new Error('尚未配置森标 AOI 入口目录，请先选择入口')
+    }
+
+    return setupAoi(current.aoi.entryRoot)
   })
 }

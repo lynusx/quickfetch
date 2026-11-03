@@ -10,6 +10,7 @@ import { SCAN_CATEGORY_LABEL } from '@shared/ipc'
 import { copyStoreOf } from '@/features/copy'
 import {
   scanStoreOf,
+  useAoiScanStore,
   useElScanStore,
   useLxtScanStore,
   usePlScanStore,
@@ -17,11 +18,12 @@ import {
 import { formatDuration } from '@/utils/common'
 import { toErrorMessage } from '@/utils/error'
 
-/** 断网自动暂停时的提示，三类网络环境不同，说法也不一样 */
+/** 断网自动暂停时的提示，各类网络环境不同，说法也不一样 */
 const NETWORK_HINT: Record<ScanCategory, string> = {
   el: '共享盘连接中断，任务已暂停，恢复连接后点击继续',
   lxt: '连不上机台，请确认已接入力禧特专用内网后点击继续',
   pl: '连不上机台，请确认已接入利珀专用内网后点击继续',
+  aoi: '连不上机台，请确认已接入森标 AOI 专用内网后点击继续',
 }
 
 interface UseScanTaskProps {
@@ -172,11 +174,13 @@ export const useScanTask = ({
   const elTask = useElScanStore((state) => state.task)
   const lxtTask = useLxtScanStore((state) => state.task)
   const plTask = usePlScanStore((state) => state.task)
+  const aoiTask = useAoiScanStore((state) => state.task)
 
   const other = [
     { category: 'el' as ScanCategory, task: elTask },
     { category: 'lxt' as ScanCategory, task: lxtTask },
     { category: 'pl' as ScanCategory, task: plTask },
+    { category: 'aoi' as ScanCategory, task: aoiTask },
   ].find(
     (item) =>
       item.category !== category && item.task && isBusy(item.task.status),

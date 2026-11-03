@@ -25,6 +25,7 @@ const EYEBROW: Record<ScanCategory, string> = {
   el: '找图 · EL',
   lxt: '找图 · 力禧特',
   pl: '找图 · 利珀',
+  aoi: '找图 · 森标 AOI',
 }
 
 interface PlantScanPageProps {

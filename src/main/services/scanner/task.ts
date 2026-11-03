@@ -203,7 +203,9 @@ export class ScanTaskRunner {
   private readonly shape: PathShape
   /** 等级层实际参与扫描的取值；没有等级层时是 ['']，让叶子数计算统一 */
   private readonly levels: string[]
-  /** 单个机台分支的叶子数：时段 × 等级 × 类型 */
+  /** 路径里没有时段层（森标 AOI）：班次目录下直接是类型目录 */
+  private readonly slotless: boolean
+  /** 单个机台分支的叶子数：有效时段 × 等级 × 类型 */
   private readonly leavesPerBranch: number
 
   constructor(
@@ -222,13 +224,17 @@ export class ScanTaskRunner {
 
     // 层级差异全部来自解析器：EL / 力禧特是标准三层，利珀多机台名层与等级层
     this.shape = context.resolver.shape ?? {}
+    this.slotless = this.shape.hasSlots === false
     this.levels = this.shape.hasLevel
       ? params.levels?.length
         ? params.levels
         : [...PL_LEVELS]
       : ['']
+    // 没有时段层时按 1 个有效时段算，否则叶子数为 0，进度与跳过计数都不动
     this.leavesPerBranch =
-      params.slots.length * this.levels.length * params.types.length
+      (this.slotless ? 1 : params.slots.length) *
+      this.levels.length *
+      params.types.length
 
     // 分支顺序与机台选择顺序一致，并发完成时也不会乱序
     this.branches = params.machines.map((machine) => ({
@@ -456,7 +462,12 @@ export class ScanTaskRunner {
     const baseRead = await this.read(base)
 
     if (baseRead.status !== 'ok') {
-      this.markBroken(branch, baseRead, resolved.brokenAt ?? 'EL', base)
+      this.markBroken(
+        branch,
+        baseRead,
+        resolved.brokenAt ?? this.shape.baseBrokenAt ?? 'EL',
+        base,
+      )
       return
     }
 
@@ -503,33 +514,43 @@ export class ScanTaskRunner {
       shiftBaseDirs = dateRead.dirs
     }
 
-    // 第 4 层：班次
-    if (!shiftBaseDirs.includes(this.params.shift)) {
+    // 第 4 层：班次。目录名由解析器决定（森标 AOI 是 8.5/20.5）
+    const shiftName =
+      this.shape.shiftDir?.(this.params.shift) ?? this.params.shift
+
+    if (!shiftBaseDirs.includes(shiftName)) {
       this.markBroken(
         branch,
         { status: 'missing', dirs: [], files: [], elapsedMs: 0 },
         '班次',
         shiftBase,
-        { expected: this.params.shift, actual: shiftBaseDirs },
+        { expected: shiftName, actual: shiftBaseDirs },
       )
       return
     }
 
-    const shiftDir = join(shiftBase, this.params.shift)
+    const shiftDir = join(shiftBase, shiftName)
     const shiftRead = await this.read(shiftDir)
 
     if (shiftRead.status !== 'ok') {
       this.markBroken(
         branch,
         shiftRead,
-        '时段',
-        `${shiftBase}/${this.params.shift}`,
+        this.slotless ? '班次' : '时段',
+        `${shiftBase}/${shiftName}`,
       )
       return
     }
 
-    branch.availableSlots = shiftRead.dirs
     this.probedMachines += 1
+
+    // 无时段层（森标 AOI）：班次目录下直接就是类型目录
+    if (this.slotless) {
+      this.collectSlotlessTypes(branch, machine, shiftDir, shiftRead.dirs)
+      return
+    }
+
+    branch.availableSlots = shiftRead.dirs
 
     const hitSlots = this.params.slots.filter((slot) =>
       shiftRead.dirs.includes(slot),
@@ -607,7 +628,7 @@ export class ScanTaskRunner {
       }
 
       // 第 7 层：等级（利珀的 A/B/C）。没有等级层时只有一个空占位，
-      // 保证下面的循环对三类扫描是同一条代码。
+      // 保证下面的循环对各类扫描是同一条代码。
       const levelDirs: { dir: string; dirs: string[] }[] = []
 
       if (this.shape.hasLevel) {
@@ -670,6 +691,49 @@ export class ScanTaskRunner {
   }
 
   /**
+   * 无时段层的收尾：班次目录下的子目录就是类型目录。
+   *
+   * 每个所选类型算一个叶子；命中的类型挂进待收队列，
+   * 目录不存在的直接计入跳过，不发无效请求。
+   */
+  private collectSlotlessTypes(
+    branch: ScanBranch,
+    machine: string,
+    shiftDir: string,
+    typeDirs: string[],
+  ): void {
+    const seen = new Set(typeDirs)
+    branch.availableTypes = [...seen]
+
+    let matched = 0
+
+    for (const type of this.params.types) {
+      this.doneLeaves += 1
+
+      if (!seen.has(type)) {
+        this.progress.dirsSkipped += 1
+        continue
+      }
+
+      matched += 1
+      this.pendingDetails.push({ dir: join(shiftDir, type), machine })
+      this.detailTotal += 1
+    }
+
+    this.progress.detailsPending = this.pendingDetails.length
+
+    if (!matched) {
+      branch.status = 'empty'
+      branch.brokenAt = '类型'
+      branch.message = seen.size
+        ? `该班次下没有所选类型，实际存在：${summarize(typeDirs)}`
+        : '该班次下没有类型目录'
+    }
+
+    this.touch(shiftDir, true)
+  }
+
+  /**
    * 收尾阶段：逐目录读取文件明细并收集图片。
    *
    * 与探测分开的理由是内存而非速度 —— 探测只拿目录名，几百个机台的
@@ -718,7 +782,7 @@ export class ScanTaskRunner {
       branch.brokenAt = branch.brokenAt ?? '类型'
       branch.message =
         branch.message ??
-        `所选时段存在，但没有读到图片，实际存在：${summarize(branch.availableTypes ?? [])}`
+        `${this.slotless ? '该班次' : '所选时段'}存在，但没有读到图片，实际存在：${summarize(branch.availableTypes ?? [])}`
     }
   }
 
@@ -767,7 +831,7 @@ export class ScanTaskRunner {
         path: [...segments, name].join('/'),
         absolutePath: join(item.dir, name),
         name,
-        // 复制按机台筛选/分组时用这个字段，路径第 0 段对力禧特、利珀是厂区
+        // 复制按机台筛选/分组时用这个字段，路径第 0 段对力禧特、利珀、森标 AOI 是厂区
         machine: item.machine,
       })
     }

@@ -101,11 +101,11 @@ const segmentsOf = (image: ScannedImage): string[] =>
 /**
  * 从图片上取机台与类型。
  *
- * 机台优先用扫描时写进去的 machine 字段 —— 力禧特、利珀的 path 第 0 段是厂区，
+ * 机台优先用扫描时写进去的 machine 字段 —— 力禧特、利珀、森标 AOI 的 path 第 0 段是厂区，
  * 直接按段切会把整个厂区当成一台机器。老历史记录没有这个字段，退回第 0 段
  * （那时的记录全是 EL 的，第 0 段就是机台目录名）。
  *
- * 类型取倒数第 2 段，三类扫描都一样。
+ * 类型取倒数第 2 段，各类扫描都一样。
  */
 export const machineOf = (image: ScannedImage): string =>
   image.machine ?? segmentsOf(image)[0] ?? ''

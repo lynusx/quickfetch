@@ -17,6 +17,11 @@ interface UserPreferencesState {
    * 没有 EL 的 NG_ 前缀，混进同一份列表反而容易勾错。
    */
   plTypes: string[]
+  /**
+   * 森标 AOI 的不良类型清单（色差、色斑、大饼片等），单独存。
+   * AOI 的类型命名与另外三类都不同，混用会越铺越长。
+   */
+  aoiTypes: string[]
 }
 
 interface UserPreferencesAction {
@@ -26,12 +31,14 @@ interface UserPreferencesAction {
   removeLxtType: (type: string) => void
   addPlType: (type: string) => void
   removePlType: (type: string) => void
+  addAoiType: (type: string) => void
+  removeAoiType: (type: string) => void
 }
 
 /**
  * v1 时期塞进默认值的样本清单。
  *
- * 三类都不该替用户预设类型：现场命名差异大，猜错一次就会扫出一堆空目录，
+ * 四类都不该替用户预设类型：现场命名差异大，猜错一次就会扫出一堆空目录，
  * 用户还得先删掉猜错的。所以从 v2 起三份清单一律空着，谁用谁加。
  * 迁移时只在「整份等于当时的预置值」时才清空 —— 用户自己加过的保留。
  */
@@ -54,6 +61,7 @@ export const useUserPreferencesStore = create<
         ngTypes: [],
         lxtTypes: [],
         plTypes: [],
+        aoiTypes: [],
         addNgType: (type: string) =>
           set((state) => ({
             ngTypes: uniqueStrings([...state.ngTypes, type]),
@@ -78,6 +86,14 @@ export const useUserPreferencesStore = create<
           set((state) => ({
             plTypes: (state.plTypes ?? []).filter((t) => t !== type),
           })),
+        addAoiType: (type: string) =>
+          set((state) => ({
+            aoiTypes: uniqueStrings([...(state.aoiTypes ?? []), type]),
+          })),
+        removeAoiType: (type: string) =>
+          set((state) => ({
+            aoiTypes: (state.aoiTypes ?? []).filter((t) => t !== type),
+          })),
       }),
       {
         name: 'user-preferences',
@@ -96,6 +112,8 @@ export const useUserPreferencesStore = create<
             plTypes: sameList(state.plTypes, LEGACY_PL_TYPES)
               ? []
               : (state.plTypes ?? []),
+            // v2 之前没有 AOI，补一个空清单
+            aoiTypes: state.aoiTypes ?? [],
           } as UserPreferencesState
         },
       },

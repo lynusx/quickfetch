@@ -1,8 +1,8 @@
 {
   "name": "shx-tools",
   "private": true,
-  "version": "1.21.0",
-  "description": "RCA EL、力禧特、利珀图片拷贝与 Excel 解析桌面工具",
+  "version": "1.22.0",
+  "description": "RCA EL、力禧特、利珀、森标 AOI 图片拷贝与 Excel 解析桌面工具",
   "author": "lynusx",
   "type": "module",
   "main": "out/main/index.cjs",

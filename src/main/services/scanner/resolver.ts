@@ -2,7 +2,12 @@ import { join } from 'node:path'
 
 import type { LxtShare, ScanCategory } from '../../../shared/ipc'
 
-import { LXT_SHARES, PL_FIXED } from '../../../shared/ipc'
+import {
+  AOI_SHARE,
+  AOI_SHIFT_DIRS,
+  LXT_SHARES,
+  PL_FIXED,
+} from '../../../shared/ipc'
 import { pickPlShare } from '../discovery/pl'
 import { splitMachine } from '../discovery/shortcuts'
 import { readDirSafe } from './fsx'
@@ -43,12 +48,18 @@ export interface ResolveResult {
 export interface PathShape {
   /** 日期层目录名；默认就是参数里的 YYYYMMDD，利珀是 YYYY.MM.DD */
   dateDir?: (date: string) => string
+  /** 班次层目录名；默认就是参数里的「白班/夜班」，森标 AOI 是 8.5/20.5 */
+  shiftDir?: (shift: '白班' | '夜班') => string
   /** 日期层与班次层之间的固定层；利珀是「机台名大写」 */
   betweenDateAndShift?: (machine: string) => string[]
   /** 时段层与类型层之间的固定层；利珀是 Fail */
   betweenSlotAndType?: string[]
   /** 类型层之上是否还有等级层（利珀的 A/B/C），等级取值来自参数 */
   hasLevel?: boolean
+  /** 是否有时段层；默认 true。森标 AOI 为 false，班次目录下直接是类型 */
+  hasSlots?: boolean
+  /** 前缀层读取失败时归属哪一层；默认 EL */
+  baseBrokenAt?: 'EL' | '共享名' | '机台标识'
 }
 
 export interface MachineResolver {
@@ -62,7 +73,7 @@ export interface MachineResolver {
    * 把类型目录的绝对路径拆成结果里展示的层级。
    *
    * EL 是「机台/EL/日期/班次/时段/类型」，取相对根目录的部分；
-   * 力禧特、利珀的各机台没有共同根，只能按「厂区/机台/日期/…」拼 ——
+   * 力禧特、利珀、森标 AOI 的各机台没有共同根，只能按「厂区/机台/日期/…」拼 ——
    * 复制分组里的「机台」取的是图片自带的 machine 字段，
    * 所以交给解析器自己决定层级，不在复制模块里做特判。
    */
@@ -540,5 +551,57 @@ export const createPlResolver = (
       : []
 
     return [plant, name, ...tail].filter(Boolean)
+  },
+})
+
+export interface AoiResolverOptions {
+  /** 机台复合键 → 入口里解析出的目标主机 */
+  hosts: Map<string, string>
+}
+
+/**
+ * 森标 AOI：每台机器一个 IP，第二层固定 SaveImages。
+ *
+ * 这里刻意不做目录读取：`base` 交给执行器的 this.read() 去读，
+ * 这样主机不可达会计入断网熔断；同时也避免枚举只有主机的 `\\IP` 根目录
+ * （Windows 对它返回 EINVAL，表现和断网一模一样）。
+ */
+export const createAoiResolver = (
+  options: AoiResolverOptions,
+): MachineResolver => ({
+  category: 'aoi',
+  // \\IP\SaveImages\{日期}\{8.5|20.5}\{类型}\x.jpg
+  shape: {
+    shiftDir: (shift) => AOI_SHIFT_DIRS[shift],
+    hasSlots: false,
+    baseBrokenAt: '共享名',
+  },
+  validate: () =>
+    options.hosts.size ? null : '尚未识别森标 AOI 入口，请先选择并识别入口目录',
+  resolve: async (machine) => {
+    const host = options.hosts.get(machine)
+
+    if (!host) {
+      return {
+        ok: false,
+        base: '',
+        reason: '该机台已不在入口目录中，请重新识别入口',
+        brokenAt: '共享名',
+      }
+    }
+
+    return {
+      ok: true,
+      base: join(host, AOI_SHARE),
+      reason: '',
+    }
+  },
+  // 厂区/机台/日期/8.5|20.5/类型/x.jpg
+  segments: (machine, dir) => {
+    const [plant, name] = splitMachine(machine)
+    const host = options.hosts.get(machine) ?? ''
+    const base = host ? join(host, AOI_SHARE) : ''
+
+    return [plant, name, ...(base ? tailOf(base, dir) : [])].filter(Boolean)
   },
 })

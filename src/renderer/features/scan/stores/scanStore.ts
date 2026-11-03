@@ -44,11 +44,15 @@ const createScanStore = (category: ScanCategory) =>
 export const useElScanStore = createScanStore('el')
 export const useLxtScanStore = createScanStore('lxt')
 export const usePlScanStore = createScanStore('pl')
+export const useAoiScanStore = createScanStore('aoi')
 
-/** 按类别取对应的扫描 store；未知类别一律按 EL 兜底 */
-export const scanStoreOf = (category: ScanCategory): ScanStore => {
-  if (category === 'lxt') return useLxtScanStore
-  if (category === 'pl') return usePlScanStore
-
-  return useElScanStore
+const stores: Record<ScanCategory, ScanStore> = {
+  el: useElScanStore,
+  lxt: useLxtScanStore,
+  pl: usePlScanStore,
+  aoi: useAoiScanStore,
 }
+
+/** 按类别取对应的扫描 store；映射穷尽，新增类别时类型检查会报错 */
+export const scanStoreOf = (category: ScanCategory): ScanStore =>
+  stores[category]

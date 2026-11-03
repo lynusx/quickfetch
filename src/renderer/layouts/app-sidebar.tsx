@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router'
 import {
+  CameraIcon,
   CopyIcon,
   GearIcon,
   MagnifyingGlassIcon,
@@ -31,6 +32,11 @@ const NAV_GROUPS = [
         label: '利珀',
         to: ROUTES.LP_PL,
         icon: TargetIcon,
+      },
+      {
+        label: '森标 AOI',
+        to: ROUTES.AOI,
+        icon: CameraIcon,
       },
     ],
   },

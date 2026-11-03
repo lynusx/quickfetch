@@ -109,11 +109,15 @@ const createCopyStore = (category: ScanCategory) =>
 export const useElCopyStore = createCopyStore('el')
 export const useLxtCopyStore = createCopyStore('lxt')
 export const usePlCopyStore = createCopyStore('pl')
+export const useAoiCopyStore = createCopyStore('aoi')
 
-/** 按类别取对应的复制 store；未知类别一律按 EL 兜底 */
-export const copyStoreOf = (category: ScanCategory): CopyStore => {
-  if (category === 'lxt') return useLxtCopyStore
-  if (category === 'pl') return usePlCopyStore
-
-  return useElCopyStore
+const stores: Record<ScanCategory, CopyStore> = {
+  el: useElCopyStore,
+  lxt: useLxtCopyStore,
+  pl: usePlCopyStore,
+  aoi: useAoiCopyStore,
 }
+
+/** 按类别取对应的复制 store；映射穷尽，新增类别时类型检查会报错 */
+export const copyStoreOf = (category: ScanCategory): CopyStore =>
+  stores[category]

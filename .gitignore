@@ -38,3 +38,6 @@ shots/
 
 # Claude Code 的本地设置（skills 仍需入库，不整目录忽略）
 .claude/settings.local.json
+
+# 现场临时资料（路径说明、快捷方式样本）
+.temp/

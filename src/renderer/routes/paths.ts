@@ -7,6 +7,7 @@ export const ROUTES = {
   EL: '/el',
   LXT_EL: '/lixite',
   LP_PL: '/lipo',
+  AOI: '/aoi',
   EXCEL_PARSE: '/xlsx',
   SETTINGS: '/settings',
 } as const

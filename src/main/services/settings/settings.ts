@@ -4,6 +4,8 @@ import { readdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 
 import type {
+  AoiMachine,
+  AoiSettings,
   AppPreferences,
   AppSettings,
   LxtMachine,
@@ -24,6 +26,7 @@ import {
   normalizeHistoryLimit,
 } from '../../../shared/historyLimit'
 import { envOverriddenKeys } from './load'
+import { aoiKey } from '../discovery/aoi'
 import { lxtKey } from '../discovery/lxt'
 import { plKey } from '../discovery/pl'
 import { toFsPath } from '../../utils/pathx'
@@ -44,6 +47,7 @@ const defaultSettings = (): AppSettings => ({
   preferences: { ...DEFAULT_PREFERENCES },
   lxt: { entryRoot: null, machines: [], skipped: [], updatedAt: null },
   pl: { entryRoot: null, machines: [], skipped: [], updatedAt: null },
+  aoi: { entryRoot: null, machines: [], skipped: [], updatedAt: null },
   envOverrides: [],
 })
 
@@ -241,6 +245,63 @@ export const normalizePl = (raw: unknown): PlSettings => {
   }
 }
 
+/**
+ * 归一化森标 AOI 配置。
+ *
+ * 与力禧特/利珀一样按「厂区/机台」重算 key；第二层固定 SaveImages，
+ * 没有需要持久化的探测缓存，share 一律写成 null。
+ */
+export const normalizeAoi = (raw: unknown): AoiSettings => {
+  if (!isRecord(raw)) {
+    return { entryRoot: null, machines: [], skipped: [], updatedAt: null }
+  }
+
+  const machines: AoiMachine[] = []
+  const seen = new Set<string>()
+
+  for (const item of Array.isArray(raw.machines) ? raw.machines : []) {
+    if (!isRecord(item)) continue
+
+    const plant = typeof item.plant === 'string' ? item.plant : ''
+    const name = typeof item.name === 'string' ? item.name : ''
+    const host = typeof item.host === 'string' ? item.host : ''
+
+    if (!plant || !name || !host) continue
+
+    const key = aoiKey(plant, name)
+    if (seen.has(key)) continue
+
+    seen.add(key)
+    machines.push({
+      plant,
+      name,
+      key,
+      host,
+      share: null,
+      stale: item.stale === true,
+    })
+  }
+
+  const skipped = (Array.isArray(raw.skipped) ? raw.skipped : [])
+    .filter(isRecord)
+    .map((item) => ({
+      plant: typeof item.plant === 'string' ? item.plant : '',
+      file: typeof item.file === 'string' ? item.file : '',
+      reason: typeof item.reason === 'string' ? item.reason : '',
+    }))
+    .filter((item) => item.file)
+
+  return {
+    entryRoot:
+      typeof raw.entryRoot === 'string' && raw.entryRoot.trim()
+        ? raw.entryRoot
+        : null,
+    machines,
+    skipped,
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : null,
+  }
+}
+
 /** 机台目录名首字母决定厂区：A 为东区、B 为西区 */
 const plantOf = (name: string): Plant | null => {
   const head = name[0]?.toUpperCase()
@@ -325,6 +386,7 @@ export const readSettings = async (): Promise<AppSettings> => {
       preferences: normalizePreferences(parsed.preferences),
       lxt: normalizeLxt(parsed.lxt),
       pl: normalizePl(parsed.pl),
+      aoi: normalizeAoi(parsed.aoi),
       // 运行期字段，不落盘，每次读的时候按当前环境算
       envOverrides: envOverriddenKeys(),
     }
@@ -504,6 +566,16 @@ export const updatePl = (
   updateSettings((current) => ({
     ...current,
     pl: normalizePl(mutate(current.pl)),
+    updatedAt: new Date().toISOString(),
+  }))
+
+/** 在锁内基于最新配置修改森标 AOI 那一段 */
+export const updateAoi = (
+  mutate: (aoi: AoiSettings) => AoiSettings,
+): Promise<AppSettings> =>
+  updateSettings((current) => ({
+    ...current,
+    aoi: normalizeAoi(mutate(current.aoi)),
     updatedAt: new Date().toISOString(),
   }))
 
