@@ -450,14 +450,17 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
               justify="between"
               gap="3"
             >
-              <Text
-                as="span"
-                size="1"
-                color="gray"
-                className="copy-progress-label"
-              >
-                完成进度
-              </Text>
+              <Flex align="center" gap="2">
+                {running ? <Spinner size="1" /> : null}
+                <Text
+                  as="span"
+                  size="1"
+                  color="gray"
+                  className="copy-progress-label"
+                >
+                  完成进度
+                </Text>
+              </Flex>
               <Text as="span" className="copy-progress-value">
                 {percent}%
               </Text>

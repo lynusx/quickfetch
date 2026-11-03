@@ -165,9 +165,19 @@ export const ScanTaskPanel = ({
               justify="between"
               gap="3"
             >
-              <Text as="span" size="1" color="gray" className="progress-label">
-                完成进度
-              </Text>
+              <Flex align="center" gap="2">
+                {task?.status === 'running' || task?.status === 'pending' ? (
+                  <Spinner size="1" />
+                ) : null}
+                <Text
+                  as="span"
+                  size="1"
+                  color="gray"
+                  className="progress-label"
+                >
+                  完成进度
+                </Text>
+              </Flex>
               <Text as="span" className="progress-value">
                 {task?.progress.percent ?? 0}%
               </Text>
