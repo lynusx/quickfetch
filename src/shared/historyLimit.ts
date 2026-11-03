@@ -12,6 +12,13 @@ export const DEFAULT_HISTORY_LIMIT = 10
  */
 export const MAX_HISTORY_LIMIT = 50
 
+/** 设置页滑杆与主进程校验共用一份区间 */
+export const HISTORY_LIMIT_RANGE = {
+  min: 1,
+  max: MAX_HISTORY_LIMIT,
+  step: 1,
+}
+
 /** 把任意输入收进合法区间，误填 0 或负数也不会把历史功能关死 */
 export const normalizeHistoryLimit = (value: unknown): number => {
   const parsed =

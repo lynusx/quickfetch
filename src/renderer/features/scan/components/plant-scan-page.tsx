@@ -16,9 +16,7 @@ import { useHistoryRestore } from '../hooks/useHistoryRestore'
 import { useScanTask } from '../hooks/useScanTask'
 import { useToast } from '@/hooks/useToast'
 import { scanStoreOf } from '../stores/scanStore'
-import { useSettingsStore } from '@/features/settings'
 import type { ScanCategory, ScanTaskParams } from '@shared/ipc'
-import { DEFAULT_HISTORY_LIMIT } from '@shared/historyLimit'
 import '../scan.css'
 
 const EYEBROW: Record<ScanCategory, string> = {
@@ -73,10 +71,6 @@ const PlantScanPage = ({
 
   const scanError = store((state) => state.error)
 
-  const historyLimit = useSettingsStore(
-    (state) => state.settings?.historyLimit ?? DEFAULT_HISTORY_LIMIT,
-  )
-  const saveHistoryLimit = useSettingsStore((state) => state.saveHistoryLimit)
   const restoreHistory = useHistoryRestore(category)
 
   const canStart = ready && !busy && !creating && !other
@@ -170,8 +164,6 @@ const PlantScanPage = ({
             showToast={showToast}
             activeId={task?.id ?? null}
             activeStatus={task?.status ?? null}
-            limit={historyLimit}
-            onLimitChange={(limit) => void saveHistoryLimit(limit)}
           />
         </Flex>
       </Grid>

@@ -3,7 +3,7 @@ import {
   InfoCircledIcon,
   TrashIcon,
 } from '@radix-ui/react-icons'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Badge,
   Box,
@@ -13,11 +13,12 @@ import {
   ScrollArea,
   Spinner,
   Text,
-  TextField,
 } from '@radix-ui/themes'
 
 import { Panel, PanelBody, PanelHeader } from '@/components/panel'
 import { EmptyState } from '@/components/empty-state/empty-state'
+import { useSettingsStore } from '@/features/settings'
+import { DEFAULT_HISTORY_LIMIT } from '@shared/historyLimit'
 import { useHistoryStore } from './historyStore'
 import { SCAN_STATUS_META } from '../scan/components/scanStatus'
 import type { ScanCategory, ScanHistoryItem, ScanTaskStatus } from '@shared/ipc'
@@ -60,9 +61,6 @@ interface HistoryPanelProps {
   activeId: string | null
   /** 当前任务状态，任务结束时触发一次静默刷新 */
   activeStatus: ScanTaskStatus | null
-  /** 历史保留条数，来自配置 */
-  limit: number
-  onLimitChange: (limit: number) => void
 }
 
 const HistoryPanel = ({
@@ -71,9 +69,11 @@ const HistoryPanel = ({
   showToast,
   activeId,
   activeStatus,
-  limit,
-  onLimitChange,
 }: HistoryPanelProps) => {
+  const limit = useSettingsStore(
+    (state) => state.settings?.historyLimit ?? DEFAULT_HISTORY_LIMIT,
+  )
+
   const {
     items,
     loading,
@@ -104,15 +104,6 @@ const HistoryPanel = ({
   )
 
   const [open, setOpen] = useState(false)
-  const [draftLimit, setDraftLimit] = useState(String(limit))
-  const [syncedLimit, setSyncedLimit] = useState(limit)
-
-  // limit 会在提交后由外层回写，也可能来自异步载入。用渲染期的条件同步
-  // 代替 useEffect 里的 setState：后者会多走一轮提交，并触发级联渲染告警。
-  if (limit !== syncedLimit) {
-    setSyncedLimit(limit)
-    setDraftLimit(String(limit))
-  }
 
   useEffect(() => {
     void load()
@@ -131,17 +122,6 @@ const HistoryPanel = ({
 
     return () => clearTimeout(timer)
   }, [activeStatus, activeId, load])
-
-  const commitLimit = useCallback(() => {
-    const parsed = Number.parseInt(draftLimit, 10)
-
-    if (!Number.isFinite(parsed) || parsed === limit) {
-      setDraftLimit(String(limit))
-      return
-    }
-
-    onLimitChange(parsed)
-  }, [draftLimit, limit, onLimitChange])
 
   const handleRestore = (item: ScanHistoryItem): void => {
     if (loadingTaskId) return
@@ -190,30 +170,14 @@ const HistoryPanel = ({
       {open ? (
         <PanelBody>
           <Flex direction="column" gap="3">
-            <Flex className="history-toolbar" align="end" gap="3">
-              <Flex direction="column" gap="1" className="history-limit-field">
-                <Text as="label" size="1" color="gray">
-                  保留条数
-                </Text>
-                <TextField.Root
-                  size="1"
-                  className="history-limit-input"
-                  value={draftLimit}
-                  inputMode="numeric"
-                  onChange={(event) => setDraftLimit(event.target.value)}
-                  onBlur={commitLimit}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') event.currentTarget.blur()
-                  }}
-                />
-              </Flex>
+            <Flex className="history-toolbar" align="center" gap="3">
               <Text
                 as="div"
                 size="1"
                 color="gray"
                 className="history-toolbar-hint"
               >
-                每条记录包含全部图片路径，可恢复查看或再次复制；超出条数的旧记录会被自动删除。
+                每条记录包含全部图片路径，可恢复查看或再次复制；保留条数在设置页调整。
               </Text>
               {visible.length > 0 ? (
                 <Button

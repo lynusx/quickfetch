@@ -20,7 +20,6 @@ import { useToast } from '@/hooks/useToast'
 import { useImageFilterStore } from '../stores/imageFilterStore'
 import { useElScanStore } from '../stores/scanStore'
 import { useSettingsStore, useUserPreferencesStore } from '@/features/settings'
-import { DEFAULT_HISTORY_LIMIT } from '@shared/historyLimit'
 import '../scan.css'
 
 const ElScanPage = () => {
@@ -53,9 +52,7 @@ const ElScanPage = () => {
   })
 
   const settings = useSettingsStore((state) => state.settings)
-  const saveHistoryLimit = useSettingsStore((state) => state.saveHistoryLimit)
   const scanError = useElScanStore((state) => state.error)
-  const historyLimit = settings?.historyLimit ?? DEFAULT_HISTORY_LIMIT
 
   const restoreHistory = useHistoryRestore('el')
 
@@ -160,8 +157,6 @@ const ElScanPage = () => {
             showToast={showToast}
             activeId={task?.id ?? null}
             activeStatus={task?.status ?? null}
-            limit={historyLimit}
-            onLimitChange={(limit) => void saveHistoryLimit(limit)}
           />
         </Flex>
       </Grid>

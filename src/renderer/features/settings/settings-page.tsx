@@ -32,6 +32,10 @@ import {
   PREFERENCE_ENV,
   PREFERENCE_RANGE,
 } from '@shared/ipc'
+import {
+  DEFAULT_HISTORY_LIMIT,
+  HISTORY_LIMIT_RANGE,
+} from '@shared/historyLimit'
 import './settings.css'
 
 /** 分组方式的实际目录形态，光看名字不知道会建几层 */
@@ -164,6 +168,10 @@ const SettingsPage = () => {
   const envOverrides = useSettingsStore(selectEnvOverrides)
   const error = useSettingsStore((state) => state.error)
   const save = useSettingsStore((state) => state.savePreferences)
+  const historyLimit = useSettingsStore(
+    (state) => state.settings?.historyLimit ?? DEFAULT_HISTORY_LIMIT,
+  )
+  const saveHistoryLimit = useSettingsStore((state) => state.saveHistoryLimit)
 
   const patch = (next: Partial<AppPreferences>) => {
     void save(next)
@@ -178,7 +186,7 @@ const SettingsPage = () => {
       <PageHeader
         eyebrow="应用"
         title="设置"
-        description="复制策略与扫描、复制的并发档位。设置只影响之后新建的任务，保存在本机。"
+        description="复制策略、扫描与复制并发档位、历史保留条数；设置只影响之后的任务，保存在本机。"
       />
 
       <Box className="settings-content">
@@ -328,6 +336,36 @@ const SettingsPage = () => {
               </PanelBody>
             </Panel>
           </Flex>
+        </Box>
+
+        {/* 历史记录 */}
+        <Box id="history" className="settings-section">
+          <Box className="settings-section-head">
+            <Heading as="h2" size="3" className="settings-section-title">
+              历史记录
+            </Heading>
+            <Text
+              as="p"
+              size="1"
+              color="gray"
+              className="settings-section-desc"
+            >
+              扫描结果保存在本机，超出条数后自动删除最旧的记录；所有扫描页面共享。
+            </Text>
+          </Box>
+
+          <Panel>
+            <PanelBody>
+              <SliderRow
+                label="保留条数"
+                hint="超出后自动删除最旧的记录"
+                unit="条"
+                value={historyLimit}
+                range={HISTORY_LIMIT_RANGE}
+                onChange={(next) => void saveHistoryLimit(next)}
+              />
+            </PanelBody>
+          </Panel>
         </Box>
 
         {/* 性能 */}
