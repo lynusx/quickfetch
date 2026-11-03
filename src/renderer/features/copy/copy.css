@@ -81,6 +81,14 @@
   background: var(--gray-a2);
 }
 
+/* 取消后的摘要行：不再显示进度条与批次，只留「已复制 N/M 张」 */
+.copy-canceled {
+  padding: 9px 13px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--radius-3);
+  background: var(--gray-a2);
+}
+
 .copy-progress-head {
   display: flex;
   align-items: baseline;

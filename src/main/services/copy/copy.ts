@@ -14,6 +14,7 @@ import type {
 import { createAdaptiveGate } from '../../utils/adaptive'
 import type { AdaptiveGate } from '../../utils/adaptive'
 import { toFsPath } from '../../utils/pathx'
+import { isImageFile } from '../scanner/imageFiles'
 
 /**
  * 同时打开的文件句柄上限。现场机器 8G 内存，10 路并发复制 +
@@ -144,6 +145,28 @@ export const filterByMachines = (
   return images.filter((image) => allowed.has(machineOf(image)))
 }
 
+/**
+ * 从已算好的目标路径反推它相对目标目录的层级。
+ *
+ * 重试时 failure.to 是「目标目录 + 分组子目录 + 文件名」，直接按分隔符
+ * 切出来的段数就是层级；拿不准（目标目录变了、路径不在其下）时退回
+ * 按分组方式重算，绝不让层级错位导致文件落到别的分组里。
+ */
+const relativeFolderOf = (
+  to: string,
+  image: ScannedImage | undefined,
+  layout: CopyLayout,
+): string[] => {
+  const segments = to.split(/[\\/]+/).filter(Boolean)
+
+  // 最后一段是文件名，前面都是文件夹；至少要有 1 段目录才可能是分组的
+  return segments.length > 1
+    ? segments.slice(0, -1)
+    : image
+      ? folderOf(image, layout)
+      : []
+}
+
 const compareName = (a: string, b: string): number =>
   a.localeCompare(b, 'zh-CN', { numeric: true })
 
@@ -153,7 +176,12 @@ export const planPreview = async (
   params: CopyTaskParams,
   targetDir?: string,
 ): Promise<CopyPlanPreview> => {
-  const picked = filterByMachines(images, params.machines)
+  // 只统计图片：界面给的是「将复制 N 张图」，不该把手工放进类型目录的
+  // 说明文件、表格一起算进去。扫描侧已经按同一套扩展名过滤过，
+  // 这里再挡一次是为了兼容从旧版历史里恢复的结果集。
+  const picked = filterByMachines(images, params.machines).filter((image) =>
+    isImageFile(image.name),
+  )
   const perMachine = new Map<string, number>()
   const folders = new Set<string>()
 
@@ -241,8 +269,17 @@ const existingNames = async (dir: string): Promise<Set<string>> => {
   }
 }
 
-/** 单个待复制项的执行意图 */
-type PlanAction = 'copy' | 'skip'
+/**
+ * 单个待复制项的执行意图。
+ *
+ * - copy：真的写盘
+ * - skip-exists：目标目录里已有同名文件，按「跳过已存在」策略跳过这一张
+ * - skip：本批内部同名且策略为跳过（源目录里就有重名，无处可放）
+ *
+ * 前两种都不碰磁盘，但要分开计数：用户看「跳过 50 张」时需要知道
+ * 是"盘上本来就有"还是"源里重了"。
+ */
+type PlanAction = 'copy' | 'skip' | 'skip-exists'
 
 interface PlanItem {
   image: ScannedImage
@@ -293,11 +330,21 @@ export class CopyTaskRunner {
   private copied = 0
   private renamed = 0
   private skipped = 0
+  private alreadyExists = 0
   private failures: CopyFailure[] = []
   private currentPath = ''
   private startedAt: number | null = null
   private finishedAt: number | null = null
   private lastEmitAt = 0
+
+  /**
+   * 是否已经规划过。
+   *
+   * 不能再用 plan.length 判断「首次执行」：重试失败项时 plan 是失败子集，
+   * 若失败项恰好为 0（全部被跳过），plan 也是空，会被误判成首次执行并
+   * 重跑 buildPlan，把「只重试失败项」变成「全量重跑」。
+   */
+  private planned = false
 
   private paused = false
   private resumeWaiters: (() => void)[] = []
@@ -306,7 +353,14 @@ export class CopyTaskRunner {
    * 重试或换目录重跑时沿用它会让任务一启动就自己取消。
    */
   private abortController = new AbortController()
-  private readonly settled: Promise<void>
+  /**
+   * 本轮执行的终态信号。
+   *
+   * 不能只在构造时建一次：Promise 一旦 resolve 就永远保持 resolved，
+   * 重试 / 换目录之后 waitSettled() 会立刻返回，调用方以为新的一轮已经跑完。
+   * 所以每次 run() 都换一个新的。
+   */
+  private settled: Promise<void> = Promise.resolve()
   private markSettled: () => void = () => {}
 
   constructor(options: CopyRunnerOptions) {
@@ -338,9 +392,7 @@ export class CopyTaskRunner {
       },
     })
 
-    this.settled = new Promise<void>((resolve) => {
-      this.markSettled = resolve
-    })
+    this.resetSettled()
   }
 
   // ---------------------------------------------------------------- 对外操作
@@ -398,23 +450,51 @@ export class CopyTaskRunner {
     if (!this.isFinal()) return this.snapshot()
     if (!this.failures.length) return this.snapshot()
 
-    // 把失败项换回待复制队列，其余计数归零
-    this.plan = this.failures.map((failure) => ({
-      image: {
-        path: failure.path,
-        absolutePath: failure.from,
-        name: failure.path.split('/').pop() ?? failure.path,
-      },
-      folder: [],
-      from: failure.from,
-      to: failure.to,
-      renamed: false,
-      action: 'copy',
-    }))
+    // 从最初的源清单里找回原项，而不是拿 failure.path 反推：
+    // path 与 name 是两回事（path 是展示用的相对路径，name 是文件名），
+    // 用 path 反推会丢 machine 字段（按机台分组就建错目录）；
+    // 而 from 在 Windows 上可能带尾随反斜杠，split 会切出空串。
+    const byPath = new Map(this.source.map((item) => [item.absolutePath, item]))
+
+    this.plan = this.failures.map((failure) => {
+      const image = byPath.get(failure.from)
+      const folder =
+        failure.to && this.targetDir
+          ? relativeFolderOf(failure.to, image, this.params.layout)
+          : folderOf(
+              image ?? {
+                path: failure.path,
+                absolutePath: failure.from,
+                name: basename(failure.from),
+              },
+              this.params.layout,
+            )
+
+      return {
+        image:
+          image ??
+          ({
+            path: failure.path,
+            absolutePath: failure.from,
+            // 找不到原项时用真实文件名兜底，不能用 path 的末段
+            name: basename(failure.from),
+          } satisfies ScannedImage),
+        folder,
+        from: failure.from,
+        to: failure.to,
+        renamed:
+          basename(failure.to) !== (image?.name ?? basename(failure.from)),
+        // 重试是明确要求「再写一次」，所以一律按复制处理，不做跳过判定
+        action: 'copy',
+      }
+    })
+    // 计划已经手工构造好，run() 不能再重跑 buildPlan
+    this.planned = true
     this.cursor = 0
     this.copied = 0
     this.renamed = 0
     this.skipped = 0
+    this.alreadyExists = 0
     this.failures = []
     this.finishedAt = null
     this.error = null
@@ -440,10 +520,13 @@ export class CopyTaskRunner {
 
     this.targetDir = targetDir
     this.plan = []
+    // 换了目录，旧计划里的 to 全部作废，必须重新规划
+    this.planned = false
     this.cursor = 0
     this.copied = 0
     this.renamed = 0
     this.skipped = 0
+    this.alreadyExists = 0
     this.failures = []
     this.error = null
     this.manifestPath = null
@@ -483,6 +566,13 @@ export class CopyTaskRunner {
     return this.settled
   }
 
+  /** 换一个新的终态 promise，供下一轮 run() 使用 */
+  private resetSettled(): void {
+    this.settled = new Promise<void>((resolve) => {
+      this.markSettled = resolve
+    })
+  }
+
   // ---------------------------------------------------------------- 执行主体
 
   private progress(): CopyProgress {
@@ -490,7 +580,8 @@ export class CopyTaskRunner {
     // 跳过的也是「处理完了」：它已经比对过目标目录并做出了决定，
     // 只是没落盘。把它排除在分母外会让进度条永远差一截，
     // 全是跳过时甚至停在 0%，用户会以为任务卡住了。
-    const done = this.copied + this.failures.length + this.skipped
+    const done =
+      this.copied + this.failures.length + this.skipped + this.alreadyExists
     const elapsed = Math.max(
       0,
       (this.finishedAt ?? Date.now()) - (this.startedAt ?? Date.now()),
@@ -512,6 +603,7 @@ export class CopyTaskRunner {
       layout: this.params.layout,
       renamed: this.renamed,
       skipped: this.skipped,
+      alreadyExists: this.alreadyExists,
       conflict: this.params.conflict ?? 'rename',
       currentPath: this.currentPath,
       startedAt: this.startedAt,
@@ -528,14 +620,20 @@ export class CopyTaskRunner {
   private async run(): Promise<void> {
     // 新一轮执行必须用干净的中断信号，否则「取消后再重试/换目录」会秒退
     this.abortController = new AbortController()
+    this.resetSettled()
 
     try {
-      // 首次执行才做规划；重试时 plan 已经是失败项的子集
-      if (!this.plan.length) {
+      // 只有从未规划过才做规划；重试时 plan 已是失败项的子集，
+      // 重试后 planned 保持 true，空计划直接结束
+      if (!this.planned) {
+        this.planned = true
         await this.buildPlan()
       }
 
       if (!this.plan.length) {
+        // 全部被跳过时也得走完收尾：清单是「这次要复制哪些图」的凭据，
+        // 跳过一张不写，用户事后无法核对到底点了哪些机台。
+        await this.writeManifest()
         this.finish('completed')
 
         return
@@ -621,27 +719,30 @@ export class CopyTaskRunner {
       let target = image.name
       let action: PlanAction = 'copy'
 
-      if (existedBefore) {
-        if (conflict === 'skip') {
-          // 目标已有这个名字：整组都不写，不搞「跳一张、改三张」的半吊子
-          action = 'skip'
-        } else if (conflict === 'overwrite') {
-          // 第一张顶掉目标文件，后面同名的编号落盘，否则 4 张最后只剩 1 张
-          target = repeated ? indexedName(image.name, used) : image.name
-        } else {
-          // 自动编号：把目标占着的名字让开，这一组一张不少地落盘
-          target = indexedName(image.name, used)
-        }
+      // 三条判定互斥，顺序不能换：
+      // 1) 目标开工前就有这个文件名 → 按用户选的策略走。skip 只跳这一张。
+      //    以前这里是整组跳过，9 张 img.jpg 遇到 1 张已存在就丢 8 张。
+      // 2) 本批内部重名（目标原本没有）→ 编号让开，skip 也跳。
+      //    这一段保证 A02-A 下 9 张 img.jpg 不会互相覆盖，不能动。
+      // 3) 其余照常复制。
+      if (existedBefore && conflict === 'skip') {
+        action = 'skip-exists'
+      } else if (existedBefore && conflict === 'overwrite') {
+        // 第一张顶掉目标文件，后面同名的编号落盘，否则 4 张最后只剩 1 张
+        target = repeated ? indexedName(image.name, used) : image.name
       } else if (used.has(lower)) {
-        // 本批内部重名（目标原本没有这个名字）：skip 全跳，其余编号
-        if (conflict === 'skip') {
-          action = 'skip'
-        } else {
-          target = indexedName(image.name, used)
-        }
+        if (conflict === 'skip') action = 'skip'
+        else target = indexedName(image.name, used)
       }
 
       if (action === 'copy') used.add(target.toLowerCase())
+
+      // 目标已存在而跳过的项不进 plan：它们不需要任何磁盘动作，
+      // 混进 plan 只会把批号、进度和并发通道都算乱。
+      if (action === 'skip-exists') {
+        this.alreadyExists += 1
+        continue
+      }
 
       this.plan.push({
         image,
@@ -697,12 +798,23 @@ export class CopyTaskRunner {
   }
 
   private async copyAll(): Promise<void> {
-    const total = this.plan.length
+    // 规划阶段就已经决定跳过的项（目标已存在 / 源内重名）在这里一次性结清：
+    // 它们不碰磁盘，没必要占用并发通道。以前它们混在 plan 里交给 copyOne，
+    // 而 copyOne 一进来就 return，pool 的 next 游标与批号推进节奏对不上，
+    // 极端情况下还会让「全部跳过」变成 0/0 的进度。
+    for (const item of this.plan) {
+      if (item.action === 'skip') this.skipped += 1
+    }
+
+    const work = this.plan.filter((item) => item.action === 'copy')
+    const total = work.length
+
+    this.touch('', true)
 
     // 外层按批推进只为让 progress 的批号有意义，真正的并发控制交给 pool
     while (this.cursor < total) {
       const batchEnd = Math.min(this.cursor + this.batchSize, total)
-      const batch = this.plan.slice(this.cursor, batchEnd)
+      const batch = work.slice(this.cursor, batchEnd)
 
       await this.pool(batch, (item) => this.copyOne(item))
 
@@ -714,15 +826,7 @@ export class CopyTaskRunner {
   private async copyOne(item: PlanItem): Promise<void> {
     await this.checkpoint()
 
-    // 跳过项不碰磁盘，直接计数
-    if (item.action === 'skip') {
-      this.skipped += 1
-      this.gate.sample(false)
-      this.touch(item.to)
-
-      return
-    }
-
+    // 走到这里的只可能是 action === 'copy'；跳过项在 copyAll 里已结清
     this.currentPath = item.to
 
     try {

@@ -55,7 +55,7 @@ const STATUS_META: Record<
 
 const CONFLICT_VERB: Record<CopyConflictPolicy, string> = {
   rename: '自动编号后全部复制',
-  skip: '整组跳过',
+  skip: '只跳过同名的那张',
   overwrite: '覆盖',
 }
 
@@ -411,8 +411,21 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
         </Callout.Root>
       ) : null}
 
-      {/* 进度 */}
-      {task ? (
+      {/* 进度：取消后只留一行摘要，不把进度条冻在 13% 让人以为还在跑 */}
+      {task && task.status === 'canceled' ? (
+        <Flex className="copy-canceled" align="center" gap="2" wrap="wrap">
+          <Badge color="gray" variant="surface">
+            已取消
+          </Badge>
+          <Text size="1" color="gray">
+            已复制 {task.progress.copied} / {task.progress.total} 张
+            {task.progress.alreadyExists > 0
+              ? ` · 已存在 ${task.progress.alreadyExists}`
+              : ''}
+            {task.progress.failed > 0 ? ` · 失败 ${task.progress.failed}` : ''}
+          </Text>
+        </Flex>
+      ) : task ? (
         <Box className="copy-progress">
           <Flex direction="column" gap="2">
             <Flex justify="between" align="center">
@@ -429,11 +442,14 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
                 ) : null}
               </Flex>
               <Text size="1" color="gray" className="tabular">
-                {task.progress.skipped > 0
-                  ? `已完成 ${task.progress.copied + task.progress.failed + task.progress.skipped} / ${task.progress.total} 张`
+                {task.progress.alreadyExists > 0 || task.progress.skipped > 0
+                  ? `已完成 ${task.progress.copied + task.progress.failed + task.progress.skipped + task.progress.alreadyExists} / ${task.progress.total} 张`
                   : `${task.progress.copied} / ${task.progress.total} 张`}
+                {task.progress.alreadyExists > 0
+                  ? ` · 已存在 ${task.progress.alreadyExists}`
+                  : ''}
                 {task.progress.skipped > 0
-                  ? ` · 跳过 ${task.progress.skipped}`
+                  ? ` · 重名跳过 ${task.progress.skipped}`
                   : ''}
                 {task.progress.failed > 0
                   ? ` · 失败 ${task.progress.failed}`

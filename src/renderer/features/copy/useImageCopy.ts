@@ -85,18 +85,19 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
       const renamed = next.progress.renamed
         ? `，${next.progress.renamed} 张重名已改名`
         : ''
-      const { copied, failed, skipped } = next.progress
+      const { copied, failed, alreadyExists, skipped, total } = next.progress
       // 跳过项算完成，但结果里要单独说清，不然「已复制 0 张」像是没干活
-      const skippedText = skipped ? `，${skipped} 张已跳过（目标已存在）` : ''
+      const existsText = alreadyExists ? `，${alreadyExists} 张目标已存在` : ''
+      const skippedText = skipped ? `，${skipped} 张源内重名跳过` : ''
       const title = failed
         ? '复制完成但有条目失败'
-        : skipped && !copied
-          ? '目标目录已存在全部文件'
+        : !copied && existsText
+          ? '目标目录已存在同名文件'
           : '复制完成'
 
       showToast(
         title,
-        `已复制 ${copied} 张${renamed}${skippedText}${
+        `共 ${total} 张，已复制 ${copied} 张${renamed}${existsText}${skippedText}${
           failed ? `，${failed} 张失败` : ''
         }`,
         failed ? 'error' : 'success',
@@ -318,11 +319,13 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
   const percent = useMemo(() => {
     if (!copying) return 0
 
-    // 跳过项同样算已完成：否则「跳过策略 + 目标已有同名」时进度条会停在中途
-    const { copied, failed, skipped, total } = copying.progress
+    // 跳过项同样算已完成：否则「目标已有同名」时进度条会停在中途
+    const { copied, failed, skipped, alreadyExists, total } = copying.progress
     if (!total) return 0
 
-    return Math.round(((copied + failed + skipped) / total) * 100)
+    return Math.round(
+      ((copied + failed + skipped + alreadyExists) / total) * 100,
+    )
   }, [copying])
 
   /**
