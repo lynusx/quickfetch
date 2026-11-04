@@ -55,11 +55,12 @@ const NETWORK_FAILURE_WINDOW = 12
  */
 const NETWORK_FAILURE_MIN = 8
 /**
- * 一批里至少有这么多台机台、且一台都没连上，就直接判定断网。
+ * 连续多少台机台网络不可达，就直接判定断网。
  *
  * 车间的断网是整片发生的。AOI 一批 2 台，靠滑动窗口要跑 4 批才攒够样本，
- * 期间用户只看到进度条不动；整批不通是更早更准的信号。
- * 门槛设 3 是因为 2 台的批太小（两台恰好都关机很正常），不足以说明是断网。
+ * 期间用户只看到进度条不动；按机台跨批累计是更早更准的信号。
+ * 门槛设 3 是因为 2 台太小（两台恰好都关机很正常），不足以说明是断网；
+ * 只有 network 不可达才计数，未认证/无权限/无共享不算。
  */
 const BATCH_UNREACHABLE_MIN = 3
 
@@ -237,15 +238,16 @@ export class ScanTaskRunner {
    */
   private readonly reachabilityWindow: boolean[] = []
   /**
-   * 当前批次里已出结论的机台数，以及其中连得上 / 连不上的台数。
+   * 当前批次里连得上 / 连不上的机台数，以及跨批累计的连续不可达台数。
    *
    * 滑动窗口按"读取次数"采样，而整片断网时机台在解析阶段就失败、
    * 每台只贡献 1 个样本；AOI 一批才 2 台，等窗口攒够 8 个样本要跑 4 批，
-   * 期间每台都要等满超时。批内整批不通是更灵敏的信号，单独计数。
+   * 期间每台都要等满超时。这里按机台跨批累计：一批全不通就累加，
+   * 出现任意一台可达就清零，达到阈值立即暂停，不再等滑动窗口。
    */
-  private batchMachines = 0
   private batchReachable = 0
   private batchFailed = 0
+  private unreachableMachineStreak = 0
   private lastEmitAt = 0
 
   /** 当前生效的并发档位与单次读取超时，会随失败率自动调整 */
@@ -379,9 +381,9 @@ export class ScanTaskRunner {
     // 清空样本窗口：用户点「继续」就是在说「网络已经好了」，
     // 带着旧样本继续统计，接回网络后的头几次读取仍然会被算成失败
     this.reachabilityWindow.length = 0
-    this.batchMachines = 0
     this.batchReachable = 0
     this.batchFailed = 0
+    this.unreachableMachineStreak = 0
     this.status = 'running'
 
     const waiters = this.resumeWaiters.splice(0)
@@ -477,10 +479,8 @@ export class ScanTaskRunner {
         await this.checkpoint()
 
         this.progress.batchIndex = index + 1
-        // 每批开始前重置批内计数：批内整片不通要能立刻停下，
-        // 不必等跨批攒够滑动窗口的样本数（AOI 是 2 台一批，10 台要跑 5 批，
-        // 用户会觉得断网了却迟迟没提示）
-        this.batchMachines = 0
+        // 每批开始前清空批内计数；跨批的连续不可达由
+        // unreachableMachineStreak 维护，达到阈值立即暂停
         this.batchReachable = 0
         this.batchFailed = 0
         this.touch('', true)
@@ -549,7 +549,10 @@ export class ScanTaskRunner {
     }
 
     const base = resolved.base
-    const baseRead = await this.read(base)
+    // 前缀层是「这台机台能不能读」的第一道门。AOI 用更短的超时：
+    // 未认证时 SMB 只给 UNKNOWN，没必要等满自适应超时；深层的日期/班次
+    // 只有在这次读通之后才会被拼接。
+    const baseRead = await this.read(base, this.shape.baseReadTimeoutMs)
 
     if (baseRead.status !== 'ok') {
       this.markBroken(
@@ -771,11 +774,21 @@ export class ScanTaskRunner {
 
     branch.availableTypes = [...typeSeen]
 
-    // 最终状态在 collectDetails 里判定：只有真读到图片才算命中
-    if (!typeSeen.size) {
+    // 最终状态在 collectDetails 里判定：只有真读到图片才算命中。
+    // 但“所选类型一个都不存在”要在这里定性 —— 这类分支不会进待读队列，
+    // 留给兜底会被写成“类型目录存在，但里面没有图片文件”，与实际相反。
+    const matchedTypes = this.params.types.filter((type) => typeSeen.has(type))
+
+    if (!matchedTypes.length) {
       branch.status = 'empty'
       branch.brokenAt = '类型'
-      branch.message = `所选时段存在，但没有匹配的类型目录，实际存在：（空目录）`
+      branch.message = typeSeen.size
+        ? `所选时段下没有所选类型，实际存在：${summarize([...typeSeen])}`
+        : '所选时段下没有类型目录'
+    } else {
+      // 类型目录确实找到了，只是还没读文件明细；先占位，
+      // 由 collectDetails 决定是“目录在但没图”还是命中。
+      branch.brokenAt = '未命中'
     }
 
     this.touch(shiftDir, true)
@@ -970,11 +983,19 @@ export class ScanTaskRunner {
     this.touch(item.dir)
   }
 
-  /** 统一读取入口：超时、网络故障计数、自适应降档与自动暂停都在这里 */
-  private async read(path: string): Promise<DirReadResult> {
+  /**
+   * 统一读取入口：超时、网络故障计数、自适应降档与自动暂停都在这里。
+   *
+   * timeoutMs 用于前缀层这类“先确认能不能进去”的浅层读取：AOI 未认证时
+   * SMB 会返回 UNKNOWN，等满默认的 20 秒只会让整批机台看起来卡住。
+   */
+  private async read(
+    path: string,
+    timeoutMs = this.timeoutMs,
+  ): Promise<DirReadResult> {
     await this.checkpoint()
 
-    const result = await readDirSafe(path, { timeoutMs: this.timeoutMs })
+    const result = await readDirSafe(path, { timeoutMs })
 
     if (result.status === 'ok') {
       this.progress.dirsScanned += 1
@@ -1029,27 +1050,38 @@ export class ScanTaskRunner {
    * 按机台记账：这台机台最终是不是连不上。
    *
    * 与 noteReachability 分开是因为两者粒度不同 —— 前者按读取次数采样，
-   * 适合判"整片断网"；这里按机台计数，供 checkBatchUnreachable 在本批
-   * 跑完后做一次整批判定。
+   * 适合判"整片断网"；这里按机台计数，供 checkBatchUnreachable 在批间累计。
+   * 只有 network 不可达才计入失败；未认证/无权限/无共享不算断网。
    */
   private noteMachineReachability(reachable: boolean): void {
-    this.batchMachines += 1
     if (reachable) this.batchReachable += 1
     else this.batchFailed += 1
   }
 
   /**
-   * 本批跑完后看一次：整批一台都没通，就直接判断网。
+   * 一批跑完后看一次：连续多台机台都网络不可达，就暂停等用户接网络。
    *
-   * 这条专门给小批量场景兜底。AOI 一批 2 台，滑动窗口要 8 个样本，
-   * 得跑 4 批才够；期间每台都要等满超时，用户看着进度条不动就会以为卡住。
-   * 判定条件是"整批一台都没通"而不是"连着几台不通"，这样
-   * "一批 8 台里 5 台关机、3 台正常"不会被误判 —— 那种情况网络是通的。
+   * 不能要求"单批 >= 3 台"：默认批次只有 2 台，那个条件永远不会成立。
+   * 改为跨批累计——一批里只要有一台可达就清零，全都不通则把本批失败数
+   * 累加；达到 BATCH_UNREACHABLE_MIN（3 台）立即暂停。这样
+   * "一批 8 台里 5 台关机、3 台正常"仍不会误判。
    */
   private checkBatchUnreachable(): void {
-    if (this.batchMachines < BATCH_UNREACHABLE_MIN) return
-    if (this.batchReachable > 0) return
-    if (this.status === 'running') this.pause('network')
+    if (this.batchReachable > 0) {
+      this.unreachableMachineStreak = 0
+    } else if (this.batchFailed > 0) {
+      this.unreachableMachineStreak += this.batchFailed
+    }
+
+    this.batchReachable = 0
+    this.batchFailed = 0
+
+    if (
+      this.unreachableMachineStreak >= BATCH_UNREACHABLE_MIN &&
+      this.status === 'running'
+    ) {
+      this.pause('network')
+    }
   }
 
   /** 采样一次读取结果；降档的具体动作由 gate 的 onChange 回调完成 */
@@ -1099,9 +1131,15 @@ export class ScanTaskRunner {
       branch.message = `「${where}」读取失败，多半是未认证：${AUTH_HINT}，然后重新扫描`
     } else if (detail) {
       branch.status = 'missing'
+      branch.missingName = detail.expected
       branch.message = `「${where}」下没有「${detail.expected}」，实际存在：${summarize(detail.actual)}`
     } else {
       branch.status = 'missing'
+      // 结构化记住缺失的目录名，界面据此显示「20261103 目录不存在」这类短文案
+      if (brokenAt === 'EL') branch.missingName = 'EL'
+      else if (brokenAt === '共享名' && this.shape.baseName) {
+        branch.missingName = this.shape.baseName
+      }
       branch.message = `「${where}」不存在`
     }
 
@@ -1137,7 +1175,9 @@ export class ScanTaskRunner {
       this.progress.dirsUnreachable += 1
     }
     this.noteReachability(resolved.unreachable === 'network')
-    this.noteMachineReachability(!resolved.unreachable)
+    // 只有网络不通才算「这台机台连不上」。未认证/无权限/无共享只是这台
+    // 机台自身的问题，把它们算成失败会让新阈值在 39 台未认证时误判断网。
+    this.noteMachineReachability(resolved.unreachable !== 'network')
 
     this.probedMachines += 1
     this.finishedMachines += 1

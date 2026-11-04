@@ -166,19 +166,12 @@
   min-width: 0;
 }
 
-/* 状态文案可能很长（含"请去资源管理器输密码"），单行省略 + title 看全文 */
+/* 状态文案保持单行；完整诊断信息放在 title 里，不把表格撑开 */
 .data-row-message {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
-}
-
-/* 「打开共享」按需出现：只在读不通的行上渲染，这里保证它不被文本挤掉 */
-.data-row-action {
-  flex-shrink: 0;
-  margin-left: auto;
-  font-size: 10.5px;
 }
 
 .data-row-value {

@@ -1,4 +1,4 @@
-import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
+import { BrowserWindow, app, dialog, ipcMain } from 'electron'
 import { basename } from 'node:path'
 
 import type {
@@ -30,7 +30,6 @@ import {
   updatePl,
 } from '../services/settings'
 import { splitMachine } from '../services/discovery/shortcuts'
-import { toFsPath } from '../utils/pathx'
 
 export const getParentWindow = (
   sender: Electron.WebContents,
@@ -207,32 +206,11 @@ export const registerSettingsIpc = (): void => {
   })
 
   /**
-   * 用资源管理器打开网络地址。
-   *
-   * 未认证时这一步是唯一可靠的办法：Windows 会在打开时弹凭据框，
-   * 用户输入一次并勾上「记住我的凭据」之后，本应用后续扫描就能直接读。
-   * 应用不代填密码 —— 那要明文保管凭据，风险远大于省下的几次输入。
-   */
-  ipcMain.handle(
-    'share:open',
-    async (_event, path: string): Promise<string | null> => {
-      const target = (path ?? '').trim()
-
-      if (!target) return '共享地址为空'
-
-      // openPath 失败时返回错误文案，成功返回空串
-      const result = await shell.openPath(toFsPath(target))
-
-      return result || null
-    },
-  )
-
-  /**
    * 强制重新探测共享目录并写回配置。
    *
    * 现场换了共享名、或者当初没连网导致没探到，都靠这个按钮补救。
-   * 默认只探"未探测"和"无共享"的机台；显式传 keys 时按 keys 来。
-   * 串行 + 分批：46 台并发探会把现场那台 8G 机器和无线网一起拖垮。
+   * 不传 keys 时重探全部未删除机台；显式传 keys 时按 keys 来。
+   * 串行探测：46 台并发会把现场那台 8G 机器和无线网一起拖垮。
    */
   ipcMain.handle(
     'share:reprobe',
@@ -258,8 +236,11 @@ export const registerSettingsIpc = (): void => {
         for (const machine of targets) {
           const share = await probeLxtShare(machine.host, date)
 
-          // null 也要写回：那正是"探过了，两边都没有"的结论
-          await rememberLxtShare(machine.key, share, machine.host)
+          // null 表示读不通、结论不确定，保留旧缓存下次再试；
+          // '' 才表示「探过了，两边都没有」，正常落盘
+          if (share !== null) {
+            await rememberLxtShare(machine.key, share, machine.host)
+          }
         }
 
         return readSettings()
@@ -273,7 +254,9 @@ export const registerSettingsIpc = (): void => {
         const [plant, name] = splitMachine(machine.key)
         const share = await probePlShare(machine.host, name, plant, date)
 
-        await rememberPlShare(machine.key, share, machine.host)
+        if (share !== null) {
+          await rememberPlShare(machine.key, share, machine.host)
+        }
       }
 
       return readSettings()

@@ -1,4 +1,4 @@
-import { useCallback, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import {
   ActivityLogIcon,
   ExclamationTriangleIcon,
@@ -23,14 +23,13 @@ import {
 
 import { Panel, PanelBody, PanelHeader } from '@/components/panel'
 import { Stat, StatGrid } from '@/components/stat'
-import { useToast } from '@/hooks/useToast'
-import type { ScanBranch, ScanTask } from '@shared/ipc'
+import type { ScanTask } from '@shared/ipc'
 import { formatDuration, formatEta } from '@/utils/common'
 import {
   SCAN_STATUS_META,
   branchState,
+  branchSummary,
   inaccessibleKindOf,
-  shareUrlOf,
 } from './scanStatus'
 import { ScanStatusBadge } from './scan-status-badge'
 
@@ -38,14 +37,6 @@ const PHASE_LABEL: Record<string, string> = {
   probe: '探测目录',
   collect: '收集图片',
   done: '已结束',
-}
-
-const branchText = (branch: ScanBranch): string => {
-  if (branch.message) return branch.message
-  if (branch.status === 'hit')
-    return `${branch.images} 张 · ${branch.matchedDirs} 个目录`
-  if (branch.status === 'skipped') return '未探测'
-  return '无图片'
 }
 
 const DOT_TONE: Record<string, string> = {
@@ -103,32 +94,7 @@ export const ScanTaskPanel = ({
 }: ScanTaskPanelProps) => {
   const status = task ? SCAN_STATUS_META[task.status] : null
   const branches = task?.branches ?? []
-  const { showToast } = useToast()
 
-  /**
-   * 交给系统资源管理器打开共享。
-   *
-   * 未认证时 Windows 会在这一步弹凭据框，用户输入一次并勾上
-   * 「记住我的凭据」后，本应用后续读取就通了 —— 比在应用里再造一个
-   * 账号密码表单安全得多，也不会绕开系统的凭据管理。
-   */
-  const openShare = useCallback(
-    async (target: string): Promise<void> => {
-      const failure = await window.electronAPI.openShare(target)
-
-      if (failure) {
-        showToast('打开共享失败', failure, 'error')
-        return
-      }
-
-      showToast(
-        '已打开共享',
-        '若弹出凭据框，请输入账号密码并勾选「记住我的凭据」，然后重新扫描',
-        'info',
-      )
-    },
-    [showToast],
-  )
   const abnormal = branches.filter(
     (branch) => branch.status !== 'hit' && branch.status !== 'empty',
   )
@@ -435,8 +401,7 @@ export const ScanTaskPanel = ({
                 {branches.map((branch) => {
                   const tone = branchState(branch)
                   const kind = inaccessibleKindOf(branch)
-                  // 只有"读不通"才需要去认证；网络不通、没有目录点了也没用
-                  const share = kind ? shareUrlOf(branch) : null
+                  const summary = branchSummary(branch, task?.params)
 
                   return (
                     <Grid
@@ -457,11 +422,7 @@ export const ScanTaskPanel = ({
                         className="data-row-status"
                         align="center"
                         gap="1"
-                        title={
-                          branch.detail
-                            ? `${branchText(branch)}\n${branch.detail}`
-                            : branchText(branch)
-                        }
+                        title={branch.detail ?? undefined}
                       >
                         <Box
                           as="span"
@@ -469,19 +430,8 @@ export const ScanTaskPanel = ({
                           data-tone={DOT_TONE[tone] || undefined}
                         />
                         <Text as="span" size="1" className="data-row-message">
-                          {branchText(branch)}
+                          {summary.statusText}
                         </Text>
-                        {share ? (
-                          <Button
-                            size="1"
-                            variant="ghost"
-                            color="amber"
-                            className="data-row-action"
-                            onClick={() => void openShare(share)}
-                          >
-                            打开共享
-                          </Button>
-                        ) : null}
                       </Flex>
                       <Text
                         as="span"
@@ -490,7 +440,7 @@ export const ScanTaskPanel = ({
                         weight="medium"
                         className="data-row-value"
                       >
-                        {branch.images > 0 ? `${branch.images} 张` : '—'}
+                        {summary.imagesText}
                       </Text>
                     </Grid>
                   )

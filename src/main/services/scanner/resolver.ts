@@ -8,7 +8,6 @@ import {
   LXT_SHARES,
   PL_FIXED,
 } from '../../../shared/ipc'
-import { pickPlShare } from '../discovery/pl'
 import { splitMachine } from '../discovery/shortcuts'
 import { AUTH_HINT, NETWORK_HINT } from '../../../shared/networkHint'
 import { readDirSafe } from './fsx'
@@ -62,6 +61,17 @@ export interface PathShape {
   hasSlots?: boolean
   /** 前缀层读取失败时归属哪一层；默认 EL */
   baseBrokenAt?: 'EL' | '共享名' | '机台标识'
+  /**
+   * 前缀层第一次读取的超时上限。
+   *
+   * 森标 AOI 大量机台未认证，直接读 `\\IP\SaveImages` 时 Windows 只会返回
+   * UNKNOWN，但一次 SMB 往返可能要等满默认的 20 秒。把它压到几秒，
+   * 未认证/离线的机台就能快速定性并跳过，不再逐层拼接深层路径。
+   * 不设时沿用扫描器的自适应超时。
+   */
+  baseReadTimeoutMs?: number
+  /** 前缀层目录名，用于「SaveImages 目录不存在」这类短文案；不设则按层名兜底 */
+  baseName?: string
 }
 
 export interface MachineResolver {
@@ -296,31 +306,44 @@ const pickLxtShare = (candidates: LxtCandidate[]): LxtShare | null => {
  * 与扫描里的调用同一个函数，保证手动重探与自动探测的判定完全一致 ——
  * 两套逻辑各写一遍迟早会分叉，那时用户点按钮得到的结果和扫描对不上。
  *
- * 返回 null 表示两个候选都不可用（保留给界面提示"无共享"）。
+ * 返回三态：名字 / ''（探过，两边都没有）/ null（读不通，结论不确定）。
+ * null 时调用方不要覆盖旧缓存，下次扫描或重探还会再试。
  */
 export const probeLxtShare = async (
   host: string,
   date: string,
-): Promise<LxtShare | null> => {
+): Promise<ShareState<LxtShare>> => {
   const candidates = await Promise.all(
     LXT_SHARES.map((share) => readLxtCandidate(host, share, date)),
   )
 
-  return pickLxtShare(candidates)
+  const picked = pickLxtShare(candidates)
+  if (picked) return picked
+
+  const roots = candidates.map((item) => item.rootStatus)
+  const inconclusive = roots.some(
+    (status) =>
+      status === 'unreachable' ||
+      status === 'unreadable' ||
+      status === 'denied',
+  )
+
+  return inconclusive ? null : ''
 }
 
 /**
  * 单独探一台利珀机台的标识目录。
  *
- * 与 probePlCandidates 走同一套候选与挑选规则；cached 传 null 表示
- * 完全重探，不拿旧值参与平局判断。
+ * 与 probePlCandidates 走同一套候选与挑选规则；不再枚举 `\\IP` 主机根 ——
+ * Windows 对只有主机的 UNC 根只会返回 EINVAL/ERROR_BAD_NETPATH，
+ * 既列不出共享，也会在未认证时白等一轮超时。
  */
 export const probePlShare = async (
   host: string,
   machineName: string,
   plant: string,
   date: string,
-): Promise<string | null> => {
+): Promise<ShareState> => {
   const names = plShareCandidates(machineName, plant)
   const probed = await Promise.all(
     names.map((name, index) => readPlCandidate(host, name, date, index)),
@@ -329,17 +352,15 @@ export const probePlShare = async (
   const picked = pickPlCandidate(probed)
   if (picked) return picked
 
-  // 名字都没猜中时列一次主机根，兼容现场改过名的标识目录
-  const listing = await probeRead(host)
+  const roots = probed.map((item) => item.rootStatus)
+  const inconclusive = roots.some(
+    (status) =>
+      status === 'unreachable' ||
+      status === 'unreadable' ||
+      status === 'denied',
+  )
 
-  if (listing.status !== 'ok') return null
-
-  const fallback = pickPlShare(listing.dirs, machineName)
-  if (!fallback) return null
-
-  const candidate = await readPlCandidate(host, fallback, date, probed.length)
-
-  return candidate.status === 'ok' ? fallback : null
+  return inconclusive ? null : ''
 }
 
 /**
@@ -657,8 +678,6 @@ const pickPlCandidate = (candidates: PlCandidate[]): string | null => {
 interface PlProbeResult {
   candidates: PlCandidate[]
   tried: string[]
-  listingDirs: string[]
-  listingStatus: DirReadResult['status'] | null
 }
 
 /**
@@ -678,8 +697,6 @@ const probePlCandidates = async (
 ): Promise<PlProbeResult> => {
   const candidates: PlCandidate[] = []
   const tried: string[] = []
-  let listingDirs: string[] = []
-  let listingStatus: DirReadResult['status'] | null = null
 
   if (cached) {
     const current = await readPlCandidate(host, cached, taskDate, 0)
@@ -690,7 +707,7 @@ const probePlCandidates = async (
     // 以前即使命中也要把所有候选跑一遍，46 台 × 4 个候选 = 184 次网络往返，
     // 现场感受就是"扫描起步要等半分钟"。
     if (current.status === 'ok' && current.hasTaskDate) {
-      return { candidates, tried, listingDirs, listingStatus }
+      return { candidates, tried }
     }
   }
 
@@ -705,37 +722,9 @@ const probePlCandidates = async (
   candidates.push(...probed)
   tried.push(...names)
 
-  if (candidates.some((item) => item.status === 'ok')) {
-    return { candidates, tried, listingDirs, listingStatus }
-  }
-
-  // 所有已知候选都不可用；如果其中有过网络不可达，主机层面大概率也不通，
-  // 不再枚举 \\IP 根目录，直接交给调用方按 network 处理
-  if (candidates.some((item) => item.status === 'unreachable')) {
-    return { candidates, tried, listingDirs, listingStatus }
-  }
-
-  // 名字都猜不中时才列主机根目录，兼容现场改过名的标识目录
-  const listing = await probeRead(host)
-  listingStatus = listing.status
-
-  if (listing.status === 'ok') {
-    listingDirs = listing.dirs
-    const picked = pickPlShare(listing.dirs, machineName)
-
-    if (picked && !tried.includes(picked)) {
-      const candidate = await readPlCandidate(
-        host,
-        picked,
-        taskDate,
-        candidates.length,
-      )
-      candidates.push(candidate)
-      tried.push(picked)
-    }
-  }
-
-  return { candidates, tried, listingDirs, listingStatus }
+  // 只探已知候选名。不再枚举 `\\IP` 主机根：Windows 对只有主机的 UNC 根
+  // 只会返回 EINVAL/ERROR_BAD_NETPATH，列不出共享，未认证时还要白等超时。
+  return { candidates, tried }
 }
 
 /** 没有可用候选时，按「主机 → 认证 → 权限 → 目录缺失」的层级给出原因 */
@@ -747,10 +736,7 @@ const plFailure = (
 ): ResolveResult => {
   const rootStates = probe.candidates.map((item) => item.rootStatus)
 
-  if (
-    rootStates.includes('unreachable') ||
-    probe.listingStatus === 'unreachable'
-  ) {
+  if (rootStates.includes('unreachable')) {
     return {
       ok: false,
       base: '',
@@ -760,10 +746,7 @@ const plFailure = (
     }
   }
 
-  if (
-    rootStates.includes('unreadable') ||
-    probe.listingStatus === 'unreadable'
-  ) {
+  if (rootStates.includes('unreadable')) {
     return {
       ok: false,
       base: '',
@@ -773,7 +756,7 @@ const plFailure = (
     }
   }
 
-  if (rootStates.includes('denied') || probe.listingStatus === 'denied') {
+  if (rootStates.includes('denied')) {
     return {
       ok: false,
       base: '',
@@ -785,16 +768,13 @@ const plFailure = (
 
   // 只有标识目录确实能进去、里面却没有 Matting 或日期时，才说「没找到」
   const tried = probe.tried.length ? `已试：${probe.tried.join('、')}；` : ''
-  const actual = probe.listingDirs.length
-    ? probe.listingDirs.slice(0, 6).join('、')
-    : '（未列出）'
 
   return {
     ok: false,
     base: '',
     reason: cached
-      ? `缓存的标识目录 ${cached} 已不可用，且没有找到与「${machineName}」匹配的标识目录（${tried}实际存在：${actual}）`
-      : `${host} 上没有找到与「${machineName}」匹配的标识目录（${tried}实际存在：${actual}）`,
+      ? `缓存的标识目录 ${cached} 已不可用，且没有找到与「${machineName}」匹配的标识目录（${tried}可点「重新探测共享」）`
+      : `${host} 上没有找到与「${machineName}」匹配的标识目录（${tried}可点「重新探测共享」）`,
     brokenAt: '机台标识',
     unreachable: 'share',
   }
@@ -929,6 +909,10 @@ export const createAoiResolver = (
     shiftDir: (shift) => AOI_SHIFT_DIRS[shift],
     hasSlots: false,
     baseBrokenAt: '共享名',
+    // 未认证机台占多数：前缀层只给 5 秒，读不通立即按 auth 跳过，
+    // 不再逐层拼接日期/班次后等满自适应超时。
+    baseReadTimeoutMs: 5_000,
+    baseName: AOI_SHARE,
   },
   validate: () =>
     options.hosts.size ? null : '尚未识别森标 AOI 入口，请先选择并识别入口目录',

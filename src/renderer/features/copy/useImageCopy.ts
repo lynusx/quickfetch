@@ -4,6 +4,7 @@ import type { CopyTask, ScanCategory } from '@shared/ipc'
 import { copyStoreOf } from './copyStore'
 import { scanStoreOf } from '@/features/scan'
 import { selectPreferences, useSettingsStore } from '@/features/settings'
+import { formatFileSize } from '@/utils/common'
 import { toErrorMessage } from '@/utils/error'
 
 interface UseImageCopyProps {
@@ -85,10 +86,13 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
       const renamed = next.progress.renamed
         ? `，${next.progress.renamed} 张重名已改名`
         : ''
-      const { copied, failed, alreadyExists, skipped, total } = next.progress
+      const { copied, failed, alreadyExists, skipped, total, totalBytes } =
+        next.progress
       // 跳过项算完成，但结果里要单独说清，不然「已复制 0 张」像是没干活
       const existsText = alreadyExists ? `，${alreadyExists} 张目标已存在` : ''
       const skippedText = skipped ? `，${skipped} 张源内重名跳过` : ''
+      const sizeText =
+        totalBytes > 0 ? `，共 ${formatFileSize(totalBytes)}` : ''
       const title = failed
         ? '复制完成但有条目失败'
         : !copied && existsText
@@ -97,7 +101,7 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
 
       showToast(
         title,
-        `共 ${total} 张，已复制 ${copied} 张${renamed}${existsText}${skippedText}${
+        `共 ${total} 张${sizeText}，已复制 ${copied} 张${renamed}${existsText}${skippedText}${
           failed ? `，${failed} 张失败` : ''
         }`,
         failed ? 'error' : 'success',

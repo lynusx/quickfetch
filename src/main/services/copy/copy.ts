@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, stat, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 
 import type {
@@ -145,28 +145,6 @@ export const filterByMachines = (
   return images.filter((image) => allowed.has(machineOf(image)))
 }
 
-/**
- * 从已算好的目标路径反推它相对目标目录的层级。
- *
- * 重试时 failure.to 是「目标目录 + 分组子目录 + 文件名」，直接按分隔符
- * 切出来的段数就是层级；拿不准（目标目录变了、路径不在其下）时退回
- * 按分组方式重算，绝不让层级错位导致文件落到别的分组里。
- */
-const relativeFolderOf = (
-  to: string,
-  image: ScannedImage | undefined,
-  layout: CopyLayout,
-): string[] => {
-  const segments = to.split(/[\\/]+/).filter(Boolean)
-
-  // 最后一段是文件名，前面都是文件夹；至少要有 1 段目录才可能是分组的
-  return segments.length > 1
-    ? segments.slice(0, -1)
-    : image
-      ? folderOf(image, layout)
-      : []
-}
-
 const compareName = (a: string, b: string): number =>
   a.localeCompare(b, 'zh-CN', { numeric: true })
 
@@ -289,6 +267,8 @@ interface PlanItem {
   to: string
   renamed: boolean
   action: PlanAction
+  /** 源文件大小；拿不到时为 undefined，进度按张数回退 */
+  size?: number
 }
 
 export interface CopyRunnerOptions {
@@ -331,6 +311,20 @@ export class CopyTaskRunner {
   private renamed = 0
   private skipped = 0
   private alreadyExists = 0
+  /**
+   * 本轮参与判定的图片总数：包含目标已存在、源内重名跳过的项。
+   *
+   * 不能用 plan.length 当分母：skip-exists 的项不进 plan，但确实处理过了。
+   * 早先的公式是「done 含 alreadyExists、total 只算 plan」，全部跳过时会
+   * 显示成「已完成 9 / 0 张」。
+   */
+  private roundTotal = 0
+  /** 本轮真正要写盘的文件数 */
+  private copyTotal = 0
+  private totalBytes = 0
+  private copiedBytes = 0
+  private failedBytes = 0
+  private sizeUnknown = 0
   private failures: CopyFailure[] = []
   private currentPath = ''
   private startedAt: number | null = null
@@ -347,6 +341,9 @@ export class CopyTaskRunner {
   private planned = false
 
   private paused = false
+  /** 暂停累计时长与本次暂停起点，用于算真实吞吐（不含暂停） */
+  private pausedMs = 0
+  private pausedAt: number | null = null
   private resumeWaiters: (() => void)[] = []
   /**
    * 每次 run 重新创建：取消过的信号会一直是 aborted，
@@ -412,6 +409,7 @@ export class CopyTaskRunner {
     if (this.status !== 'running') return this.snapshot()
 
     this.paused = true
+    this.pausedAt = Date.now()
     this.status = 'paused'
     this.touch('', true)
 
@@ -420,6 +418,11 @@ export class CopyTaskRunner {
 
   resume(): CopyTask {
     if (this.status !== 'paused') return this.snapshot()
+
+    if (this.pausedAt !== null) {
+      this.pausedMs += Date.now() - this.pausedAt
+      this.pausedAt = null
+    }
 
     this.paused = false
     this.status = 'running'
@@ -433,6 +436,11 @@ export class CopyTaskRunner {
 
   cancel(): CopyTask {
     if (this.isFinal()) return this.snapshot()
+
+    if (this.pausedAt !== null) {
+      this.pausedMs += Date.now() - this.pausedAt
+      this.pausedAt = null
+    }
 
     this.abortController.abort()
     this.paused = false
@@ -458,27 +466,19 @@ export class CopyTaskRunner {
 
     this.plan = this.failures.map((failure) => {
       const image = byPath.get(failure.from)
+      // 失败时已经把分组目录记下来了，直接沿用；不能从绝对路径反推，
+      // 否则盘符和目标目录会被当成子目录拼进下一次 createFolders。
+      const fallbackImage: ScannedImage = image ?? {
+        path: failure.path,
+        absolutePath: failure.from,
+        // 找不到原项时用真实文件名兜底，不能用 path 的末段
+        name: basename(failure.from),
+      }
       const folder =
-        failure.to && this.targetDir
-          ? relativeFolderOf(failure.to, image, this.params.layout)
-          : folderOf(
-              image ?? {
-                path: failure.path,
-                absolutePath: failure.from,
-                name: basename(failure.from),
-              },
-              this.params.layout,
-            )
+        failure.folder ?? folderOf(fallbackImage, this.params.layout)
 
       return {
-        image:
-          image ??
-          ({
-            path: failure.path,
-            absolutePath: failure.from,
-            // 找不到原项时用真实文件名兜底，不能用 path 的末段
-            name: basename(failure.from),
-          } satisfies ScannedImage),
+        image: fallbackImage,
         folder,
         from: failure.from,
         to: failure.to,
@@ -495,9 +495,17 @@ export class CopyTaskRunner {
     this.renamed = 0
     this.skipped = 0
     this.alreadyExists = 0
+    this.roundTotal = this.plan.length
+    this.copyTotal = this.plan.length
+    this.totalBytes = 0
+    this.copiedBytes = 0
+    this.failedBytes = 0
+    this.sizeUnknown = 0
     this.failures = []
     this.finishedAt = null
     this.error = null
+    this.pausedMs = 0
+    this.pausedAt = null
     this.status = 'running'
     this.startedAt = Date.now()
     this.touch('', true)
@@ -527,11 +535,19 @@ export class CopyTaskRunner {
     this.renamed = 0
     this.skipped = 0
     this.alreadyExists = 0
+    this.roundTotal = 0
+    this.copyTotal = 0
+    this.totalBytes = 0
+    this.copiedBytes = 0
+    this.failedBytes = 0
+    this.sizeUnknown = 0
     this.failures = []
     this.error = null
     this.manifestPath = null
     this.currentPath = ''
     this.finishedAt = null
+    this.pausedMs = 0
+    this.pausedAt = null
     this.startedAt = Date.now()
     this.status = 'running'
     this.touch('', true)
@@ -576,27 +592,60 @@ export class CopyTaskRunner {
   // ---------------------------------------------------------------- 执行主体
 
   private progress(): CopyProgress {
-    const total = this.plan.length
+    const total = this.roundTotal
     // 跳过的也是「处理完了」：它已经比对过目标目录并做出了决定，
-    // 只是没落盘。把它排除在分母外会让进度条永远差一截，
-    // 全是跳过时甚至停在 0%，用户会以为任务卡住了。
+    // 只是没落盘。分母用 roundTotal（含已存在/源内重名跳过），
+    // 分子也包含它们，完成时两边才能对上。
     const done =
       this.copied + this.failures.length + this.skipped + this.alreadyExists
+    // 吞吐不算暂停：用户暂停十分钟再继续，不该把速度摊薄成接近 0
+    const activePausedMs =
+      this.pausedMs + (this.pausedAt !== null ? Date.now() - this.pausedAt : 0)
     const elapsed = Math.max(
       0,
-      (this.finishedAt ?? Date.now()) - (this.startedAt ?? Date.now()),
+      (this.finishedAt ?? Date.now()) -
+        (this.startedAt ?? Date.now()) -
+        activePausedMs,
     )
     const ratio = total > 0 ? Math.min(1, done / total) : 0
-    const batchTotal = total > 0 ? Math.ceil(total / this.batchSize) : 0
+    const batchTotal =
+      this.copyTotal > 0 ? Math.ceil(this.copyTotal / this.batchSize) : 0
+    const batchDone = this.copied + this.failures.length
+    const bytesPerSecond =
+      elapsed > 0 ? Math.round((this.copiedBytes / elapsed) * 1000) : 0
+
+    // 有完整字节信息时优先按字节估剩余；否则回退到按张数
+    let etaMs: number | null = null
+
+    if (this.status === 'running' && ratio < 1) {
+      const remainingBytes =
+        this.totalBytes - this.copiedBytes - this.failedBytes
+
+      if (
+        this.sizeUnknown === 0 &&
+        remainingBytes > 0 &&
+        bytesPerSecond > 0 &&
+        elapsed >= 3000
+      ) {
+        etaMs = Math.round((remainingBytes / bytesPerSecond) * 1000)
+      } else if (ratio >= 0.03) {
+        // 张数回退：3% 以后估算才稳，又比原来的 10% 更早给出预期
+        etaMs = Math.round((elapsed / ratio) * (1 - ratio))
+      }
+    }
 
     return {
       status: this.status,
       copied: this.copied,
       total,
+      copyTotal: this.copyTotal,
       failed: this.failures.length,
       batchIndex:
         batchTotal > 0
-          ? Math.min(Math.max(1, Math.ceil(done / this.batchSize)), batchTotal)
+          ? Math.min(
+              Math.max(1, Math.ceil(batchDone / this.batchSize)),
+              batchTotal,
+            )
           : 0,
       batchTotal,
       targetDir: this.targetDir,
@@ -605,15 +654,16 @@ export class CopyTaskRunner {
       skipped: this.skipped,
       alreadyExists: this.alreadyExists,
       conflict: this.params.conflict ?? 'rename',
+      totalBytes: this.totalBytes,
+      copiedBytes: this.copiedBytes,
+      failedBytes: this.failedBytes,
+      bytesPerSecond,
+      sizeUnknown: this.sizeUnknown,
       currentPath: this.currentPath,
       startedAt: this.startedAt,
       finishedAt: this.finishedAt,
       elapsedMs: elapsed,
-      // 进度过 10% 后估算才稳，否则刚开始会跳出一个很大的数
-      etaMs:
-        this.status === 'running' && ratio > 0.1 && ratio < 1
-          ? Math.round((elapsed / ratio) * (1 - ratio))
-          : null,
+      etaMs,
     }
   }
 
@@ -639,6 +689,9 @@ export class CopyTaskRunner {
         return
       }
 
+      // 先量一遍源文件大小：后面的总大小、吞吐与字节 ETA 都靠它。
+      // stat 失败不影响复制，只是该文件按大小未知处理。
+      await this.measurePlan()
       await this.writeManifest()
       await this.createFolders()
       await this.copyAll()
@@ -664,13 +717,18 @@ export class CopyTaskRunner {
 
   /** 本次任务应复制的完整图片集合；清单与执行计划都从这里取 */
   private taskImages(): ScannedImage[] {
-    return filterByMachines(this.source, this.params.machines)
+    // 与 planPreview、扫描侧共用同一套扩展名判定：
+    // 旧历史里若混入说明文件/表格，预览与真正复制的张数不能对不上。
+    return filterByMachines(this.source, this.params.machines).filter((image) =>
+      isImageFile(image.name),
+    )
   }
 
   /** 规划目标路径：按布局建子目录，按重名策略决定改名 / 跳过 / 覆盖 */
   private async buildPlan(): Promise<void> {
     const picked = this.taskImages()
     const conflict = this.params.conflict ?? 'rename'
+    this.roundTotal = picked.length
 
     // 三个名单各管一件事：
     // - original 是目标目录「开工前」的快照，用来判断这个名字是不是本来就存在
@@ -753,6 +811,39 @@ export class CopyTaskRunner {
         action,
       })
     }
+
+    this.copyTotal = this.plan.filter((item) => item.action === 'copy').length
+  }
+
+  /**
+   * 量一遍待复制源文件的大小。
+   *
+   * 只 stat 真正要写盘的项；跳过项不落盘，没必要为它们跑网络 IO。
+   * 失败只记 sizeUnknown，不能让 stat 问题阻断复制本身。
+   */
+  private async measurePlan(): Promise<void> {
+    const items = this.plan.filter((item) => item.action === 'copy')
+
+    this.totalBytes = 0
+    this.sizeUnknown = 0
+
+    // 极端大任务不在开跑前逐张 stat：几千次网络往返会让「开始复制」
+    // 看起来像卡住。此时展示层回退为按张数估算。
+    if (items.length > 5000) {
+      this.sizeUnknown = items.length
+      return
+    }
+
+    await this.pool(items, async (item) => {
+      try {
+        const info = await stat(toFsPath(item.from))
+        item.size = info.size
+        this.totalBytes += info.size
+      } catch {
+        // 源文件不可读时复制本来就会失败，大小按未知处理即可
+        this.sizeUnknown += 1
+      }
+    })
   }
 
   private async createFolders(): Promise<void> {
@@ -808,6 +899,7 @@ export class CopyTaskRunner {
 
     const work = this.plan.filter((item) => item.action === 'copy')
     const total = work.length
+    this.copyTotal = total
 
     this.touch('', true)
 
@@ -833,6 +925,7 @@ export class CopyTaskRunner {
       await copyFile(toFsPath(item.from), toFsPath(item.to))
 
       this.copied += 1
+      this.copiedBytes += item.size ?? 0
       if (item.renamed) this.renamed += 1
       this.gate.sample(false)
     } catch (error) {
@@ -840,10 +933,13 @@ export class CopyTaskRunner {
       // 但取消要立刻传播，不能被当成普通失败吞掉
       if (isAbortError(error)) throw error
 
+      this.failedBytes += item.size ?? 0
       this.failures.push({
         path: item.image.path,
         from: item.from,
         to: item.to,
+        // 重试时靠它还原分组目录，不再从绝对路径反推
+        folder: item.folder,
         reason: (error as Error)?.message ?? '未知错误',
       })
 

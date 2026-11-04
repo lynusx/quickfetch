@@ -34,7 +34,12 @@ import { copyStoreOf } from './copyStore'
 import { selectPreferences, useSettingsStore } from '@/features/settings'
 import type { CopyConflictPolicy, CopyStatus, ScanCategory } from '@shared/ipc'
 import { COPY_CONFLICT_LABEL, COPY_LAYOUT_LABEL } from '@shared/ipc'
-import { formatClockTime, formatDuration, formatEta } from '@/utils/common'
+import {
+  formatClockTime,
+  formatDuration,
+  formatEta,
+  formatFileSize,
+} from '@/utils/common'
 import './copy.css'
 
 const STATUS_META: Record<
@@ -418,7 +423,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
             已取消
           </Badge>
           <Text size="1" color="gray">
-            已复制 {task.progress.copied} / {task.progress.total} 张
+            已复制 {task.progress.copied} / {task.progress.copyTotal} 张
             {task.progress.alreadyExists > 0
               ? ` · 已存在 ${task.progress.alreadyExists}`
               : ''}
@@ -499,6 +504,18 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
               {finishAt !== null ? (
                 <Text as="span" size="1" color="gray">
                   预计 {formatClockTime(finishAt)} 完成
+                </Text>
+              ) : null}
+              {task.progress.totalBytes > 0 ? (
+                <Text as="span" size="1" color="gray" className="tabular">
+                  {formatFileSize(task.progress.copiedBytes)} /{' '}
+                  {formatFileSize(task.progress.totalBytes)}
+                  {running && task.progress.bytesPerSecond > 0
+                    ? ` · ${formatFileSize(task.progress.bytesPerSecond)}/s`
+                    : ''}
+                  {task.progress.sizeUnknown > 0
+                    ? ` · ${task.progress.sizeUnknown} 个大小未知`
+                    : ''}
                 </Text>
               ) : null}
               <Text

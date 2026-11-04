@@ -108,6 +108,9 @@ export const useHistoryRestore = (category: ScanCategory) => {
 
         // 上一轮的复制进度属于另一次结果，留着会让「复制」按钮状态错乱
         copyStoreOf(category).getState().reset()
+        // 恢复也会改筛选，先打个标记，避免 useResetOnParamChange 把
+        // 刚载入的任务当成"范围变了"清掉（第一次点击面板为空的原因）
+        scanStoreOf(category).getState().markRestored()
         scanStoreOf(category).getState().setTask(loaded)
 
         showToast(

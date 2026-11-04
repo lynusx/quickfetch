@@ -328,6 +328,11 @@ export interface ScanBranch {
   availableSlots?: string[]
   /** 该时段目录下真实存在的类型，用于提示「选了但目录里没有」；森标 AOI 即班次目录下的类型 */
   availableTypes?: string[]
+  /**
+   * 断链时缺失的那一层目录名，用于短文案「20261103 目录不存在」。
+   * 旧历史没有该字段，界面按 brokenAt/params 回退。
+   */
+  missingName?: string
   message?: string
   /**
    * 原始错误码 / 系统报错原文。
@@ -508,12 +513,26 @@ export interface CopyFailure {
   /** 目标绝对路径 */
   to: string
   reason: string
+  /**
+   * 失败项所属的分组子目录（相对目标目录）。
+   *
+   * 重试时直接沿用它，不再从 to 反推：to 是绝对路径，直接切段会把
+   * 盘符/目标目录一起当成子目录，Windows 上拼出非法路径，其他平台
+   * 则建出嵌套的垃圾目录。
+   */
+  folder?: string[]
 }
 
 export interface CopyProgress {
   status: CopyStatus
   copied: number
+  /**
+   * 本轮参与判定的图片总数：包含「目标已存在」「源内重名跳过」的项，
+   * 所以完成时 `copied + failed + skipped + alreadyExists === total`。
+   */
   total: number
+  /** 本轮真正要写盘的文件数（不含跳过项） */
+  copyTotal: number
   failed: number
   /** 当前批次，从 1 开始 */
   batchIndex: number
@@ -532,6 +551,16 @@ export interface CopyProgress {
   skipped: number
   /** 重名策略 */
   conflict: CopyConflictPolicy
+  /** 已知 size 的待写盘字节数；stat 全部失败时为 0 */
+  totalBytes: number
+  /** 已成功写盘的字节数 */
+  copiedBytes: number
+  /** 失败文件对应的字节数（已知 size 的部分） */
+  failedBytes: number
+  /** 平均吞吐（字节/秒），按扣除暂停后的用时计算 */
+  bytesPerSecond: number
+  /** 拿不到 size 的待写盘文件数；大于 0 时 ETA 回退到按张数估算 */
+  sizeUnknown: number
   /** 正在复制的文件，展示用 */
   currentPath: string
   startedAt: number | null
@@ -703,16 +732,6 @@ export interface ElectronAPI {
   ) => Promise<CopyTask | null>
   /** 在系统文件管理器里打开目标目录；失败时返回可读错误，成功返回 null */
   revealCopyTarget: (targetDir: string) => Promise<string | null>
-
-  /**
-   * 用资源管理器打开一个网络地址（如 \\10.108.8.203\SaveImages）。
-   *
-   * 未认证时这是唯一可靠的办法：Windows 会在打开时弹凭据框，
-   * 用户输入一次、勾上「记住我的凭据」之后，后续扫描就能直接读。
-   * 应用本身不代填密码 —— 那需要明文保管凭据，得不偿失。
-   * 返回 null 表示已交给系统，返回字符串表示失败原因。
-   */
-  openShare: (path: string) => Promise<string | null>
 
   /**
    * 强制重新探测力禧特 / 利珀机台的共享目录并写回配置。
