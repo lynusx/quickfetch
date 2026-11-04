@@ -110,7 +110,7 @@ pnpm build                        # 构建
 ```bash
 rm -rf release/* && pnpm dist:win                 # 打包
 rm -f /workspace/SHX-Tools-*.zip                  # 删旧包
-cp release/SHX-Tools-*-portable.zip /workspace/   # 只留这一份
+cp release/SHX-Tools-*-win-x64.zip /workspace/   # 只留这一份
 rm -f /workspace/shots/*                          # 拍截图前清空
 ```
 

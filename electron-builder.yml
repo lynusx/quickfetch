@@ -33,7 +33,7 @@ win:
       arch:
         - x64
   icon: build/icon.png
-  artifactName: SHX-Tools-${version}-win-x64-portable.${ext}
+  artifactName: SHX-Tools-${version}-win-x64.${ext}
 
 # 安装包配置保留：换回 nsis 目标即可恢复
 nsis:
