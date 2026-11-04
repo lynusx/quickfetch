@@ -5,8 +5,18 @@ import react from '@vitejs/plugin-react'
 
 const rootDir = process.cwd()
 
-// 图片扩展名列表
-const imgExts = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp']
+// 渲染层构建产物的图片扩展名：只决定资源放 img/ 还是 assets/。
+// 它与扫描/复制能不能识别图片无关 —— 运行时支持的格式见
+// src/shared/imageExtensions.ts，新增扫描格式不要改这里。
+const bundledImageExts = [
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.svg',
+  '.ico',
+  '.webp',
+]
 
 // 读取 package.json 获取版本信息
 const packageJson = JSON.parse(
@@ -71,7 +81,7 @@ export default defineConfig({
             if (name.endsWith('.css')) {
               return 'css/[name]-[hash][extname]'
             }
-            if (imgExts.some((ext) => name.endsWith(ext))) {
+            if (bundledImageExts.some((ext) => name.endsWith(ext))) {
               return 'img/[name]-[hash][extname]'
             }
 

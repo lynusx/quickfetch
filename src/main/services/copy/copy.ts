@@ -14,7 +14,7 @@ import type {
 import { createAdaptiveGate } from '../../utils/adaptive'
 import type { AdaptiveGate } from '../../utils/adaptive'
 import { toFsPath } from '../../utils/pathx'
-import { isImageFile } from '../scanner/imageFiles'
+import { isImageFile } from '../../../shared/imageExtensions'
 
 /**
  * 同时打开的文件句柄上限。现场机器 8G 内存，10 路并发复制 +

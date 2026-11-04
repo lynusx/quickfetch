@@ -433,6 +433,36 @@ const copyTests = async () => {
     const files = await readdir(dst)
     assert.ok(!files.includes('readme.txt'), `实际 ${files}`)
   })
+
+  await test('复制: .bmp 文件按图片参与计划（森标 AOI 原生格式）', async () => {
+    const dst = await mkdtemp(join(tmpdir(), 'shx-dst-bmp-'))
+    const bmp = join(src, 'aoi.bmp')
+    await writeFile(bmp, 'bmp-data')
+
+    const task = new CopyTaskRunner({
+      scanTaskId: 's8',
+      targetDir: dst,
+      params: { machines: [], layout: 'flat', conflict: 'rename' },
+      images: [
+        {
+          path: '东区/1A/20261103/20.5/色斑B-/aoi.bmp',
+          absolutePath: bmp,
+          name: 'aoi.bmp',
+          machine: '东区/1A',
+        },
+      ],
+      emit: () => undefined,
+    })
+    task.start()
+    await task.waitSettled()
+
+    const snap = task.snapshot()
+    assert.equal(snap.progress.total, 1)
+    assert.equal(snap.progress.copied, 1)
+    assert.equal(snap.progress.totalBytes, 8)
+    const files = await readdir(dst)
+    assert.ok(files.includes('aoi.bmp'), `实际 ${files}`)
+  })
 }
 
 /* ------------------------------------------------ 4. 扫描任务端到端 */
@@ -748,13 +778,51 @@ const scanTests = async () => {
 
 const imageTests = async () => {
   const { isImageFile, IMAGE_EXTENSIONS } =
-    await import('../src/main/services/scanner/imageFiles')
+    await import('../src/shared/imageExtensions')
   const { ScanTaskRunner } = await import('../src/main/services/scanner/task')
 
   await test('图片: .bmp 算图片（森标 AOI 原生格式）', async () => {
     assert.equal(isImageFile('A02_20261103.bmp'), true)
     assert.equal(isImageFile('A02.BMP'), true, '大写扩展名也要认')
     assert.equal(IMAGE_EXTENSIONS.has('.bmp'), true)
+  })
+
+  await test('图片: 支持清单覆盖 MDN 常见位图格式', async () => {
+    const supported = [
+      '.jpg',
+      '.jpeg',
+      '.jpe',
+      '.jif',
+      '.jfif',
+      '.pjpeg',
+      '.pjp',
+      '.png',
+      '.apng',
+      '.webp',
+      '.avif',
+      '.gif',
+      '.bmp',
+      '.dib',
+      '.tif',
+      '.tiff',
+    ]
+    for (const ext of supported) {
+      assert.equal(isImageFile(`a${ext}`), true, ext)
+    }
+
+    // 矢量图、图标/光标不是产线采集的位图，不能混进复制清单
+    for (const ext of [
+      '.svg',
+      '.svgz',
+      '.ico',
+      '.cur',
+      '.heic',
+      '.heif',
+      '.jxl',
+      '.txt',
+    ]) {
+      assert.equal(isImageFile(`a${ext}`), false, ext)
+    }
   })
 
   await test('图片: 原有格式与非常规名仍按原规则', async () => {
