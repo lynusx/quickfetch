@@ -4,6 +4,7 @@ import type { CopyTask } from '../../../shared/ipc'
 
 import { CopyTaskRunner } from './copy'
 import type { CopyRunnerOptions } from './copy'
+import { logger } from '../log'
 
 /** 同时保留的复制任务数。复制任务比扫描任务轻，但也不该无限留着 */
 const MAX_COPY_TASKS = 10
@@ -35,6 +36,7 @@ const evict = (): void => {
   for (const runner of finished) {
     if (runners.size <= MAX_COPY_TASKS) break
     runners.delete(runner.id)
+    logger.debug('copy', 'copy.task.evicted', { copyId: runner.id })
   }
 }
 

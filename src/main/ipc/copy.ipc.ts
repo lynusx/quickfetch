@@ -1,4 +1,4 @@
-import { ipcMain, shell } from 'electron'
+import { shell } from 'electron'
 import { normalize, resolve } from 'node:path'
 
 import type {
@@ -16,6 +16,7 @@ import {
 import { getRunner, readRecord } from '../services/scanner'
 import { readSettings, loadFrom } from '../services/settings'
 import { toFsPath } from '../utils/pathx'
+import { handle } from './handle'
 
 const resolveImages = async (taskId: string): Promise<ScannedImage[]> => {
   const runner = getRunner(taskId)
@@ -36,7 +37,7 @@ const requireCopyRunner = (copyId: string) => {
 }
 
 export const registerCopyIpc = (): void => {
-  ipcMain.handle(
+  handle(
     'copy:preview',
     async (
       _event,
@@ -58,7 +59,7 @@ export const registerCopyIpc = (): void => {
     },
   )
 
-  ipcMain.handle(
+  handle(
     'copy:start',
     async (
       _event,
@@ -98,34 +99,32 @@ export const registerCopyIpc = (): void => {
     },
   )
 
-  ipcMain.handle('copy:pause', (_event, copyId: string) =>
+  handle('copy:pause', (_event, copyId: string) =>
     requireCopyRunner(copyId).pause(),
   )
 
-  ipcMain.handle('copy:resume', (_event, copyId: string) =>
+  handle('copy:resume', (_event, copyId: string) =>
     requireCopyRunner(copyId).resume(),
   )
 
-  ipcMain.handle('copy:cancel', (_event, copyId: string) =>
+  handle('copy:cancel', (_event, copyId: string) =>
     requireCopyRunner(copyId).cancel(),
   )
 
-  ipcMain.handle('copy:retry', (_event, copyId: string) =>
+  handle('copy:retry', (_event, copyId: string) =>
     requireCopyRunner(copyId).retry(),
   )
 
-  ipcMain.handle(
+  handle(
     'copy:get',
     (_event, copyId: string) => getCopyRunner(copyId)?.snapshot() ?? null,
   )
 
-  ipcMain.handle(
-    'copy:to-new-dir',
-    (_event, copyId: string, targetDir: string) =>
-      requireCopyRunner(copyId).retargetTo(resolve(normalize(targetDir))),
+  handle('copy:to-new-dir', (_event, copyId: string, targetDir: string) =>
+    requireCopyRunner(copyId).retargetTo(resolve(normalize(targetDir))),
   )
 
-  ipcMain.handle(
+  handle(
     'copy:reveal',
     async (_event, targetDir: string): Promise<string | null> => {
       const result = await shell.openPath(toFsPath(targetDir))

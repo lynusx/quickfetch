@@ -1,5 +1,3 @@
-import { ipcMain } from 'electron'
-
 import type {
   AppSettings,
   LxtShare,
@@ -27,6 +25,7 @@ import {
   rememberPlShare,
   loadFrom,
 } from '../services/settings'
+import { handle } from './handle'
 
 const requireRunner = (taskId: string) => {
   const runner = getRunner(taskId)
@@ -153,7 +152,7 @@ const createAoiTask = (
 }
 
 export const registerScanIpc = (): void => {
-  ipcMain.handle('scan:create', async (_event, params: ScanTaskParams) => {
+  handle('scan:create', async (_event, params: ScanTaskParams) => {
     validateParams(params)
     const settings = await readSettings()
     const category = params.category ?? 'el'
@@ -194,7 +193,7 @@ export const registerScanIpc = (): void => {
   })
 
   // 启动走 registry.startTask：它在任务结束后负责把结果写入历史
-  ipcMain.handle('scan:start', (_event, taskId: string): ScanTask => {
+  handle('scan:start', (_event, taskId: string): ScanTask => {
     const task = startTask(taskId)
 
     if (!task) throw new Error('任务不存在或已过期，请重新开始扫描')
@@ -202,21 +201,21 @@ export const registerScanIpc = (): void => {
     return task
   })
 
-  ipcMain.handle('scan:pause', (_event, taskId: string) =>
+  handle('scan:pause', (_event, taskId: string) =>
     requireRunner(taskId).pause('user'),
   )
 
-  ipcMain.handle('scan:resume', (_event, taskId: string) =>
+  handle('scan:resume', (_event, taskId: string) =>
     requireRunner(taskId).resume(),
   )
 
-  ipcMain.handle('scan:cancel', (_event, taskId: string) =>
+  handle('scan:cancel', (_event, taskId: string) =>
     requireRunner(taskId).cancel(),
   )
 
-  ipcMain.handle('scan:get', (_event, taskId: string) => getTask(taskId))
+  handle('scan:get', (_event, taskId: string) => getTask(taskId))
 
-  ipcMain.handle(
+  handle(
     'scan:images',
     async (_event, taskId: string, offset: number, limit: number) => {
       const runner = getRunner(taskId)

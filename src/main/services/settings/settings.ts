@@ -31,6 +31,7 @@ import { envOverriddenKeys } from './load'
 import { aoiKey } from '../discovery/aoi'
 import { lxtKey } from '../discovery/lxt'
 import { plKey } from '../discovery/pl'
+import { logger } from '../log'
 import { toFsPath } from '../../utils/pathx'
 
 const SETTINGS_VERSION = 1 as const
@@ -120,6 +121,8 @@ export const normalizePreferences = (
       'copyBatchSize',
       DEFAULT_PREFERENCES.copyBatchSize,
     ),
+    // 只认真正的 boolean：旧配置缺字段、手改成 "true" 都回落关闭
+    debugLogEnabled: merged.debugLogEnabled === true,
   }
 }
 
@@ -416,9 +419,14 @@ const writeSettings = async (settings: AppSettings): Promise<void> => {
   const temp = `${target}.${process.pid}.${randomUUID()}.tmp`
   // envOverrides 是运行时算出来的，写进文件没有意义
   const { envOverrides: _runtime, ...persisted } = settings
+  const body = JSON.stringify(persisted, null, 2)
 
-  await writeFile(temp, JSON.stringify(persisted, null, 2), 'utf-8')
+  await writeFile(temp, body, 'utf-8')
   await rename(temp, target)
+  logger.debug('settings', 'settings.write', {
+    path: target,
+    bytes: body.length,
+  })
 }
 
 /**
@@ -442,6 +450,7 @@ export const cleanupSettingsTempFiles = async (): Promise<void> => {
   } catch (error) {
     // 清理失败不影响启动，下次启动再试
     console.error('清理设置临时文件失败:', error)
+    logger.error('settings', 'cleanup-temp.failed', { error })
   }
 }
 
@@ -525,14 +534,45 @@ export const saveHistoryLimit = (limit: number): Promise<AppSettings> =>
   }))
 
 /** 局部更新偏好：只覆盖传进来的字段，其余保持原值 */
-export const savePreferences = (
+export const savePreferences = async (
   patch: Partial<AppPreferences>,
-): Promise<AppSettings> =>
-  updateSettings((current) => ({
-    ...current,
-    preferences: normalizePreferences({ ...current.preferences, ...patch }),
-    updatedAt: new Date().toISOString(),
-  }))
+): Promise<AppSettings> => {
+  let wasLogEnabled = false
+
+  const next = await updateSettings((current) => {
+    wasLogEnabled = current.preferences.debugLogEnabled
+
+    return {
+      ...current,
+      preferences: normalizePreferences({
+        ...current.preferences,
+        ...patch,
+      }),
+      updatedAt: new Date().toISOString(),
+    }
+  })
+
+  const logEnabled = next.preferences.debugLogEnabled
+
+  // 落盘成功后再切日志，和界面失败回滚保持一致
+  if (logEnabled !== wasLogEnabled) {
+    if (logEnabled) {
+      logger.setEnabled(true)
+      logger.info('settings', 'debug-log.changed', {
+        enabled: true,
+        source: 'settings-page',
+      })
+    } else {
+      logger.info('settings', 'debug-log.changed', {
+        enabled: false,
+        source: 'settings-page',
+      })
+      logger.setEnabled(false)
+    }
+  }
+
+  return next
+}
 
 /** 只替换力禧特那段配置，其余字段原样保留 */
 export const saveLxt = (lxt: LxtSettings): Promise<AppSettings> =>
@@ -586,6 +626,7 @@ export const rememberLxtShare = async (
     })
   } catch (error) {
     console.error('保存共享名探测结果失败:', error)
+    logger.error('settings', 'lxt-share.persist.failed', { key, host, error })
   }
 }
 
@@ -651,5 +692,6 @@ export const rememberPlShare = async (
     })
   } catch (error) {
     console.error('保存利珀标识目录探测结果失败:', error)
+    logger.error('settings', 'pl-share.persist.failed', { key, host, error })
   }
 }

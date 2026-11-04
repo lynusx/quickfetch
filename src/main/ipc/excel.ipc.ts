@@ -1,10 +1,11 @@
-import { dialog, ipcMain } from 'electron'
+import { dialog } from 'electron'
 import { writeFile } from 'node:fs/promises'
 
 import { getParentWindow } from './settings.ipc'
+import { handle } from './handle'
 
 export const registerExcelIpc = (): void => {
-  ipcMain.handle(
+  handle(
     'fs:save-excel',
     async (
       event,

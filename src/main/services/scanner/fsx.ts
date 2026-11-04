@@ -2,6 +2,7 @@ import { readdir } from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 
 import { toFsPath } from '../../utils/pathx'
+import { logger } from '../log'
 
 /**
  * 目录读取结果：把「不存在」「无权限」「不可达」「读不了」区分开，
@@ -178,7 +179,19 @@ export const readDirSafe = async (
 
     dirs.sort(compareName)
 
-    return { status: 'ok', dirs, files, elapsedMs: Date.now() - startedAt }
+    const elapsedMs = Date.now() - startedAt
+
+    logger.debug('fsx', 'read.ok', () => ({
+      path,
+      status: 'ok',
+      elapsedMs,
+      dirs: dirs.length,
+      dirsSample: dirs.slice(0, 8),
+      files: files.length,
+      filesSample: files.slice(0, 5),
+    }))
+
+    return { status: 'ok', dirs, files, elapsedMs }
   } catch (error) {
     const status = toStatus(error)
     const elapsedMs = Date.now() - startedAt
@@ -188,6 +201,20 @@ export const readDirSafe = async (
         `读取目录 ${path} 失败（${status}）:`,
         (error as Error)?.message,
       )
+      logger.warn('fsx', 'read.fail', {
+        path,
+        status,
+        code: codeOf(error),
+        elapsedMs,
+        error: (error as Error)?.message,
+      })
+    } else {
+      logger.debug('fsx', 'read.missing', {
+        path,
+        status,
+        code: codeOf(error),
+        elapsedMs,
+      })
     }
 
     // 尽力收回底层请求，减少超时任务在后台堆积

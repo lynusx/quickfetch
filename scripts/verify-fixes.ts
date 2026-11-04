@@ -18,6 +18,18 @@ import { join } from 'node:path'
 
 import { readDirSafe } from '../src/main/services/scanner/fsx'
 import { createLxtResolver } from '../src/main/services/scanner/resolver'
+import {
+  createLogger,
+  formatLogLine,
+  isLogDayExpired,
+  logFileName,
+  parseLogDay,
+  pruneOldLogs,
+  retentionCutoffDay,
+  serializeLogValue,
+} from '../src/main/services/log'
+import { normalizePreferences } from '../src/main/services/settings'
+import { summarizeIpcArgs } from '../src/main/ipc/log-summary'
 import type { MachineResolver } from '../src/main/services/scanner/resolver'
 import { CopyTaskRunner } from '../src/main/services/copy/copy'
 import type { ScanCategory, ScanTaskParams } from '../src/shared/ipc'
@@ -1175,6 +1187,198 @@ const breakerTests = async () => {
   })
 }
 
+/* ---------------------------------------------------------------- 日志 */
+
+const logFormatTests = async () => {
+  await test('log: 文件名、日期解析与 7 天保留', async () => {
+    assert.equal(logFileName('2026-11-04'), 'shx-2026-11-04.log')
+    assert.equal(parseLogDay('shx-2026-11-04.log'), '2026-11-04')
+    assert.equal(parseLogDay('other.log'), null)
+    assert.equal(parseLogDay('shx-2026-02-31.log'), null)
+    assert.equal(retentionCutoffDay('2026-11-04', 7), '2026-10-29')
+    assert.equal(retentionCutoffDay('2026-01-02', 7), '2025-12-27')
+    assert.equal(retentionCutoffDay('2024-03-01', 7), '2024-02-24')
+    assert.equal(isLogDayExpired('2026-10-29', '2026-11-04', 7), false)
+    assert.equal(isLogDayExpired('2026-10-28', '2026-11-04', 7), true)
+  })
+
+  await test('log: 单行格式固定且 meta 换行不拆行', async () => {
+    const at = new Date(2026, 10, 4, 10, 23, 45, 123)
+    const line = formatLogLine(
+      'info',
+      'scan',
+      'scan.start',
+      { taskId: 't1' },
+      at,
+    )
+
+    assert.equal(
+      line,
+      '2026-11-04 10:23:45.123 | INFO  | scan | scan.start | {"taskId":"t1"}',
+    )
+
+    const multiline = formatLogLine(
+      'info',
+      'test',
+      'line',
+      { text: 'a\nb' },
+      at,
+    )
+    assert.equal(multiline.split('\n').length, 1)
+  })
+
+  await test('log: 序列化 Error/循环引用/字节/长字符串/大数组', async () => {
+    const error = Object.assign(new Error('boom'), { code: 'ETIMEDOUT' })
+    const serializedError = serializeLogValue(error) as Record<string, unknown>
+    assert.equal(serializedError.name, 'Error')
+    assert.equal(serializedError.message, 'boom')
+    assert.equal(serializedError.code, 'ETIMEDOUT')
+    assert.match(String(serializedError.stack), /boom/)
+
+    const circular: Record<string, unknown> = {}
+    circular.self = circular
+    const serializedCircular = serializeLogValue(circular) as Record<
+      string,
+      unknown
+    >
+    assert.equal(serializedCircular.self, '[Circular]')
+
+    const bytes = serializeLogValue(new Uint8Array(1024)) as Record<
+      string,
+      unknown
+    >
+    assert.equal(bytes.type, 'Uint8Array')
+    assert.equal(bytes.byteLength, 1024)
+
+    const long = serializeLogValue('x'.repeat(1500))
+    assert.match(String(long), /\+500 chars/)
+
+    const many = serializeLogValue(
+      Array.from({ length: 100 }, (_, index) => index),
+    ) as unknown[]
+    assert.equal(many.length, 21)
+    assert.equal(many[20], '[+80 more]')
+  })
+}
+
+const loggerRuntimeTests = async () => {
+  await test('log: 关闭不写、开启写入、跨天分文件、close 幂等', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'shx-log-'))
+    let now = new Date(2026, 10, 4, 10, 0, 0)
+    const instance = createLogger({
+      dir,
+      now: () => now,
+      flushIntervalMs: 10,
+    })
+
+    instance.info('test', 'disabled', {})
+    await instance.flush()
+
+    const before = await readdir(dir).catch(() => [] as string[])
+    assert.equal(before.length, 0)
+
+    instance.setEnabled(true)
+    instance.info('test', 'one', { a: 1 })
+
+    now = new Date(2026, 10, 5, 10, 0, 0)
+    instance.info('test', 'two', { b: 2 })
+    await instance.flush()
+
+    const day1 = await readFile(join(dir, logFileName('2026-11-04')), 'utf8')
+    const day2 = await readFile(join(dir, logFileName('2026-11-05')), 'utf8')
+
+    assert.match(day1, /log\.enabled/)
+    assert.match(day1, /test \| one/)
+    assert.doesNotMatch(day1, /test \| two/)
+    assert.match(day2, /test \| two/)
+
+    await instance.close(200)
+    await instance.close(200)
+
+    const closedLength = day2.length
+    instance.info('test', 'after-close', {})
+    await instance.flush()
+
+    const day2After = await readFile(
+      join(dir, logFileName('2026-11-05')),
+      'utf8',
+    )
+    assert.match(day2After, /log\.session\.end/)
+    assert.ok(day2After.length >= closedLength)
+    assert.doesNotMatch(day2After, /after-close/)
+  })
+
+  await test('log: 清理只删过期且匹配命名的文件', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'shx-prune-'))
+    const old1 = logFileName('2026-10-27')
+    const old2 = logFileName('2026-10-28')
+    const keep = logFileName('2026-10-29')
+    const today = logFileName('2026-11-04')
+
+    for (const name of [old1, old2, keep, today]) {
+      await writeFile(join(dir, name), 'x')
+    }
+    await writeFile(join(dir, 'notes.txt'), 'keep me')
+
+    const removed = await pruneOldLogs(dir, '2026-11-04', 7)
+    assert.deepEqual(removed, [old1, old2])
+
+    const left = (await readdir(dir)).sort()
+    assert.deepEqual(left, [keep, today, 'notes.txt'].sort())
+  })
+}
+
+const logIpcTests = async () => {
+  await test('log: IPC 参数摘要不输出大字节/大数组', async () => {
+    const excel = summarizeIpcArgs('fs:save-excel', [
+      { defaultName: 'a.xlsx', data: new Uint8Array(1024 * 1024) },
+    ])
+    assert.equal(excel.dataBytes, 1024 * 1024)
+    assert.ok(JSON.stringify(excel).length < 500)
+
+    const scan = summarizeIpcArgs('scan:create', [
+      {
+        category: 'el',
+        date: '20261104',
+        shift: '白班',
+        machines: ['A', 'B', 'C', 'D', 'E', 'F'],
+        slots: ['8.5'],
+        types: ['NG_脏污'],
+      },
+    ])
+    const machines = scan.machines as { count: number; sample: unknown[] }
+    assert.equal(machines.count, 6)
+    assert.equal(machines.sample.length, 5)
+
+    const copy = summarizeIpcArgs('copy:start', [
+      't1',
+      'C:/out',
+      { layout: 'flat', conflict: 'rename', machines: ['A'] },
+    ])
+    assert.equal(copy.taskId, 't1')
+    assert.equal(copy.targetDir, 'C:/out')
+    assert.equal(copy.layout, 'flat')
+
+    const circular: Record<string, unknown> = {}
+    circular.self = circular
+    assert.doesNotThrow(() => summarizeIpcArgs('unknown:channel', [circular]))
+  })
+
+  await test('settings: debugLogEnabled 只认严格布尔值', async () => {
+    assert.equal(normalizePreferences(undefined).debugLogEnabled, false)
+    assert.equal(normalizePreferences({}).debugLogEnabled, false)
+    assert.equal(
+      normalizePreferences({ debugLogEnabled: true }).debugLogEnabled,
+      true,
+    )
+    assert.equal(
+      normalizePreferences({ debugLogEnabled: 'true' as never })
+        .debugLogEnabled,
+      false,
+    )
+  })
+}
+
 /* ---------------------------------------------------------------- 主流程 */
 
 const main = async () => {
@@ -1190,6 +1394,12 @@ const main = async () => {
   await imageTests()
   console.log('\n[6] 断网熔断与阶段判定')
   await breakerTests()
+  console.log('\n[7] 日志格式与序列化')
+  await logFormatTests()
+  console.log('\n[8] 日志运行时与清理')
+  await loggerRuntimeTests()
+  console.log('\n[9] 日志 IPC 摘要与设置归一化')
+  await logIpcTests()
 
   const failed = results.filter((r) => !r.ok)
   console.log(`\n共 ${results.length} 项，失败 ${failed.length} 项`)

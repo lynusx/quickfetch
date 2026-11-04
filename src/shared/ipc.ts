@@ -452,7 +452,7 @@ export const COPY_CONFLICT_LABEL: Record<CopyConflictPolicy, string> = {
 /**
  * 设置页可调的偏好，随 settings.json 一起持久化。
  *
- * 这六项以前散在三处：复制面板的 store（重启就丢）、主进程的常量、
+ * 这些项以前散在三处：复制面板的 store（重启就丢）、主进程的常量、
  * 环境变量。集中到这里之后，界面只认这份值，环境变量仍可临时覆盖。
  * EL / 力禧特 / 利珀 / 森标 AOI 共用同一套档位。
  */
@@ -469,6 +469,13 @@ export interface AppPreferences {
   copyConcurrency: number
   /** 每批复制的文件数 */
   copyBatchSize: number
+  /**
+   * 是否写全量调试日志。
+   *
+   * 日志只落在本机 userData/logs，按天分文件保留 7 天；默认关闭。
+   * 开启后立即生效，不必重启，也不必等新任务。
+   */
+  debugLogEnabled: boolean
 }
 
 /**
@@ -483,6 +490,7 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   scanBatchSize: 2,
   copyConcurrency: 6,
   copyBatchSize: 50,
+  debugLogEnabled: false,
 }
 
 /**
@@ -495,6 +503,27 @@ export const PREFERENCE_RANGE = {
   copyConcurrency: { min: 1, max: 16, step: 1 },
   copyBatchSize: { min: 10, max: 100, step: 10 },
 } as const
+
+/** 调试日志级别；界面只负责展示，主进程按顺序写入同一文件 */
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+
+export interface LogInfo {
+  /** 日志目录绝对路径，如 C:\Users\x\AppData\Roaming\shx-tools\logs */
+  dir: string
+  /** 今天的日志文件绝对路径 */
+  todayFile: string
+  enabled: boolean
+  /** 固定 7，设置页用来展示保留天数 */
+  retentionDays: number
+}
+
+/** 渲染层通过 log:renderer 单向发送的未捕获错误 */
+export interface RendererLogEntry {
+  level: LogLevel
+  scope: string
+  event: string
+  meta?: Record<string, unknown>
+}
 
 export interface CopyTaskParams {
   /** 要复制的机台目录名；为空表示全部 */
@@ -638,6 +667,13 @@ export interface ElectronAPI {
   refreshMachines: () => Promise<AppSettings>
   /** 局部更新复制与性能偏好，返回落盘后的完整配置 */
   savePreferences: (patch: Partial<AppPreferences>) => Promise<AppSettings>
+
+  /** 当前日志目录、今日文件与开关状态；日志未初始化时返回空目录 */
+  getLogInfo: () => Promise<LogInfo>
+  /** 在系统文件管理器里打开日志目录；失败返回可读错误，成功返回 null */
+  openLogDir: () => Promise<string | null>
+  /** 单向上报渲染层未捕获错误；不等待主进程，也不返回结果 */
+  logRenderer: (entry: RendererLogEntry) => void
 
   /**
    * 设置力禧特入口根目录并解析其中的 .lnk。

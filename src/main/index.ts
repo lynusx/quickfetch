@@ -2,7 +2,8 @@ import { BrowserWindow, app, screen, shell } from 'electron'
 import { join } from 'node:path'
 
 import { registerIpcHandlers } from './ipc'
-import { cleanupSettingsTempFiles } from './services/settings'
+import { cleanupSettingsTempFiles, readSettings } from './services/settings'
+import { initLogger, logger } from './services/log'
 import { persistUnfinished } from './services/scanner'
 
 // electron-vite 在开发模式下注入渲染层 dev server 地址
@@ -60,6 +61,35 @@ const createWindow = (): BrowserWindow => {
   // 等首屏渲染完成再显示，避免白屏闪烁
   window.once('ready-to-show', () => window.show())
 
+  logger.info('window', 'window.created', { id: window.id })
+
+  window.webContents.on(
+    'did-fail-load',
+    (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      logger.warn('window', 'window.load-failed', {
+        errorCode,
+        errorDescription,
+        validatedURL,
+        isMainFrame,
+      })
+    },
+  )
+
+  window.webContents.on('render-process-gone', (_event, details) => {
+    logger.error('window', 'window.render-gone', {
+      reason: details.reason,
+      exitCode: details.exitCode,
+    })
+  })
+
+  window.webContents.on('preload-error', (_event, preloadPath, error) => {
+    logger.error('window', 'window.preload-error', { preloadPath, error })
+  })
+
+  window.on('unresponsive', () => {
+    logger.warn('window', 'window.unresponsive', { id: window.id })
+  })
+
   // 外部链接交给系统浏览器，不在应用内开新窗口
   window.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)
@@ -79,6 +109,18 @@ const createWindow = (): BrowserWindow => {
 // 必须在 app ready 之前设置
 app.commandLine.appendSwitch('lang', 'zh-CN')
 
+// 只记录，不主动退出：现场工具宁可继续跑，也不要因为一次异常直接消失。
+// initLogger 之前 logger 是 no-op，这段时间的异常仍会出现在终端。
+process.on('uncaughtException', (error) => {
+  logger.error('process', 'uncaught-exception', { error })
+  console.error('主进程未捕获异常:', error)
+})
+
+process.on('unhandledRejection', (reason) => {
+  logger.error('process', 'unhandled-rejection', { reason })
+  console.error('主进程未处理的 Promise 拒绝:', reason)
+})
+
 // 单实例锁：双开时两个进程会共写同一份 settings.json / history，
 // 后写覆盖先写，历史裁剪也会互相删记录。
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
@@ -88,6 +130,8 @@ if (!hasSingleInstanceLock) {
   app.exit(0)
 } else {
   app.on('second-instance', () => {
+    logger.info('app', 'app.second-instance', {})
+
     const window = BrowserWindow.getAllWindows()[0]
 
     if (!window) return
@@ -101,6 +145,21 @@ if (!hasSingleInstanceLock) {
   app.whenReady().then(async () => {
     // Windows 任务栏分组与通知标识
     app.setAppUserModelId('com.lynusx.shx-tools')
+
+    // 先按已落盘的开关初始化日志，后续启动步骤与现场操作都能被记录
+    const settings = await readSettings().catch(() => null)
+    await initLogger({
+      enabled: settings?.preferences.debugLogEnabled === true,
+    })
+
+    logger.info('app', 'app.ready', {
+      version: app.getVersion(),
+      platform: process.platform,
+      arch: process.arch,
+      userData: app.getPath('userData'),
+      logDir: logger.dir,
+      enabled: logger.isEnabled(),
+    })
 
     // 上次进程被强杀时可能留下 settings.json.*.tmp，先清掉再开放读写
     await cleanupSettingsTempFiles()
@@ -136,6 +195,7 @@ if (!hasSingleInstanceLock) {
 
     savedOnQuit = true
     event.preventDefault()
+    logger.info('app', 'app.before-quit', {})
 
     // 先藏窗口再写盘：让用户看到的是「关掉了」，而不是一个点不动的窗口
     for (const window of BrowserWindow.getAllWindows()) {
@@ -149,6 +209,11 @@ if (!hasSingleInstanceLock) {
     void Promise.race([persistUnfinished(), timeout])
       .catch((error: unknown) => {
         console.error('退出前保存扫描历史失败:', error)
+        logger.error('app', 'persist-unfinished.failed', { error })
+      })
+      .then(() => {
+        logger.info('app', 'app.quit', {})
+        return logger.close(800)
       })
       .finally(() => app.quit())
   })

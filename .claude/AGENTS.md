@@ -62,6 +62,11 @@ Windows 上实际位置是 `%APPDATA%\shx-tools\`，**和开发态是同一个�
 几千张图会随进程消失。`saveRecord(task, images, { interrupted: true })` 是这条路径的入口，
 平时不传这个参数——正常结束的任务只认 completed / canceled / failed 三种终态。
 
+**调试日志只走 `src/main/services/log/`**：默认关闭，设置页开关实时生效；日志写在
+`userData/logs/shx-YYYY-MM-DD.log`，按天分文件保留 7 天，零运行时依赖。业务代码里不要再
+直接 `appendFile` 或另起一套日志；热点路径（逐目录/逐文件）用函数型 fields，关闭日志时不会
+执行对象构造。不要记录图片内容、Excel 字节或每帧进度快照。
+
 **版本号**：`fix:` 递增 patch，`feat:` 递增 minor，`!` 或 `BREAKING CHANGE` 递增 major。
 这套逻辑在 `.husky/commit-msg` + `scripts/auto-version.cjs`，`post-commit` 负责把版本号 amend 进同一个提交。
 **不要手动改 `package.json` 的 version，也不要再补 `chore(release)` 提交。**

@@ -15,6 +15,7 @@ import { createAdaptiveGate } from '../../utils/adaptive'
 import type { AdaptiveGate } from '../../utils/adaptive'
 import { toFsPath } from '../../utils/pathx'
 import { isImageFile } from '../../../shared/imageExtensions'
+import { logger } from '../log'
 
 /**
  * 同时打开的文件句柄上限。现场机器 8G 内存，10 路并发复制 +
@@ -384,6 +385,11 @@ export class CopyTaskRunner {
         console.warn(
           `复制失败率 ${(ratio * 100).toFixed(0)}%，并发降至 ${concurrency}`,
         )
+        logger.warn('copy', 'copy.concurrency.downgrade', {
+          copyId: this.id,
+          ratio,
+          concurrency,
+        })
 
         this.touch('', true)
       },
@@ -399,6 +405,19 @@ export class CopyTaskRunner {
 
     this.status = 'running'
     this.startedAt = Date.now()
+
+    logger.info('copy', 'copy.start', {
+      copyId: this.id,
+      scanTaskId: this.scanTaskId,
+      targetDir: this.targetDir,
+      layout: this.params.layout,
+      conflict: this.params.conflict,
+      machines: this.params.machines.length,
+      images: this.source.length,
+      concurrency: this.concurrency,
+      batchSize: this.batchSize,
+    })
+
     this.touch('', true)
     void this.run()
 
@@ -411,6 +430,15 @@ export class CopyTaskRunner {
     this.paused = true
     this.pausedAt = Date.now()
     this.status = 'paused'
+
+    logger.info('copy', 'copy.pause', {
+      copyId: this.id,
+      copied: this.copied,
+      failed: this.failures.length,
+      skipped: this.skipped,
+      alreadyExists: this.alreadyExists,
+    })
+
     this.touch('', true)
 
     return this.snapshot()
@@ -426,6 +454,11 @@ export class CopyTaskRunner {
 
     this.paused = false
     this.status = 'running'
+
+    logger.info('copy', 'copy.resume', {
+      copyId: this.id,
+      pausedMs: this.pausedMs,
+    })
 
     for (const resolve of this.resumeWaiters.splice(0)) resolve()
 
@@ -448,6 +481,14 @@ export class CopyTaskRunner {
     for (const resolve of this.resumeWaiters.splice(0)) resolve()
 
     this.status = 'canceled'
+
+    logger.info('copy', 'copy.cancel', {
+      copyId: this.id,
+      copied: this.copied,
+      failed: this.failures.length,
+      copiedBytes: this.copiedBytes,
+    })
+
     this.touch('', true)
 
     return this.snapshot()
@@ -457,6 +498,15 @@ export class CopyTaskRunner {
   retry(): CopyTask {
     if (!this.isFinal()) return this.snapshot()
     if (!this.failures.length) return this.snapshot()
+
+    logger.info('copy', 'copy.retry', {
+      copyId: this.id,
+      failures: this.failures.length,
+      sample: this.failures.slice(0, 5).map((failure) => ({
+        path: failure.path,
+        reason: failure.reason,
+      })),
+    })
 
     // 从最初的源清单里找回原项，而不是拿 failure.path 反推：
     // path 与 name 是两回事（path 是展示用的相对路径，name 是文件名），
@@ -525,6 +575,13 @@ export class CopyTaskRunner {
     }
     if (!targetDir.trim()) throw new Error('目标目录不能为空')
     if (targetDir === this.targetDir) return this.snapshot()
+
+    logger.info('copy', 'copy.retarget', {
+      copyId: this.id,
+      from: this.targetDir,
+      to: targetDir,
+      failures: this.failures.length,
+    })
 
     this.targetDir = targetDir
     this.plan = []
@@ -711,6 +768,30 @@ export class CopyTaskRunner {
     this.finishedAt = Date.now()
     this.status = status
     this.currentPath = ''
+
+    logger.info('copy', 'copy.end', {
+      copyId: this.id,
+      status,
+      copied: this.copied,
+      copyTotal: this.copyTotal,
+      failed: this.failures.length,
+      skipped: this.skipped,
+      alreadyExists: this.alreadyExists,
+      renamed: this.renamed,
+      totalBytes: this.totalBytes,
+      copiedBytes: this.copiedBytes,
+      failedBytes: this.failedBytes,
+      elapsedMs: this.finishedAt - (this.startedAt ?? this.finishedAt),
+      error: this.error,
+    })
+
+    if (status === 'failed') {
+      logger.error('copy', 'copy.failed', {
+        copyId: this.id,
+        error: this.error,
+      })
+    }
+
     this.touch('', true)
     this.markSettled()
   }
@@ -813,6 +894,15 @@ export class CopyTaskRunner {
     }
 
     this.copyTotal = this.plan.filter((item) => item.action === 'copy').length
+
+    logger.info('copy', 'copy.plan', {
+      copyId: this.id,
+      planned: this.roundTotal,
+      copyTotal: this.copyTotal,
+      alreadyExists: this.alreadyExists,
+      skipped: this.plan.filter((item) => item.action === 'skip').length,
+      renamed: this.plan.filter((item) => item.renamed).length,
+    })
   }
 
   /**
@@ -831,6 +921,15 @@ export class CopyTaskRunner {
     // 看起来像卡住。此时展示层回退为按张数估算。
     if (items.length > 5000) {
       this.sizeUnknown = items.length
+
+      logger.info('copy', 'copy.measure', {
+        copyId: this.id,
+        items: items.length,
+        totalBytes: 0,
+        sizeUnknown: this.sizeUnknown,
+        skippedStat: true,
+      })
+
       return
     }
 
@@ -844,6 +943,13 @@ export class CopyTaskRunner {
         this.sizeUnknown += 1
       }
     })
+
+    logger.info('copy', 'copy.measure', {
+      copyId: this.id,
+      items: items.length,
+      totalBytes: this.totalBytes,
+      sizeUnknown: this.sizeUnknown,
+    })
   }
 
   private async createFolders(): Promise<void> {
@@ -856,7 +962,16 @@ export class CopyTaskRunner {
 
       try {
         await mkdir(toFsPath(dir), { recursive: true })
+        logger.debug('copy', 'copy.folder.created', {
+          copyId: this.id,
+          dir,
+        })
       } catch (error) {
+        logger.error('copy', 'copy.folder.create.failed', {
+          copyId: this.id,
+          dir,
+          error,
+        })
         throw new Error(
           `无法创建目录「${dir}」：${(error as Error)?.message ?? '未知错误'}`,
         )
@@ -882,9 +997,20 @@ export class CopyTaskRunner {
         'utf-8',
       )
       this.manifestPath = target
-    } catch {
+
+      logger.info('copy', 'copy.manifest', {
+        copyId: this.id,
+        path: target,
+        images: images.length,
+      })
+    } catch (error) {
       // 清单只是辅助信息，写不进去不该让整次复制失败
       this.manifestPath = null
+      logger.warn('copy', 'copy.manifest.failed', {
+        copyId: this.id,
+        target,
+        error,
+      })
     }
   }
 
@@ -901,6 +1027,14 @@ export class CopyTaskRunner {
     const total = work.length
     this.copyTotal = total
 
+    logger.info('copy', 'copy.all.start', {
+      copyId: this.id,
+      work: total,
+      totalBytes: this.totalBytes,
+      concurrency: this.concurrency,
+      batchSize: this.batchSize,
+    })
+
     this.touch('', true)
 
     // 外层按批推进只为让 progress 的批号有意义，真正的并发控制交给 pool
@@ -911,6 +1045,16 @@ export class CopyTaskRunner {
       await this.pool(batch, (item) => this.copyOne(item))
 
       this.cursor = batchEnd
+
+      logger.debug('copy', 'copy.batch.end', {
+        copyId: this.id,
+        cursor: this.cursor,
+        total,
+        copied: this.copied,
+        failed: this.failures.length,
+        copiedBytes: this.copiedBytes,
+      })
+
       this.touch('', true)
     }
   }
@@ -920,6 +1064,7 @@ export class CopyTaskRunner {
 
     // 走到这里的只可能是 action === 'copy'；跳过项在 copyAll 里已结清
     this.currentPath = item.to
+    const startedAt = Date.now()
 
     try {
       await copyFile(toFsPath(item.from), toFsPath(item.to))
@@ -928,6 +1073,15 @@ export class CopyTaskRunner {
       this.copiedBytes += item.size ?? 0
       if (item.renamed) this.renamed += 1
       this.gate.sample(false)
+
+      logger.debug('copy', 'copy.file.ok', () => ({
+        copyId: this.id,
+        from: item.from,
+        to: item.to,
+        bytes: item.size,
+        ms: Date.now() - startedAt,
+        renamed: item.renamed,
+      }))
     } catch (error) {
       // 源文件被占用、权限不足、磁盘满等：记录后继续，不中断整批；
       // 但取消要立刻传播，不能被当成普通失败吞掉
@@ -940,6 +1094,15 @@ export class CopyTaskRunner {
         to: item.to,
         // 重试时靠它还原分组目录，不再从绝对路径反推
         folder: item.folder,
+        reason: (error as Error)?.message ?? '未知错误',
+      })
+
+      logger.warn('copy', 'copy.file.failed', {
+        copyId: this.id,
+        from: item.from,
+        to: item.to,
+        bytes: item.size,
+        ms: Date.now() - startedAt,
         reason: (error as Error)?.message ?? '未知错误',
       })
 

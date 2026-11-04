@@ -18,6 +18,18 @@ const api: ElectronAPI = {
   savePreferences: (patch) =>
     ipcRenderer.invoke('settings:save-preferences', patch),
 
+  getLogInfo: () => ipcRenderer.invoke('logs:info'),
+
+  openLogDir: () => ipcRenderer.invoke('logs:open'),
+
+  logRenderer: (entry) => {
+    try {
+      ipcRenderer.send('log:renderer', entry)
+    } catch {
+      // 日志上报失败不能影响渲染层业务
+    }
+  },
+
   setupLxtRoot: (entryRoot) => ipcRenderer.invoke('lxt:setup-root', entryRoot),
 
   refreshLxtMachines: () => ipcRenderer.invoke('lxt:refresh'),

@@ -20,6 +20,7 @@ import { isImageFile } from '../../../shared/imageExtensions'
 import { createLimiter } from './limiter'
 import type { Limiter } from './limiter'
 import type { MachineResolver, PathShape } from './resolver'
+import { logger } from '../log'
 
 /**
  * 并发上限的默认值，按现场机器（8G 内存 + 256G 盘）定的保守档：
@@ -336,6 +337,12 @@ export class ScanTaskRunner {
         console.warn(
           `读取失败率 ${(ratio * 100).toFixed(0)}%，并发降至 ${concurrency}，超时 ${this.timeoutMs} 毫秒`,
         )
+        logger.warn('scan', 'scan.concurrency.downgrade', {
+          taskId: this.id,
+          ratio,
+          concurrency,
+          timeoutMs: this.timeoutMs,
+        })
 
         this.touch('', true)
       },
@@ -356,6 +363,21 @@ export class ScanTaskRunner {
 
     this.status = 'running'
     this.startedAt = Date.now()
+
+    logger.info('scan', 'scan.start', {
+      taskId: this.id,
+      category: this.params.category,
+      machines: this.params.machines.length,
+      date: this.params.date,
+      shift: this.params.shift,
+      slots: this.params.slots.length,
+      types: this.params.types.length,
+      readConcurrency: this.readConcurrency,
+      machineBatchSize: this.batchSize,
+      timeoutMs: this.timeoutMs,
+      batchTotal: this.progress.batchTotal,
+    })
+
     this.touch('', true)
     void this.run()
 
@@ -368,6 +390,15 @@ export class ScanTaskRunner {
     this.paused = true
     this.pauseReason = reason
     this.status = 'paused'
+
+    logger.info('scan', 'scan.pause', {
+      taskId: this.id,
+      reason,
+      percent: this.progress.percent,
+      machinesPending: this.progress.machinesPending,
+      currentPath: this.progress.currentPath,
+    })
+
     this.touch('', true)
 
     return this.snapshot()
@@ -385,6 +416,11 @@ export class ScanTaskRunner {
     this.batchFailed = 0
     this.unreachableMachineStreak = 0
     this.status = 'running'
+
+    logger.info('scan', 'scan.resume', {
+      taskId: this.id,
+      percent: this.progress.percent,
+    })
 
     const waiters = this.resumeWaiters.splice(0)
     for (const resolve of waiters) resolve()
@@ -412,6 +448,13 @@ export class ScanTaskRunner {
 
     // 立即反馈状态，不等执行体在下一个检查点退出；已完成的结果原样保留
     this.status = 'canceled'
+
+    logger.info('scan', 'scan.cancel', {
+      taskId: this.id,
+      percent: this.progress.percent,
+      images: this.progress.images,
+    })
+
     this.touch('', true)
 
     return this.snapshot()
@@ -485,6 +528,13 @@ export class ScanTaskRunner {
         this.batchFailed = 0
         this.touch('', true)
 
+        logger.debug('scan', 'scan.batch.start', {
+          taskId: this.id,
+          batchIndex: index + 1,
+          batchTotal: batches.length,
+          machines: batches[index].length,
+        })
+
         await Promise.all(
           batches[index].map((machine) => this.scanMachine(machine, limiter)),
         )
@@ -493,6 +543,19 @@ export class ScanTaskRunner {
         // 不能在单台失败时判：一批 8 台并发解析，前 3 台先失败的瞬间
         // "失败数 === 已完成数"成立，会被误判成整片断网。
         this.checkBatchUnreachable()
+
+        logger.debug('scan', 'scan.batch.end', {
+          taskId: this.id,
+          batchIndex: index + 1,
+          batchReachable: this.batchReachable,
+          batchFailed: this.batchFailed,
+          unreachableMachineStreak: this.unreachableMachineStreak,
+          dirsScanned: this.progress.dirsScanned,
+          dirsHit: this.progress.dirsHit,
+          dirsSkipped: this.progress.dirsSkipped,
+          dirsUnreachable: this.progress.dirsUnreachable,
+          images: this.progress.images,
+        })
 
         // 整批都不通就停下来等用户接网络，不必继续跑下一批去等超时
         await this.checkpoint()
@@ -519,6 +582,28 @@ export class ScanTaskRunner {
       }
     } finally {
       this.finishedAt = Date.now()
+
+      const branches = this.branches.reduce<Record<string, number>>(
+        (counts, branch) => {
+          counts[branch.status] = (counts[branch.status] ?? 0) + 1
+          return counts
+        },
+        {},
+      )
+
+      logger.info('scan', 'scan.end', {
+        taskId: this.id,
+        status: this.status,
+        elapsedMs: this.finishedAt - (this.startedAt ?? this.finishedAt),
+        images: this.progress.images,
+        dirsScanned: this.progress.dirsScanned,
+        dirsHit: this.progress.dirsHit,
+        dirsSkipped: this.progress.dirsSkipped,
+        dirsUnreachable: this.progress.dirsUnreachable,
+        batchTotal: this.progress.batchTotal,
+        branches,
+      })
+
       // 补一次强制推送：finally 只做落盘通知，不推快照的话，最后一个
       // 进度事件可能被节流丢掉，界面停在 70% 而任务其实已经结束了 ——
       // 现场看到的「卡住，点继续立刻出结果」有一部分就是这么来的
@@ -531,6 +616,12 @@ export class ScanTaskRunner {
   private fail(message: string): void {
     this.status = 'failed'
     this.error = message
+
+    logger.error('scan', 'scan.fail', {
+      taskId: this.id,
+      error: message,
+      percent: this.progress.percent,
+    })
   }
 
   /** 单个机台分支：机台 → 解析出的路径前缀 → 日期 → 班次 → 时段 → 类型 */
@@ -542,6 +633,16 @@ export class ScanTaskRunner {
     // EL 会校验「根/机台/EL」存在；力禧特要先探出这台机器用的是
     // el 还是 SaveImages。解析本身含网络读取，所以也走闸门。
     const resolved = await limiter(() => this.context.resolver.resolve(machine))
+
+    logger.debug('scan', 'scan.machine.resolved', () => ({
+      taskId: this.id,
+      machine,
+      ok: resolved.ok,
+      base: resolved.base,
+      reason: resolved.reason,
+      brokenAt: resolved.brokenAt,
+      unreachable: resolved.unreachable,
+    }))
 
     if (!resolved.ok) {
       this.markUnresolved(branch, resolved)
@@ -872,6 +973,12 @@ export class ScanTaskRunner {
     let next = 0
     const lanes = Math.max(1, Math.min(this.readConcurrency, queue.length))
 
+    logger.info('scan', 'scan.phase.collect', {
+      taskId: this.id,
+      detailTotal: queue.length,
+      lanes,
+    })
+
     const worker = async (): Promise<void> => {
       while (next < queue.length) {
         await this.checkpoint()
@@ -952,6 +1059,14 @@ export class ScanTaskRunner {
 
     if (typeRead.status !== 'ok') {
       this.progress.dirsSkipped += 1
+
+      logger.debug('scan', 'scan.detail.failed', {
+        taskId: this.id,
+        machine: item.machine,
+        dir: item.dir,
+        status: typeRead.status,
+        code: typeRead.code,
+      })
       return
     }
 
@@ -961,6 +1076,13 @@ export class ScanTaskRunner {
       branch.status = branch.status === 'hit' ? 'hit' : 'empty'
       return
     }
+
+    logger.debug('scan', 'scan.detail.hit', {
+      taskId: this.id,
+      machine: item.machine,
+      dir: item.dir,
+      images: images.length,
+    })
 
     branch.matchedDirs += 1
     branch.images += images.length
@@ -1042,8 +1164,16 @@ export class ScanTaskRunner {
     const ratio = failed / this.reachabilityWindow.length
 
     if (ratio < NETWORK_FAILURE_RATIO) return
+    if (this.status !== 'running') return
 
-    if (this.status === 'running') this.pause('network')
+    logger.warn('scan', 'scan.network.window', {
+      taskId: this.id,
+      failed,
+      window: this.reachabilityWindow.length,
+      ratio,
+    })
+
+    this.pause('network')
   }
 
   /**
@@ -1080,6 +1210,11 @@ export class ScanTaskRunner {
       this.unreachableMachineStreak >= BATCH_UNREACHABLE_MIN &&
       this.status === 'running'
     ) {
+      logger.warn('scan', 'scan.network.streak', {
+        taskId: this.id,
+        unreachableMachines: this.unreachableMachineStreak,
+        threshold: BATCH_UNREACHABLE_MIN,
+      })
       this.pause('network')
     }
   }
@@ -1144,6 +1279,25 @@ export class ScanTaskRunner {
     }
 
     this.probedMachines += 1
+
+    const fields = {
+      taskId: this.id,
+      machine: branch.machine,
+      where,
+      brokenAt,
+      status: result.status,
+      code: result.code,
+      elapsedMs: result.elapsedMs,
+      message: branch.message,
+      detail: branch.detail,
+    }
+
+    if (branch.status === 'unreachable') {
+      logger.warn('scan', 'scan.machine.broken', fields)
+    } else {
+      logger.debug('scan', 'scan.machine.broken', fields)
+    }
+
     this.touch(where, true)
   }
 
@@ -1181,6 +1335,15 @@ export class ScanTaskRunner {
 
     this.probedMachines += 1
     this.finishedMachines += 1
+
+    logger.warn('scan', 'scan.machine.unresolved', {
+      taskId: this.id,
+      machine: branch.machine,
+      reason: resolved.reason,
+      brokenAt: branch.brokenAt,
+      unreachable: resolved.unreachable,
+    })
+
     this.touch(branch.machine, true)
   }
 

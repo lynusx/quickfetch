@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ExclamationTriangleIcon } from '@radix-ui/react-icons'
 import {
   Box,
@@ -9,11 +9,14 @@ import {
   Heading,
   RadioCards,
   Slider,
+  Switch,
   Text,
 } from '@radix-ui/themes'
 
 import { PageHeader } from '@/components/page-header/page-header'
 import { Panel, PanelBody } from '@/components/panel'
+import { useToast } from '@/hooks/useToast'
+import { toErrorMessage } from '@/utils/error'
 import {
   selectEnvOverrides,
   selectPreferences,
@@ -23,6 +26,7 @@ import type {
   AppPreferences,
   CopyConflictPolicy,
   CopyLayout,
+  LogInfo,
   PreferenceKey,
 } from '@shared/ipc'
 import {
@@ -172,9 +176,61 @@ const SettingsPage = () => {
     (state) => state.settings?.historyLimit ?? DEFAULT_HISTORY_LIMIT,
   )
   const saveHistoryLimit = useSettingsStore((state) => state.saveHistoryLimit)
+  const load = useSettingsStore((state) => state.load)
+  const { showToast } = useToast()
+  const [logInfo, setLogInfo] = useState<LogInfo | null>(null)
+  const [logInfoFailed, setLogInfoFailed] = useState(false)
+
+  // 直接深链到 #/settings 时 store 可能还没读盘，先补一次
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  useEffect(() => {
+    let cancelled = false
+
+    window.electronAPI
+      .getLogInfo()
+      .then((info) => {
+        if (!cancelled) setLogInfo(info)
+      })
+      .catch(() => {
+        if (!cancelled) setLogInfoFailed(true)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const patch = (next: Partial<AppPreferences>) => {
     void save(next)
+  }
+
+  const openLogDir = async () => {
+    try {
+      const error = await window.electronAPI.openLogDir()
+
+      if (error) showToast('无法打开日志目录', error, 'error')
+    } catch (error) {
+      showToast(
+        '无法打开日志目录',
+        toErrorMessage(error, '请稍后重试'),
+        'error',
+      )
+    }
+  }
+
+  /** 只恢复复制策略与并发档位，不把正在排查的调试日志关掉 */
+  const restoreCopyDefaults = () => {
+    patch({
+      copyLayout: DEFAULT_PREFERENCES.copyLayout,
+      copyConflict: DEFAULT_PREFERENCES.copyConflict,
+      scanConcurrency: DEFAULT_PREFERENCES.scanConcurrency,
+      scanBatchSize: DEFAULT_PREFERENCES.scanBatchSize,
+      copyConcurrency: DEFAULT_PREFERENCES.copyConcurrency,
+      copyBatchSize: DEFAULT_PREFERENCES.copyBatchSize,
+    })
   }
 
   /** 被接管时把环境变量名传下去，行内会换成说明文案 */
@@ -186,7 +242,7 @@ const SettingsPage = () => {
       <PageHeader
         eyebrow="应用"
         title="设置"
-        description="复制策略、扫描与复制并发档位、历史保留条数；设置只影响之后的任务，保存在本机。"
+        description="复制策略、扫描与复制并发档位、历史保留条数、调试日志；设置保存在本机。"
       />
 
       <Box className="settings-content">
@@ -426,6 +482,101 @@ const SettingsPage = () => {
           </Panel>
         </Box>
 
+        {/* 调试日志 */}
+        <Box id="logging" className="settings-section">
+          <Box className="settings-section-head">
+            <Heading as="h2" size="3" className="settings-section-title">
+              调试日志
+            </Heading>
+            <Text
+              as="p"
+              size="1"
+              color="gray"
+              className="settings-section-desc"
+            >
+              记录扫描、复制、网络探测、IPC 与渲染层异常；按天写入，保留最近 7
+              天。
+            </Text>
+          </Box>
+
+          <Panel>
+            <PanelBody>
+              <Flex
+                className="setting-row"
+                align="center"
+                justify="between"
+                gap="5"
+              >
+                <Box className="setting-row-main">
+                  <Text
+                    as="p"
+                    size="2"
+                    weight="medium"
+                    className="setting-row-label"
+                  >
+                    启用调试日志
+                  </Text>
+                  <Text
+                    as="p"
+                    size="1"
+                    color="gray"
+                    className="setting-row-hint"
+                  >
+                    默认关闭；开启后立即生效，不必重启或重新开始任务。
+                  </Text>
+                </Box>
+                <Switch
+                  checked={preferences.debugLogEnabled}
+                  aria-label="启用调试日志"
+                  onCheckedChange={(checked) =>
+                    patch({ debugLogEnabled: checked })
+                  }
+                />
+              </Flex>
+
+              <Flex
+                className="setting-row"
+                align="center"
+                justify="between"
+                gap="5"
+              >
+                <Box className="setting-row-main">
+                  <Text
+                    as="p"
+                    size="2"
+                    weight="medium"
+                    className="setting-row-label"
+                  >
+                    日志目录
+                  </Text>
+                  <Text
+                    as="p"
+                    size="1"
+                    color="gray"
+                    className="setting-row-hint setting-log-path"
+                  >
+                    {logInfo ? (
+                      <Code size="1">{logInfo.dir}</Code>
+                    ) : logInfoFailed ? (
+                      '读取日志目录失败'
+                    ) : (
+                      '读取中…'
+                    )}
+                  </Text>
+                </Box>
+                <Button
+                  variant="soft"
+                  color="gray"
+                  size="2"
+                  onClick={() => void openLogDir()}
+                >
+                  打开日志目录
+                </Button>
+              </Flex>
+            </PanelBody>
+          </Panel>
+        </Box>
+
         {/* 其他 */}
         <Box id="other" className="settings-section">
           <Box className="settings-section-head">
@@ -469,14 +620,14 @@ const SettingsPage = () => {
                     color="gray"
                     className="setting-row-hint"
                   >
-                    复制策略与所有并发档位回到出厂值，扫描历史不受影响。
+                    复制策略与所有并发档位回到出厂值，扫描历史与调试日志不受影响。
                   </Text>
                 </Box>
                 <Button
                   variant="soft"
                   color="gray"
                   size="2"
-                  onClick={() => patch({ ...DEFAULT_PREFERENCES })}
+                  onClick={restoreCopyDefaults}
                 >
                   恢复默认
                 </Button>

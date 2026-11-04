@@ -7,6 +7,7 @@ import { readSettings } from '../settings'
 import { saveRecord, trimRecords } from './history'
 import { ScanTaskRunner } from './task'
 import type { TaskContext } from './task'
+import { logger } from '../log'
 
 /** 内存中保留的任务上限，超出时淘汰最早的已结束任务 */
 const MAX_TASKS = 20
@@ -47,12 +48,30 @@ const persistWhenSettled = async (runner: ScanTaskRunner): Promise<void> => {
   try {
     const task = runner.snapshot()
 
+    logger.info('history', 'history.persist.start', {
+      taskId: task.id,
+      status: task.status,
+      images: task.totalImages,
+    })
+
+    const startedAt = Date.now()
+
     await saveRecord(task, runner.getImages())
 
     const settings = await readSettings()
     await trimRecords(settings.historyLimit ?? DEFAULT_HISTORY_LIMIT)
+
+    logger.info('history', 'history.persist.done', {
+      taskId: task.id,
+      elapsedMs: Date.now() - startedAt,
+      historyLimit: settings.historyLimit,
+    })
   } catch (error) {
     console.error('保存扫描历史失败:', error)
+    logger.error('history', 'history.persist.failed', {
+      taskId: runner.id,
+      error,
+    })
   }
 }
 
@@ -67,6 +86,7 @@ const evict = (): void => {
   for (const runner of finished) {
     if (tasks.size <= MAX_TASKS) break
     tasks.delete(runner.id)
+    logger.debug('scan', 'scan.task.evicted', { taskId: runner.id })
   }
 }
 
@@ -78,6 +98,12 @@ export const createTask = (
 
   tasks.set(runner.id, runner)
   evict()
+
+  logger.info('scan', 'scan.task.created', {
+    taskId: runner.id,
+    category: params.category,
+    machines: params.machines.length,
+  })
 
   // 创建瞬间就推送一次，前端进度条立即进入 0% 的待开始状态
   const snapshot = runner.snapshot()
@@ -125,6 +151,11 @@ export const persistUnfinished = async (): Promise<void> => {
 
   if (!pending.length) return
 
+  logger.info('history', 'history.persist-unfinished', {
+    count: pending.length,
+    taskIds: pending.map((runner) => runner.id),
+  })
+
   const limit = (await readSettings().catch(() => null))?.historyLimit
 
   for (const runner of pending) {
@@ -134,6 +165,10 @@ export const persistUnfinished = async (): Promise<void> => {
       })
     } catch (error) {
       console.error(`保存中断的扫描任务失败(${runner.id}):`, error)
+      logger.error('history', 'history.persist-unfinished.failed', {
+        taskId: runner.id,
+        error,
+      })
     }
   }
 

@@ -12,6 +12,7 @@ import { splitMachine } from '../discovery/shortcuts'
 import { AUTH_HINT, NETWORK_HINT } from '../../../shared/networkHint'
 import { readDirSafe } from './fsx'
 import type { DirReadResult } from './fsx'
+import { logger } from '../log'
 
 /**
  * 机台 → 绝对路径前缀。
@@ -193,9 +194,25 @@ const probeRead = async (path: string): Promise<DirReadResult> => {
 
   if (first.status !== 'unreachable') return first
 
+  logger.debug('resolver', 'probe.retry', {
+    path,
+    status: first.status,
+    code: first.code,
+    elapsedMs: first.elapsedMs,
+  })
+
   await new Promise((resolve) => setTimeout(resolve, 600))
 
-  return readDirSafe(path, { timeoutMs: PROBE_TIMEOUT_MS })
+  const second = await readDirSafe(path, { timeoutMs: PROBE_TIMEOUT_MS })
+
+  logger.debug('resolver', 'probe.retry.result', {
+    path,
+    status: second.status,
+    code: second.code,
+    elapsedMs: second.elapsedMs,
+  })
+
+  return second
 }
 
 /** 日期目录名；A-01-B 下除日期外可能还有别的目录，只认这种 */
@@ -318,6 +335,20 @@ export const probeLxtShare = async (
   )
 
   const picked = pickLxtShare(candidates)
+
+  logger.debug('resolver', 'lxt.share.probe', () => ({
+    host,
+    date,
+    candidates: candidates.map((item) => ({
+      share: item.share,
+      status: item.status,
+      rootStatus: item.rootStatus,
+      hasTaskDate: item.hasTaskDate,
+      hasRecentDate: item.hasRecentDate,
+    })),
+    picked,
+  }))
+
   if (picked) return picked
 
   const roots = candidates.map((item) => item.rootStatus)
@@ -350,6 +381,22 @@ export const probePlShare = async (
   )
 
   const picked = pickPlCandidate(probed)
+
+  logger.debug('resolver', 'pl.share.probe', () => ({
+    host,
+    machineName,
+    plant,
+    date,
+    candidates: probed.map((item) => ({
+      share: item.share,
+      status: item.status,
+      rootStatus: item.rootStatus,
+      hasTaskDate: item.hasTaskDate,
+      hasRecentDate: item.hasRecentDate,
+    })),
+    picked,
+  }))
+
   if (picked) return picked
 
   const roots = probed.map((item) => item.rootStatus)
@@ -478,6 +525,20 @@ export const createLxtResolver = (
         )
         const picked = pickLxtShare(candidates)
         const failure = lxtFailure(host, candidates)
+
+        logger.debug('resolver', 'lxt.share.auto', () => ({
+          machine,
+          host,
+          date: options.date,
+          candidates: candidates.map((item) => ({
+            share: item.share,
+            status: item.status,
+            rootStatus: item.rootStatus,
+            hasTaskDate: item.hasTaskDate,
+          })),
+          picked,
+          unreachable: failure.unreachable,
+        }))
 
         if (!picked) {
           // 只有"共享读通了但没有 A-01-B"这个结论才值得落盘；
@@ -856,6 +917,21 @@ export const createPlResolver = (
       }
 
       const failure = plFailure(host, name, probe, cached)
+
+      logger.debug('resolver', 'pl.share.auto', () => ({
+        machine,
+        host,
+        date: options.date,
+        cached,
+        candidates: probe.candidates.map((item) => ({
+          share: item.share,
+          status: item.status,
+          rootStatus: item.rootStatus,
+          hasTaskDate: item.hasTaskDate,
+        })),
+        picked,
+        unreachable: failure.unreachable,
+      }))
 
       // 只有"标识目录确实能进去、里面确实没有"才落盘空串；
       // 暂时性的断网 / 未认证保持原值，下次扫描再试

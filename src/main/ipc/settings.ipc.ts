@@ -1,4 +1,4 @@
-import { BrowserWindow, app, dialog, ipcMain } from 'electron'
+import { BrowserWindow, app, dialog } from 'electron'
 import { basename } from 'node:path'
 
 import type {
@@ -30,6 +30,7 @@ import {
   updatePl,
 } from '../services/settings'
 import { splitMachine } from '../services/discovery/shortcuts'
+import { handle } from './handle'
 
 export const getParentWindow = (
   sender: Electron.WebContents,
@@ -124,9 +125,9 @@ const setupAoi = async (entryRoot: string): Promise<AoiSetupResult> => {
 }
 
 export const registerSettingsIpc = (): void => {
-  ipcMain.handle('app:version', () => app.getVersion())
+  handle('app:version', () => app.getVersion())
 
-  ipcMain.handle(
+  handle(
     'fs:pick-directory',
     async (
       event,
@@ -150,24 +151,24 @@ export const registerSettingsIpc = (): void => {
     },
   )
 
-  ipcMain.handle('settings:read', () => readSettings())
+  handle('settings:read', () => readSettings())
 
-  ipcMain.handle('settings:save-root', (_event, rootPath: string) =>
+  handle('settings:save-root', (_event, rootPath: string) =>
     saveRootPath(rootPath),
   )
 
-  ipcMain.handle('settings:refresh', () => refreshMachines())
+  handle('settings:refresh', () => refreshMachines())
 
-  ipcMain.handle(
+  handle(
     'settings:save-preferences',
     (_event, patch: Partial<AppPreferences>) => savePreferences(patch),
   )
 
-  ipcMain.handle('lxt:setup-root', (_event, entryRoot: string) =>
+  handle('lxt:setup-root', (_event, entryRoot: string) =>
     setupLxt(entryRoot.trim()),
   )
 
-  ipcMain.handle('lxt:refresh', async () => {
+  handle('lxt:refresh', async () => {
     const current = await readSettings()
 
     if (!current.lxt.entryRoot) {
@@ -177,11 +178,11 @@ export const registerSettingsIpc = (): void => {
     return setupLxt(current.lxt.entryRoot)
   })
 
-  ipcMain.handle('pl:setup-root', (_event, entryRoot: string) =>
+  handle('pl:setup-root', (_event, entryRoot: string) =>
     setupPl(entryRoot.trim()),
   )
 
-  ipcMain.handle('pl:refresh', async () => {
+  handle('pl:refresh', async () => {
     const current = await readSettings()
 
     if (!current.pl.entryRoot) {
@@ -191,11 +192,11 @@ export const registerSettingsIpc = (): void => {
     return setupPl(current.pl.entryRoot)
   })
 
-  ipcMain.handle('aoi:setup-root', (_event, entryRoot: string) =>
+  handle('aoi:setup-root', (_event, entryRoot: string) =>
     setupAoi(entryRoot.trim()),
   )
 
-  ipcMain.handle('aoi:refresh', async () => {
+  handle('aoi:refresh', async () => {
     const current = await readSettings()
 
     if (!current.aoi.entryRoot) {
@@ -212,7 +213,7 @@ export const registerSettingsIpc = (): void => {
    * 不传 keys 时重探全部未删除机台；显式传 keys 时按 keys 来。
    * 串行探测：46 台并发会把现场那台 8G 机器和无线网一起拖垮。
    */
-  ipcMain.handle(
+  handle(
     'share:reprobe',
     async (
       _event,
