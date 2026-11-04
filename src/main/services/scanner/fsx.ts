@@ -26,8 +26,26 @@ export interface DirReadResult {
   error?: string
   /** 原始错误码，界面诊断用；miss 时为 ENOENT 这类 */
   code?: string
+  /**
+   * 原始异常的完整快照（含堆栈、errno、syscall、path）。
+   *
+   * 只用于日志，不参与状态判定 —— 现场要核对「UNKNOWN / EINVAL」
+   * 这类错误码到底该归到哪一档，靠的就是这份原文。
+   */
+  raw?: DirReadError
   /** 本次读取耗时，供调用方做自适应并发判断 */
   elapsedMs: number
+}
+
+/** Node 文件系统异常的原始字段；日志专用 */
+export interface DirReadError {
+  name: string
+  message: string
+  code?: string
+  errno?: number
+  syscall?: string
+  path?: string
+  stack?: string
 }
 
 /** 默认读取超时。现场 8G 内存机器上 SMB 抖动更明显，由任务按需下探 */
@@ -80,6 +98,21 @@ const PATH_CODES = new Set([
 const codeOf = (error: unknown): string | undefined =>
   (error as NodeJS.ErrnoException | undefined)?.code
 
+/** 保留 Node 异常的原始字段；堆栈截断交给日志序列化统一处理 */
+const rawErrorOf = (error: unknown): DirReadError => {
+  const source = error as NodeJS.ErrnoException | undefined
+
+  return {
+    name: error instanceof Error ? error.name : 'Error',
+    message: error instanceof Error ? error.message : String(error),
+    code: typeof source?.code === 'string' ? source.code : undefined,
+    errno: typeof source?.errno === 'number' ? source.errno : undefined,
+    syscall: typeof source?.syscall === 'string' ? source.syscall : undefined,
+    path: typeof source?.path === 'string' ? source.path : undefined,
+    stack: error instanceof Error ? error.stack : undefined,
+  }
+}
+
 /**
  * 错误码 → 状态。
  *
@@ -123,7 +156,16 @@ const emptyResult = (
   elapsedMs: number,
   error?: string,
   code?: string,
-): DirReadResult => ({ status, dirs: [], files: [], error, code, elapsedMs })
+  raw?: DirReadError,
+): DirReadResult => ({
+  status,
+  dirs: [],
+  files: [],
+  error,
+  code,
+  raw,
+  elapsedMs,
+})
 
 export interface ReadOptions {
   /** 单次读取超时，默认 20 秒 */
@@ -195,6 +237,7 @@ export const readDirSafe = async (
   } catch (error) {
     const status = toStatus(error)
     const elapsedMs = Date.now() - startedAt
+    const raw = rawErrorOf(error)
 
     if (status !== 'missing') {
       console.error(
@@ -206,7 +249,7 @@ export const readDirSafe = async (
         status,
         code: codeOf(error),
         elapsedMs,
-        error: (error as Error)?.message,
+        error: raw,
       })
     } else {
       logger.debug('fsx', 'read.missing', {
@@ -214,6 +257,7 @@ export const readDirSafe = async (
         status,
         code: codeOf(error),
         elapsedMs,
+        error: raw,
       })
     }
 
@@ -232,6 +276,7 @@ export const readDirSafe = async (
       elapsedMs,
       (error as Error)?.message,
       codeOf(error),
+      raw,
     )
   } finally {
     if (timer) clearTimeout(timer)

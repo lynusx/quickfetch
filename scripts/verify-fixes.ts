@@ -55,6 +55,8 @@ const fsxTests = async () => {
   await test('fsx: 不存在的目录 → missing', async () => {
     const r = await readDirSafe(join(root, 'nope'))
     assert.equal(r.status, 'missing')
+    assert.equal(r.raw?.code, 'ENOENT')
+    assert.ok((r.raw?.stack ?? '').length > 0, '应保留原始堆栈')
   })
 
   await test('fsx: 把文件当目录读 → missing（ENOTDIR 属路径错误）', async () => {
@@ -1228,11 +1230,19 @@ const logFormatTests = async () => {
   })
 
   await test('log: 序列化 Error/循环引用/字节/长字符串/大数组', async () => {
-    const error = Object.assign(new Error('boom'), { code: 'ETIMEDOUT' })
+    const error = Object.assign(new Error('boom'), {
+      code: 'ETIMEDOUT',
+      errno: -110,
+      syscall: 'scandir',
+      path: '\\\\10.1.1.2\\SaveImages',
+    })
     const serializedError = serializeLogValue(error) as Record<string, unknown>
     assert.equal(serializedError.name, 'Error')
     assert.equal(serializedError.message, 'boom')
     assert.equal(serializedError.code, 'ETIMEDOUT')
+    assert.equal(serializedError.errno, -110)
+    assert.equal(serializedError.syscall, 'scandir')
+    assert.equal(serializedError.path, '\\\\10.1.1.2\\SaveImages')
     assert.match(String(serializedError.stack), /boom/)
 
     const circular: Record<string, unknown> = {}

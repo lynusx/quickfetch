@@ -199,6 +199,7 @@ const probeRead = async (path: string): Promise<DirReadResult> => {
     status: first.status,
     code: first.code,
     elapsedMs: first.elapsedMs,
+    error: first.raw,
   })
 
   await new Promise((resolve) => setTimeout(resolve, 600))
@@ -210,6 +211,7 @@ const probeRead = async (path: string): Promise<DirReadResult> => {
     status: second.status,
     code: second.code,
     elapsedMs: second.elapsedMs,
+    error: second.raw,
   })
 
   return second

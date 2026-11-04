@@ -134,7 +134,15 @@ const serialize = (
   const nextDepth = depth + 1
 
   if (value instanceof Error) {
-    const extended = value as Error & { code?: unknown; cause?: unknown }
+    const extended = value as Error & {
+      code?: unknown
+      errno?: unknown
+      syscall?: unknown
+      path?: unknown
+      address?: unknown
+      port?: unknown
+      cause?: unknown
+    }
     const result: Record<string, unknown> = {
       name: value.name,
       message: truncate(value.message, options.maxString),
@@ -147,6 +155,17 @@ const serialize = (
     ) {
       result.code = extended.code
     }
+    if (typeof extended.errno === 'number') result.errno = extended.errno
+    if (typeof extended.syscall === 'string') {
+      result.syscall = extended.syscall
+    }
+    if (typeof extended.path === 'string') {
+      result.path = truncate(extended.path, options.maxString)
+    }
+    if (typeof extended.address === 'string') {
+      result.address = extended.address
+    }
+    if (typeof extended.port === 'number') result.port = extended.port
     if (extended.cause !== undefined) {
       result.cause = serialize(
         extended.cause,

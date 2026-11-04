@@ -578,7 +578,7 @@ export class ScanTaskRunner {
         // 取消属于正常流程：保留已收集的结果，状态标记 canceled
         this.status = 'canceled'
       } else {
-        this.fail((error as Error)?.message ?? '扫描过程中发生未知错误')
+        this.fail((error as Error)?.message ?? '扫描过程中发生未知错误', error)
       }
     } finally {
       this.finishedAt = Date.now()
@@ -613,13 +613,13 @@ export class ScanTaskRunner {
     }
   }
 
-  private fail(message: string): void {
+  private fail(message: string, error?: unknown): void {
     this.status = 'failed'
     this.error = message
 
     logger.error('scan', 'scan.fail', {
       taskId: this.id,
-      error: message,
+      error: error ?? message,
       percent: this.progress.percent,
     })
   }
@@ -1066,6 +1066,7 @@ export class ScanTaskRunner {
         dir: item.dir,
         status: typeRead.status,
         code: typeRead.code,
+        error: typeRead.raw,
       })
       return
     }
@@ -1290,6 +1291,7 @@ export class ScanTaskRunner {
       elapsedMs: result.elapsedMs,
       message: branch.message,
       detail: branch.detail,
+      error: result.raw,
     }
 
     if (branch.status === 'unreachable') {

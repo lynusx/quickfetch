@@ -759,6 +759,10 @@ export class CopyTaskRunner {
         this.finish('canceled')
       } else {
         this.error = (error as Error)?.message ?? '复制过程中发生未知错误'
+        logger.error('copy', 'copy.run.failed', {
+          copyId: this.id,
+          error,
+        })
         this.finish('failed')
       }
     }
@@ -1104,6 +1108,7 @@ export class CopyTaskRunner {
         bytes: item.size,
         ms: Date.now() - startedAt,
         reason: (error as Error)?.message ?? '未知错误',
+        error,
       })
 
       // 失败率过高时降档：共享盘抖动下越并发越糟
