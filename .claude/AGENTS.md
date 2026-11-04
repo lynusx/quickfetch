@@ -103,14 +103,12 @@ pnpm build                        # 构建
 
 **不要每次改完就打包**，只在用户明确要求打包时执行。
 
-打包前先清 `release/`，打完把 zip 拷到工作区根目录（要先把根目录里的旧 zip 删掉）。
+打包前先清 `release/`，**产物留在 `release/` 里即可，不要拷到工作区根目录**。
 截图同理：`shots/` 里只保留最近一次，新一轮截图前先清空，否则会慢慢堆出几十张过期图，
 用户分不清哪张是当前界面。
 
 ```bash
-rm -rf release/* && pnpm dist:win                 # 打包
-rm -f /workspace/SHX-Tools-*.zip                  # 删旧包
-cp release/SHX-Tools-*-win-x64.zip /workspace/   # 只留这一份
+rm -rf release/* && pnpm dist:win                 # 打包，产物在 release/
 rm -f /workspace/shots/*                          # 拍截图前清空
 ```
 
