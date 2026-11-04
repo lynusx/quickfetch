@@ -9,20 +9,18 @@ import {
   mkdtemp,
   mkdir,
   writeFile,
+  readFile,
   readdir,
   mkdir as mkdirP,
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { readDirSafe } from '/workspace/shx-tools/src/main/services/scanner/fsx'
-import { createLxtResolver } from '/workspace/shx-tools/src/main/services/scanner/resolver'
-import type { MachineResolver } from '/workspace/shx-tools/src/main/services/scanner/resolver'
-import { CopyTaskRunner } from '/workspace/shx-tools/src/main/services/copy/copy'
-import type {
-  ScanCategory,
-  ScanTaskParams,
-} from '/workspace/shx-tools/src/shared/ipc'
+import { readDirSafe } from '../src/main/services/scanner/fsx'
+import { createLxtResolver } from '../src/main/services/scanner/resolver'
+import type { MachineResolver } from '../src/main/services/scanner/resolver'
+import { CopyTaskRunner } from '../src/main/services/copy/copy'
+import type { ScanCategory, ScanTaskParams } from '../src/shared/ipc'
 
 const results: { name: string; ok: boolean; detail?: string }[] = []
 
@@ -215,6 +213,8 @@ const copyTests = async () => {
     assert.equal(snap.progress.alreadyExists, 1, '目标已有同名应计 1 张')
     assert.equal(snap.progress.copied, 1, '同批其他图必须照常复制')
     assert.equal(snap.progress.failed, 0, '跳过不该报错')
+    assert.equal(snap.progress.total, 2, 'total 要包含目标已存在的 1 张')
+    assert.equal(snap.progress.copyTotal, 1, 'copyTotal 只算真正写盘的')
     assert.equal(
       snap.progress.copied +
         snap.progress.alreadyExists +
@@ -247,6 +247,9 @@ const copyTests = async () => {
     assert.equal(snap.progress.copied, 0)
     assert.equal(snap.progress.alreadyExists, 9)
     assert.equal(snap.progress.failed, 0, '跳过不等于失败')
+    // 以前 total 只取 plan.length，全部跳过时会显示「已完成 9 / 0 张」
+    assert.equal(snap.progress.total, 9)
+    assert.equal(snap.progress.copyTotal, 0)
 
     const files = await readdir(dst)
     assert.deepEqual(files.sort(), ['img.jpg', 'source.txt'].sort())
@@ -269,6 +272,10 @@ const copyTests = async () => {
     const snap = task.snapshot()
     assert.equal(snap.progress.copied, 9)
     assert.equal(snap.progress.renamed, 9)
+    // 每张源文件 6 字节（data-N），9 张共 54 字节
+    assert.equal(snap.progress.sizeUnknown, 0)
+    assert.equal(snap.progress.totalBytes, 54)
+    assert.equal(snap.progress.copiedBytes, 54)
     const files = await readdir(dst2)
     assert.equal(files.filter((n) => n.endsWith('.jpg')).length, 10)
   })
@@ -357,13 +364,81 @@ const copyTests = async () => {
     await task.waitSettled()
     assert.ok(true)
   })
+
+  await test('复制: retry() 按原分组目录落盘，不把绝对路径拼进目标目录', async () => {
+    const dst = await mkdtemp(join(tmpdir(), 'shx-dst-folder-'))
+    const missing = join(src, 'retry-missing.jpg')
+
+    const task = new CopyTaskRunner({
+      scanTaskId: 's6',
+      targetDir: dst,
+      params: { machines: [], layout: 'machine-type', conflict: 'rename' },
+      images: [
+        {
+          path: 'A02-A/EL/20261103/白班/8/NG_脏污_B/x.jpg',
+          absolutePath: missing,
+          name: 'x.jpg',
+          machine: 'A02-A',
+        },
+      ],
+      emit: () => undefined,
+    })
+    task.start()
+    await task.waitSettled()
+    assert.equal(task.snapshot().progress.failed, 1, '源文件不存在应先失败')
+
+    // 补上源文件后重试：分组目录应来自失败记录，而不是从绝对路径反推
+    await writeFile(missing, 'retry-data')
+    task.retry()
+    await task.waitSettled()
+
+    const after = task.snapshot()
+    assert.equal(after.status, 'completed', after.error ?? '')
+    assert.equal(after.progress.copied, 1, after.error ?? '')
+
+    const target = join(dst, 'A02-A', 'NG_脏污_B', 'x.jpg')
+    assert.equal(await readFile(target, 'utf-8'), 'retry-data')
+
+    // 目标根下只应出现分组目录和清单，不能出现 tmp/、C: 这类嵌套段
+    const top = await readdir(dst)
+    assert.deepEqual(top.sort(), ['A02-A', 'source.txt'].sort())
+  })
+
+  await test('复制: 非图片文件不参与复制计划与总数', async () => {
+    const dst = await mkdtemp(join(tmpdir(), 'shx-dst-nonimage-'))
+    const txt = join(src, 'readme.txt')
+    await writeFile(txt, 'not an image')
+
+    const task = new CopyTaskRunner({
+      scanTaskId: 's7',
+      targetDir: dst,
+      params: { machines: [], layout: 'flat', conflict: 'rename' },
+      images: [
+        images[0],
+        {
+          path: 'A02-A/EL/20261103/白班/8/NG_脏污_B/readme.txt',
+          absolutePath: txt,
+          name: 'readme.txt',
+          machine: 'A02-A',
+        },
+      ],
+      emit: () => undefined,
+    })
+    task.start()
+    await task.waitSettled()
+
+    const snap = task.snapshot()
+    assert.equal(snap.progress.total, 1)
+    assert.equal(snap.progress.copied, 1)
+    const files = await readdir(dst)
+    assert.ok(!files.includes('readme.txt'), `实际 ${files}`)
+  })
 }
 
 /* ------------------------------------------------ 4. 扫描任务端到端 */
 
 const scanTests = async () => {
-  const { ScanTaskRunner } =
-    await import('/workspace/shx-tools/src/main/services/scanner/task')
+  const { ScanTaskRunner } = await import('../src/main/services/scanner/task')
 
   const run = async (params: ScanTaskParams, resolver: MachineResolver) => {
     const runner = new ScanTaskRunner(
@@ -500,15 +575,181 @@ const scanTests = async () => {
     assert.equal(branch.brokenAt, '类型')
     assert.match(branch.message ?? '', /没有所选类型/)
   })
+
+  await test('扫描: 有时段路径所选类型全不存在时，不误报「没有图片文件」', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'sc-slot-'))
+    const typeDir = join(root, '20261103', '白班', '8', '色差B-')
+    await mkdirP(typeDir, { recursive: true })
+    await writeFile(join(typeDir, 'a.jpg'), 'x')
+
+    const resolver = {
+      category: 'el' as const,
+      shape: {},
+      validate: () => null,
+      resolve: async () => ({ ok: true, base: root, reason: '' }),
+      segments: (m: string, dir: string) => [
+        m,
+        ...dir.slice(root.length).split('/').filter(Boolean),
+      ],
+    }
+
+    const snap = await run(
+      {
+        category: 'el',
+        machines: ['A02-A'],
+        date: '20261103',
+        shift: '白班',
+        slots: ['8'],
+        types: ['色斑B-'],
+      },
+      resolver,
+    )
+
+    const branch = snap.branches[0]
+    assert.equal(branch.status, 'empty')
+    assert.equal(branch.brokenAt, '类型', `实际 ${branch.brokenAt}`)
+    assert.match(branch.message ?? '', /没有所选类型/)
+    assert.doesNotMatch(branch.message ?? '', /没有图片文件/)
+    assert.ok(
+      branch.availableTypes?.includes('色差B-'),
+      '实际存在的类型要保留给界面提示',
+    )
+  })
+
+  await test('扫描: 日期目录缺失时写入 missingName', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'sc-missing-date-'))
+
+    const resolver = {
+      category: 'el' as const,
+      shape: {},
+      validate: () => null,
+      resolve: async () => ({ ok: true, base: root, reason: '' }),
+      segments: (m: string) => [m],
+    }
+
+    const snap = await run(
+      {
+        category: 'el',
+        machines: ['A02-A'],
+        date: '20261103',
+        shift: '白班',
+        slots: ['8'],
+        types: ['色斑B-'],
+      },
+      resolver,
+    )
+
+    const branch = snap.branches[0]
+    assert.equal(branch.status, 'missing')
+    assert.equal(branch.brokenAt, '日期')
+    assert.equal(branch.missingName, '20261103')
+    assert.equal(branch.images, 0)
+  })
+
+  await test('状态文案: 短文案与图片列映射', async () => {
+    const { branchSummary } =
+      await import('../src/renderer/features/scan/components/scanStatus')
+
+    const make = (patch: Record<string, unknown>) =>
+      ({
+        machine: 'A02-A',
+        status: 'missing',
+        matchedDirs: 0,
+        images: 0,
+        ...patch,
+      }) as Parameters<typeof branchSummary>[0]
+
+    assert.deepEqual(
+      branchSummary(
+        make({ status: 'unreachable', unreachableReason: 'auth' }),
+        undefined,
+      ),
+      { statusText: '未认证', imagesText: '—' },
+    )
+
+    assert.deepEqual(
+      branchSummary(make({ brokenAt: '日期', missingName: '20261103' }), {
+        date: '20261103',
+      } as ScanTaskParams),
+      { statusText: '20261103 目录不存在', imagesText: '0 张' },
+    )
+
+    assert.deepEqual(branchSummary(make({ brokenAt: 'EL' }), undefined), {
+      statusText: 'EL 目录不存在',
+      imagesText: '0 张',
+    })
+
+    // 旧历史没有 missingName：从 message 里提取
+    assert.deepEqual(
+      branchSummary(
+        make({
+          brokenAt: '日期',
+          message:
+            '「\\\\10.1.1.1\\DC\\A02-A\\EL」下没有「20261103」，实际存在：（空目录）',
+        }),
+        { date: '20261103' } as ScanTaskParams,
+      ),
+      { statusText: '20261103 目录不存在', imagesText: '0 张' },
+    )
+
+    assert.deepEqual(
+      branchSummary(make({ status: 'empty', brokenAt: '未命中' }), undefined),
+      { statusText: '目录内无图片', imagesText: '0 张' },
+    )
+
+    assert.deepEqual(
+      branchSummary(make({ status: 'empty', brokenAt: '类型' }), undefined),
+      { statusText: '没有所选类型', imagesText: '0 张' },
+    )
+
+    assert.deepEqual(
+      branchSummary(
+        make({ status: 'hit', matchedDirs: 3, images: 12 }),
+        undefined,
+      ),
+      { statusText: '3 个目录', imagesText: '12 张' },
+    )
+
+    assert.deepEqual(branchSummary(make({ status: 'skipped' }), undefined), {
+      statusText: '未探测',
+      imagesText: '—',
+    })
+
+    // 机台不在入口目录里：保留可读原因，而不是硬套「目录不存在」
+    assert.deepEqual(
+      branchSummary(
+        make({ brokenAt: '机台标识', message: '该机台已不在入口目录中' }),
+        undefined,
+      ),
+      { statusText: '该机台已不在入口目录中', imagesText: '0 张' },
+    )
+  })
+
+  await test('探测: 利珀不再枚举 \\\\IP 根，力禧特空结论落为字符串', async () => {
+    const { probeLxtShare, probePlShare } =
+      await import('../src/main/services/scanner/resolver')
+
+    // 力禧特：共享根可读，但两边都没有 A-01-B → ''（探过、没有）
+    const lxtHost = await mkdtemp(join(tmpdir(), 'sc-lxt-probe-'))
+    await mkdirP(join(lxtHost, 'el'), { recursive: true })
+    await mkdirP(join(lxtHost, 'SaveImages'), { recursive: true })
+    assert.equal(await probeLxtShare(lxtHost, '20261103'), '')
+
+    // 利珀：只有根枚举才可能命中的目录（6a-old），新实现不应再读 \\IP 根
+    const plHost = await mkdtemp(join(tmpdir(), 'sc-pl-probe-'))
+    await mkdirP(join(plHost, '6a-old', 'Matting', '2026.11.03'), {
+      recursive: true,
+    })
+    assert.equal(await probePlShare(plHost, '6A', '东区', '20261103'), '')
+  })
 }
 
 /* ---------------------------------------------------------------- 5. 图片扩展名 */
 
 const imageTests = async () => {
   const { isImageFile, IMAGE_EXTENSIONS } =
-    await import('/workspace/shx-tools/src/main/services/scanner/imageFiles')
-  const { ScanTaskRunner } =
-    await import('/workspace/shx-tools/src/main/services/scanner/task')
+    await import('../src/main/services/scanner/imageFiles')
+  const { ScanTaskRunner } = await import('../src/main/services/scanner/task')
 
   await test('图片: .bmp 算图片（森标 AOI 原生格式）', async () => {
     assert.equal(isImageFile('A02_20261103.bmp'), true)
@@ -596,8 +837,7 @@ const imageTests = async () => {
  * 这两类场景正是真机上"卡住"的来源，必须各写一条。
  */
 const breakerTests = async () => {
-  const { ScanTaskRunner } =
-    await import('/workspace/shx-tools/src/main/services/scanner/task')
+  const { ScanTaskRunner } = await import('../src/main/services/scanner/task')
 
   /**
    * 按机台名给出剧本：每台机器第一次解析时返回指定结果。
@@ -607,13 +847,23 @@ const breakerTests = async () => {
    */
   const makeResolver = (
     root: string,
-    plan: Map<string, 'ok' | 'unreachable' | 'missing'>,
+    plan: ReadonlyMap<string, 'ok' | 'unreachable' | 'missing' | 'auth'>,
   ): MachineResolver => ({
     category: 'aoi',
     shape: { shiftDir: () => '20.5', hasSlots: false, baseBrokenAt: '共享名' },
     validate: () => null,
     resolve: async (machine: string) => {
       const state = plan.get(machine) ?? 'ok'
+
+      if (state === 'auth') {
+        return {
+          ok: false,
+          base: '',
+          reason: '未认证',
+          brokenAt: '共享名',
+          unreachable: 'auth',
+        }
+      }
 
       return state === 'unreachable'
         ? {
@@ -712,6 +962,77 @@ const breakerTests = async () => {
     const snap = runner.snapshot()
     assert.equal(snap.status, 'paused', `实际 ${snap.status}`)
     assert.equal(snap.pauseReason, 'network')
+  })
+
+  await test('熔断: 默认 2 台批次下连续多台不可达也会暂停', async () => {
+    // 真机默认 machineBatchSize=2；旧判定要求"单批 >= 3 台"，永远不触发
+    const machines = ['东区/1A终检', '东区/2A终检', '东区/3A终检']
+    const root = await buildRoot(machines)
+    const plan = new Map<string, 'ok' | 'unreachable' | 'missing' | 'auth'>(
+      machines.map((machine) => [machine, 'unreachable']),
+    )
+
+    const runner = new ScanTaskRunner(
+      {
+        category: 'aoi',
+        machines,
+        date: '20261103',
+        shift: '夜班',
+        slots: [],
+        types: ['色斑B-'],
+      },
+      {
+        category: 'aoi',
+        resolver: makeResolver(root, plan),
+        load: { readConcurrency: 1, machineBatchSize: 2 },
+      },
+      () => undefined,
+    )
+    runner.start()
+    await new Promise((resolve) => setTimeout(resolve, 300))
+
+    const snap = runner.snapshot()
+    assert.equal(snap.status, 'paused', `实际 ${snap.status}`)
+    assert.equal(snap.pauseReason, 'network')
+
+    runner.resume()
+    await runner.waitSettled()
+    assert.equal(runner.snapshot().status, 'completed')
+  })
+
+  await test('熔断: 未认证机台不会触发断网暂停', async () => {
+    // 39 台未认证是现场常态；认证问题不是断网，不能把整个任务停掉
+    const machines = ['东区/1A正检', '东区/2A正检', '东区/3A正检']
+    const root = await buildRoot(machines)
+    const plan = new Map<string, 'ok' | 'unreachable' | 'missing' | 'auth'>(
+      machines.map((machine) => [machine, 'auth']),
+    )
+
+    const runner = new ScanTaskRunner(
+      {
+        category: 'aoi',
+        machines,
+        date: '20261103',
+        shift: '夜班',
+        slots: [],
+        types: ['色斑B-'],
+      },
+      {
+        category: 'aoi',
+        resolver: makeResolver(root, plan),
+        load: { readConcurrency: 1, machineBatchSize: 2 },
+      },
+      () => undefined,
+    )
+    runner.start()
+    await runner.waitSettled()
+
+    const snap = runner.snapshot()
+    assert.equal(snap.status, 'completed', `被误暂停：${snap.status}`)
+    assert.ok(
+      snap.branches.every((b) => b.unreachableReason === 'auth'),
+      '应全部标记为未认证',
+    )
   })
 
   await test('熔断: 整片不可达时仍然会暂停，提示连 JA-PDA', async () => {
