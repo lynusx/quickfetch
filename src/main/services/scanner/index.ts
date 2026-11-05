@@ -7,6 +7,7 @@ export {
   startTask,
 } from './registry'
 export type { TaskContext } from './task'
+export { taskImagePage, taskImages } from './images'
 
 // 历史记录的读写与裁剪
 export {

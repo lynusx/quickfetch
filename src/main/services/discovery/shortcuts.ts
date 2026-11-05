@@ -4,6 +4,7 @@ import { basename, extname, join } from 'node:path'
 import type { LxtSkippedLink, Plant } from '../../../shared/ipc'
 
 import { readLnk } from './lnk'
+import { describeAccessError } from '../scanner/diagnosis'
 import { toFsPath } from '../../utils/pathx'
 
 /**
@@ -62,16 +63,7 @@ export const discoverShortcutEntry = async (
   try {
     zones = await readdir(toFsPath(entryRoot), { withFileTypes: true })
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException | undefined)?.code
-    if (code === 'ENOENT') {
-      throw new Error(`入口目录不存在或已被移动：${entryRoot}，请重新选择`)
-    }
-    if (code === 'EACCES' || code === 'EPERM') {
-      throw new Error(`没有读取「${entryRoot}」的权限，请检查目录访问权限`)
-    }
-    throw new Error(
-      `无法访问「${entryRoot}」：${(error as Error)?.message ?? '未知错误'}`,
-    )
+    throw new Error(describeAccessError(error, entryRoot, { noun: '入口目录' }))
   }
 
   const machines: DiscoveredLink[] = []

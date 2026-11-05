@@ -7,6 +7,7 @@ import type {
   AppSettings,
   DirectoryInfo,
   LxtSetupResult,
+  LxtSkippedLink,
   PlSetupResult,
 } from '../../shared/ipc'
 import {
@@ -16,6 +17,11 @@ import {
   mergeAoiMachines,
   mergeLxtMachines,
   mergePlMachines,
+} from '../services/discovery'
+import type {
+  DiscoveredLink,
+  Discovery,
+  MergeResult,
 } from '../services/discovery'
 import { probeLxtShare, probePlShare } from '../services/scanner/resolver'
 import {
@@ -37,92 +43,79 @@ export const getParentWindow = (
 ): BrowserWindow | undefined =>
   BrowserWindow.fromWebContents(sender) ?? undefined
 
-const setupLxt = async (entryRoot: string): Promise<LxtSetupResult> => {
+interface EntrySettings<TMachine> {
+  entryRoot: string | null
+  machines: TMachine[]
+  skipped: LxtSkippedLink[]
+  updatedAt: string | null
+}
+
+interface EntrySetupAdapter<
+  TMachine,
+  TSettings extends EntrySettings<TMachine>,
+> {
+  discover: (entryRoot: string) => Promise<Discovery>
+  merge: (
+    previous: TMachine[],
+    discovered: DiscoveredLink[],
+  ) => MergeResult<TMachine>
+  update: (mutate: (current: TSettings) => TSettings) => Promise<AppSettings>
+}
+
+/**
+ * 入口目录识别 + 合并 + 落盘的共同流程。
+ *
+ * LXT/PL/AOI 的差异只有 discover、merge 与 settings 段落；三者以前
+ * 各写一遍同样的 added/removed/relocated 统计与原子更新顺序。
+ */
+const setupEntry = async <TMachine, TSettings extends EntrySettings<TMachine>>(
+  entryRoot: string,
+  adapter: EntrySetupAdapter<TMachine, TSettings>,
+): Promise<LxtSetupResult> => {
   // 识别在锁外跑，合并放到锁内，基于最新配置进行
-  const { machines: discovered, skipped } = await discoverLxt(entryRoot)
+  const discovery = await adapter.discover(entryRoot)
   let added = 0
   let removed = 0
   let relocated = 0
 
-  const settings = await updateLxt((lxt) => {
-    const merged = mergeLxtMachines(lxt.machines, discovered)
+  const settings = await adapter.update((current) => {
+    const merged = adapter.merge(current.machines, discovery.machines)
     added = merged.added
     removed = merged.removed
     relocated = merged.relocated
 
     return {
+      ...current,
       entryRoot,
       machines: merged.machines,
-      skipped,
+      skipped: discovery.skipped,
       updatedAt: new Date().toISOString(),
     }
   })
 
-  return {
-    settings,
-    added,
-    removed,
-    relocated,
-  }
+  return { settings, added, removed, relocated }
 }
 
-const setupPl = async (entryRoot: string): Promise<PlSetupResult> => {
-  // 识别在锁外跑，合并放到锁内，基于最新配置进行
-  const { machines: discovered, skipped } = await discoverPl(entryRoot)
-  let added = 0
-  let removed = 0
-  let relocated = 0
-
-  const settings = await updatePl((pl) => {
-    const merged = mergePlMachines(pl.machines, discovered)
-    added = merged.added
-    removed = merged.removed
-    relocated = merged.relocated
-
-    return {
-      entryRoot,
-      machines: merged.machines,
-      skipped,
-      updatedAt: new Date().toISOString(),
-    }
+const setupLxt = (entryRoot: string): Promise<LxtSetupResult> =>
+  setupEntry(entryRoot, {
+    discover: discoverLxt,
+    merge: mergeLxtMachines,
+    update: updateLxt,
   })
 
-  return {
-    settings,
-    added,
-    removed,
-    relocated,
-  }
-}
-
-const setupAoi = async (entryRoot: string): Promise<AoiSetupResult> => {
-  // 识别在锁外跑，合并放到锁内，基于最新配置进行
-  const { machines: discovered, skipped } = await discoverAoi(entryRoot)
-  let added = 0
-  let removed = 0
-  let relocated = 0
-
-  const settings = await updateAoi((aoi) => {
-    const merged = mergeAoiMachines(aoi.machines, discovered)
-    added = merged.added
-    removed = merged.removed
-    relocated = merged.relocated
-
-    return {
-      entryRoot,
-      machines: merged.machines,
-      skipped,
-      updatedAt: new Date().toISOString(),
-    }
+const setupPl = (entryRoot: string): Promise<PlSetupResult> =>
+  setupEntry(entryRoot, {
+    discover: discoverPl,
+    merge: mergePlMachines,
+    update: updatePl,
   })
 
-  return {
-    settings,
-    added,
-    removed,
-    relocated,
-  }
-}
+const setupAoi = (entryRoot: string): Promise<AoiSetupResult> =>
+  setupEntry(entryRoot, {
+    discover: discoverAoi,
+    merge: mergeAoiMachines,
+    update: updateAoi,
+  })
 
 export const registerSettingsIpc = (): void => {
   handle('app:version', () => app.getVersion())

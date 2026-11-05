@@ -5,7 +5,6 @@ import type {
   CopyPlanPreview,
   CopyTask,
   CopyTaskParams,
-  ScannedImage,
 } from '../../shared/ipc'
 import {
   filterByMachines,
@@ -13,18 +12,10 @@ import {
   getCopyRunner,
   startCopy,
 } from '../services/copy'
-import { getRunner, readRecord } from '../services/scanner'
+import { taskImages } from '../services/scanner'
 import { readSettings, loadFrom } from '../services/settings'
 import { toFsPath } from '../utils/pathx'
 import { handle } from './handle'
-
-const resolveImages = async (taskId: string): Promise<ScannedImage[]> => {
-  const runner = getRunner(taskId)
-
-  if (runner) return runner.getImages()
-
-  return (await readRecord(taskId))?.images ?? []
-}
 
 const requireCopyRunner = (copyId: string) => {
   const runner = getCopyRunner(copyId)
@@ -45,7 +36,7 @@ export const registerCopyIpc = (): void => {
       params: CopyTaskParams,
       targetDir?: string,
     ): Promise<CopyPlanPreview> => {
-      const images = await resolveImages(taskId)
+      const images = await taskImages(taskId)
 
       if (!images.length) {
         throw new Error('该任务没有可复制的图片，请重新扫描')
@@ -71,7 +62,11 @@ export const registerCopyIpc = (): void => {
         throw new Error('请先选择复制目标目录')
       }
 
-      const images = await resolveImages(taskId)
+      if (!params.machines.length) {
+        throw new Error('请至少勾选一个机台')
+      }
+
+      const images = await taskImages(taskId)
 
       if (!images.length) {
         throw new Error('该任务没有可复制的图片，请重新扫描')
@@ -118,10 +113,6 @@ export const registerCopyIpc = (): void => {
   handle(
     'copy:get',
     (_event, copyId: string) => getCopyRunner(copyId)?.snapshot() ?? null,
-  )
-
-  handle('copy:to-new-dir', (_event, copyId: string, targetDir: string) =>
-    requireCopyRunner(copyId).retargetTo(resolve(normalize(targetDir))),
   )
 
   handle(

@@ -50,6 +50,7 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
 
   const setTask = copyStore((state) => state.setTask)
   const patchTask = copyStore((state) => state.patchTask)
+  const syncMachines = copyStore((state) => state.syncMachines)
   const setPreview = copyStore((state) => state.setPreview)
   const setPreviewing = copyStore((state) => state.setPreviewing)
   const setBusy = copyStore((state) => state.setBusy)
@@ -59,7 +60,7 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
   /**
    * 已经弹过终态提示的「任务 id + 终态 + 完成时间」。
    *
-   * 只判 isFinal 不够：重试和换目录重跑会再发一次终态快照，
+   * 只判 isFinal 不够：重试或重新复制会再发一次终态快照，
    * 同一批次会弹两遍「复制完成」。带上 finishedAt 就能区分是不是新一轮结束。
    */
   const toasted = useRef(new Set<string>())
@@ -129,14 +130,31 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
       )
   }, [task])
 
-  const pickedStats = machineStats.filter(
-    (item) => !machines.length || machines.includes(item.machine),
+  /**
+   * 新扫描任务默认全选全部机台。
+   *
+   * 同步状态放在 store 里而不是 hook ref：切换页面再回来时勾选仍然有效。
+   * 用户手动改过勾选后（selectionTouched），同一任务内不再被覆盖。
+   */
+  useEffect(() => {
+    if (!task) return
+
+    syncMachines(
+      task.id,
+      machineStats.map((item) => item.machine),
+    )
+  }, [task, machineStats, syncMachines])
+
+  const pickedStats = machineStats.filter((item) =>
+    machines.includes(item.machine),
   )
   const pickedCount = pickedStats.reduce((sum, item) => sum + item.images, 0)
 
   /** 预检查：勾选变化后重算一次，让界面实时显示「将复制 N 张、建 M 个目录」 */
   const refreshPreview = useCallback(async () => {
-    if (!task || !machineStats.length) {
+    // 一台都没选时不请求预检查：否则主进程会按空列表返回 0 张，
+    // 界面上「将复制 0 张」像是任务本身没图。
+    if (!task || !machineStats.length || !machines.length) {
       setPreview(null)
       return
     }
@@ -200,7 +218,7 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
       return
     }
     if (!pickedCount) {
-      showToast('没有勾选机台', '请至少勾选一个机台', 'info')
+      showToast('没有勾选机台', '请至少勾选 1 台机台', 'info')
       return
     }
 
@@ -289,29 +307,10 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
     [run],
   )
 
-  /** 换目录重来：已完成的复制任务改指向新目录，按原计划完整重跑 */
-  const handleChangeTarget = useCallback(async () => {
-    if (!copying || !isFinal(copying.status)) return
-
-    const picked = await handlePickTarget()
-
-    if (!picked) return
-
-    setBusy(true)
-
-    try {
-      const next = await window.electronAPI.copyTaskToNewDir(copying.id, picked)
-
-      if (next) patchTask(next)
-    } catch (cause) {
-      showToast('更换目录失败', toErrorMessage(cause, '更换目录失败'), 'error')
-    } finally {
-      setBusy(false)
-    }
-  }, [copying, handlePickTarget, patchTask, setBusy, showToast])
-
   const handleReveal = useCallback(async () => {
-    const dir = copying?.progress.targetDir ?? targetDir
+    // 优先打开界面上显示的那个目录：复制完成后换了新目录，
+    // 「打开」应该指向新选的路径，而不是上一次任务写过的旧路径。
+    const dir = targetDir || copying?.progress.targetDir
 
     if (!dir) return
 
@@ -320,26 +319,15 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
     if (failure) showToast('打开目录失败', failure, 'error')
   }, [copying, targetDir, showToast])
 
-  const percent = useMemo(() => {
-    if (!copying) return 0
-
-    // 跳过项同样算已完成：否则「目标已有同名」时进度条会停在中途
-    const { copied, failed, skipped, alreadyExists, total } = copying.progress
-    if (!total) return 0
-
-    return Math.round(
-      ((copied + failed + skipped + alreadyExists) / total) * 100,
-    )
-  }, [copying])
-
   /**
-   * 当前生效的目标目录：优先取已开始任务的落盘目录，其次取这次选的。
-   * 复制完成后 targetDir 仍保留，所以「重新复制」不必再选一次。
+   * 当前生效的目标目录：优先取这次选的目录，没有才回落到上一次任务的落盘目录。
+   * 复制完成后 targetDir 仍保留，所以「重新复制」不必再选一次；
+   * 换了新目录时也以新目录为准，而不是继续显示旧任务写过的路径。
    */
-  const activeTargetDir = copying?.progress.targetDir || targetDir
+  const activeTargetDir = targetDir || copying?.progress.targetDir
 
   /**
-   * 扫描没结束、没有图片、没选目标目录时都不能复制。
+   * 扫描没结束、没有图片、没勾机台、没选目标目录时都不能复制。
    *
    * 目标目录是硬前置：以前这里漏了它，按钮在未选目录时照样可点，
    * 点下去才弹选择框 —— 用户会以为是「点开始复制就会自己问」，
@@ -349,33 +337,25 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
     Boolean(task) &&
     (task?.status === 'completed' || task?.status === 'canceled') &&
     (task?.totalImages ?? 0) > 0 &&
+    pickedCount > 0 &&
     Boolean(activeTargetDir) &&
     !busy
-
-  const running = copying?.status === 'running' || copying?.status === 'pending'
-
-  const paused = copying?.status === 'paused'
 
   return {
     task: copying,
     machineStats,
-    pickedCount,
     preview,
     previewing,
     targetDir,
     targetName,
     busy,
     error,
-    running,
-    paused,
-    percent,
     canCopy,
     handleStart,
     handlePause,
     handleResume,
     handleCancel,
     handleRetry,
-    handleChangeTarget,
     handleReveal,
     handlePickTarget,
   }

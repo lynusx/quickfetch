@@ -5,6 +5,7 @@
  * 这些都不依赖 Electron，可以在 Linux 上用真实目录树验证。
  */
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
 import {
   mkdtemp,
   mkdir,
@@ -17,6 +18,17 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { readDirSafe } from '../src/main/services/scanner/fsx'
+import {
+  classifyFailureStatuses,
+  classifyReadStatus,
+  describeAccessError,
+  describeLeafFailure,
+} from '../src/main/services/scanner/diagnosis'
+import type { DirReadResult } from '../src/main/services/scanner/fsx'
+import {
+  probeSharePath,
+  readShareCandidate,
+} from '../src/main/services/scanner/shareProbe'
 import { createLxtResolver } from '../src/main/services/scanner/resolver'
 import {
   createLogger,
@@ -29,9 +41,24 @@ import {
   serializeLogValue,
 } from '../src/main/services/log'
 import { normalizePreferences } from '../src/main/services/settings'
+import {
+  createHistoryStore,
+  toTask,
+} from '../src/main/services/scanner/history'
+import { deriveScanParams } from '../src/renderer/features/scan/scanParams'
+import { deriveCopyReadModel } from '../src/renderer/features/copy/copyReadModel'
+import { createTaskTable } from '../src/main/utils/taskTable'
+import type { CopyTask } from '../src/shared/ipc'
+import type { ScanTask } from '../src/shared/ipc'
 import { summarizeIpcArgs } from '../src/main/ipc/log-summary'
 import type { MachineResolver } from '../src/main/services/scanner/resolver'
-import { CopyTaskRunner } from '../src/main/services/copy/copy'
+import {
+  CopyTaskRunner,
+  SpeedMeter,
+  filterByMachines,
+} from '../src/main/services/copy/copy'
+import { useElCopyStore } from '../src/renderer/features/copy/copyStore'
+import { elPlantOf } from '../src/shared/ipc'
 import type { ScanCategory, ScanTaskParams } from '../src/shared/ipc'
 
 const results: { name: string; ok: boolean; detail?: string }[] = []
@@ -50,7 +77,7 @@ const test = async (name: string, fn: () => Promise<void>) => {
 /* ---------------------------------------------------------------- 1. fsx */
 
 const fsxTests = async () => {
-  const root = await mkdtemp(join(tmpdir(), 'shx-fsx-'))
+  const root = await mkdtemp(join(tmpdir(), 'qf-fsx-'))
 
   await test('fsx: 不存在的目录 → missing', async () => {
     const r = await readDirSafe(join(root, 'nope'))
@@ -85,7 +112,7 @@ const fsxTests = async () => {
 /* ------------------------------------------------- 2. 力禧特两步探测 */
 
 const lxtTests = async () => {
-  const base = await mkdtemp(join(tmpdir(), 'shx-lxt-'))
+  const base = await mkdtemp(join(tmpdir(), 'qf-lxt-'))
   const host = join(base, 'host')
   const share = join(host, 'el')
   const fixed = join(share, 'A-01-B')
@@ -114,7 +141,7 @@ const lxtTests = async () => {
   })
 
   await test('力禧特: 没有 A-01-B 时落盘空串（探过、没有）', async () => {
-    const base2 = await mkdtemp(join(tmpdir(), 'shx-lxt2-'))
+    const base2 = await mkdtemp(join(tmpdir(), 'qf-lxt2-'))
     const host2 = join(base2, 'host2')
     await mkdirP(join(host2, 'el'), { recursive: true })
     await mkdirP(join(host2, 'SaveImages'), { recursive: true })
@@ -181,7 +208,7 @@ const lxtTests = async () => {
 /* ------------------------------------------------------ 3. 复制规划 */
 
 const copyTests = async () => {
-  const src = await mkdtemp(join(tmpdir(), 'shx-src-'))
+  const src = await mkdtemp(join(tmpdir(), 'qf-src-'))
 
   // 模拟 A02-A 下 9 张同名 img.jpg
   const images = []
@@ -198,7 +225,7 @@ const copyTests = async () => {
 
   await test('复制: skip 策略只跳目标已有同名的那一张，不牵连同批其他图', async () => {
     // 现场场景：目标目录里已经有 img.jpg，源里除了 img.jpg 还有别的图
-    const dst = await mkdtemp(join(tmpdir(), 'shx-dst-a-'))
+    const dst = await mkdtemp(join(tmpdir(), 'qf-dst-a-'))
     await writeFile(join(dst, 'img.jpg'), 'preexisting')
 
     const mixed = [
@@ -214,7 +241,7 @@ const copyTests = async () => {
     const task = new CopyTaskRunner({
       scanTaskId: 's1',
       targetDir: dst,
-      params: { machines: [], layout: 'flat', conflict: 'skip' },
+      params: { machines: ['A02-A'], layout: 'flat', conflict: 'skip' },
       images: mixed,
       emit: () => undefined,
     })
@@ -243,13 +270,13 @@ const copyTests = async () => {
   await test('复制: 9 张同名且目标已有该名 → 全部跳过，不产生 img1..img8', async () => {
     // 这是必须保留的行为：目标已有 img.jpg 时，本批同名图若强行编号落盘，
     // 第二次跑同一批会生成 img1...img8 的副本，等于重复复制。
-    const dst = await mkdtemp(join(tmpdir(), 'shx-dst-b-'))
+    const dst = await mkdtemp(join(tmpdir(), 'qf-dst-b-'))
     await writeFile(join(dst, 'img.jpg'), 'preexisting')
 
     const task = new CopyTaskRunner({
       scanTaskId: 's1b',
       targetDir: dst,
-      params: { machines: [], layout: 'flat', conflict: 'skip' },
+      params: { machines: ['A02-A'], layout: 'flat', conflict: 'skip' },
       images,
       emit: () => undefined,
     })
@@ -270,13 +297,13 @@ const copyTests = async () => {
   })
 
   await test('复制: rename 策略下 9 张全落盘且互不覆盖', async () => {
-    const dst2 = await mkdtemp(join(tmpdir(), 'shx-dst2-'))
+    const dst2 = await mkdtemp(join(tmpdir(), 'qf-dst2-'))
     await writeFile(join(dst2, 'img.jpg'), 'x')
 
     const task = new CopyTaskRunner({
       scanTaskId: 's2',
       targetDir: dst2,
-      params: { machines: [], layout: 'flat', conflict: 'rename' },
+      params: { machines: ['A02-A'], layout: 'flat', conflict: 'rename' },
       images,
       emit: () => undefined,
     })
@@ -295,7 +322,7 @@ const copyTests = async () => {
   })
 
   await test('复制: retry() 不再崩 action 未定义，且不重跑整批规划', async () => {
-    const dst3 = await mkdtemp(join(tmpdir(), 'shx-dst3-'))
+    const dst3 = await mkdtemp(join(tmpdir(), 'qf-dst3-'))
     // 9 张里只有后 2 张的源文件不存在 → 恰好 2 张失败
     const brokenImages = images.map((img, i) =>
       i >= 7 ? { ...img, absolutePath: img.absolutePath + '.missing' } : img,
@@ -304,7 +331,7 @@ const copyTests = async () => {
     const task = new CopyTaskRunner({
       scanTaskId: 's3',
       targetDir: dst3,
-      params: { machines: [], layout: 'flat', conflict: 'rename' },
+      params: { machines: ['A02-A'], layout: 'flat', conflict: 'rename' },
       images: brokenImages,
       emit: () => undefined,
     })
@@ -334,14 +361,14 @@ const copyTests = async () => {
   })
 
   await test('复制: 有失败项时清单仍写全量', async () => {
-    const dst5 = await mkdtemp(join(tmpdir(), 'shx-dst6-'))
+    const dst5 = await mkdtemp(join(tmpdir(), 'qf-dst6-'))
     const broken = images.map((img, i) =>
       i === 0 ? { ...img, absolutePath: img.absolutePath + '.miss' } : img,
     )
     const task = new CopyTaskRunner({
       scanTaskId: 's5',
       targetDir: dst5,
-      params: { machines: [], layout: 'flat', conflict: 'rename' },
+      params: { machines: ['A02-A'], layout: 'flat', conflict: 'rename' },
       images: broken,
       emit: () => undefined,
     })
@@ -355,12 +382,12 @@ const copyTests = async () => {
   })
 
   await test('复制: retry() 在尾随反斜杠路径下也不崩', async () => {
-    const dst4 = await mkdtemp(join(tmpdir(), 'shx-dst4-'))
+    const dst4 = await mkdtemp(join(tmpdir(), 'qf-dst4-'))
 
     const task = new CopyTaskRunner({
       scanTaskId: 's4',
       targetDir: dst4,
-      params: { machines: [], layout: 'flat', conflict: 'skip' },
+      params: { machines: ['A'], layout: 'flat', conflict: 'skip' },
       images: [
         {
           path: 'A/EL/x/img.jpg',
@@ -380,13 +407,17 @@ const copyTests = async () => {
   })
 
   await test('复制: retry() 按原分组目录落盘，不把绝对路径拼进目标目录', async () => {
-    const dst = await mkdtemp(join(tmpdir(), 'shx-dst-folder-'))
+    const dst = await mkdtemp(join(tmpdir(), 'qf-dst-folder-'))
     const missing = join(src, 'retry-missing.jpg')
 
     const task = new CopyTaskRunner({
       scanTaskId: 's6',
       targetDir: dst,
-      params: { machines: [], layout: 'machine-type', conflict: 'rename' },
+      params: {
+        machines: ['A02-A'],
+        layout: 'machine-type',
+        conflict: 'rename',
+      },
       images: [
         {
           path: 'A02-A/EL/20261103/白班/8/NG_脏污_B/x.jpg',
@@ -419,14 +450,14 @@ const copyTests = async () => {
   })
 
   await test('复制: 非图片文件不参与复制计划与总数', async () => {
-    const dst = await mkdtemp(join(tmpdir(), 'shx-dst-nonimage-'))
+    const dst = await mkdtemp(join(tmpdir(), 'qf-dst-nonimage-'))
     const txt = join(src, 'readme.txt')
     await writeFile(txt, 'not an image')
 
     const task = new CopyTaskRunner({
       scanTaskId: 's7',
       targetDir: dst,
-      params: { machines: [], layout: 'flat', conflict: 'rename' },
+      params: { machines: ['A02-A'], layout: 'flat', conflict: 'rename' },
       images: [
         images[0],
         {
@@ -449,14 +480,14 @@ const copyTests = async () => {
   })
 
   await test('复制: .bmp 文件按图片参与计划（森标 AOI 原生格式）', async () => {
-    const dst = await mkdtemp(join(tmpdir(), 'shx-dst-bmp-'))
+    const dst = await mkdtemp(join(tmpdir(), 'qf-dst-bmp-'))
     const bmp = join(src, 'aoi.bmp')
     await writeFile(bmp, 'bmp-data')
 
     const task = new CopyTaskRunner({
       scanTaskId: 's8',
       targetDir: dst,
-      params: { machines: [], layout: 'flat', conflict: 'rename' },
+      params: { machines: ['东区/1A'], layout: 'flat', conflict: 'rename' },
       images: [
         {
           path: '东区/1A/20261103/20.5/色斑B-/aoi.bmp',
@@ -476,6 +507,56 @@ const copyTests = async () => {
     assert.equal(snap.progress.totalBytes, 8)
     const files = await readdir(dst)
     assert.ok(files.includes('aoi.bmp'), `实际 ${files}`)
+  })
+
+  await test('复制: 空机台列表表示一台都不选，不再等于全选', async () => {
+    assert.equal(filterByMachines(images, []).length, 0)
+    assert.equal(filterByMachines(images, ['A02-A']).length, images.length)
+    assert.equal(filterByMachines(images, ['B01-A']).length, 0)
+  })
+
+  await test('复制: 取消全选后不会被同步重新补全', async () => {
+    const store = useElCopyStore.getState()
+
+    store.reset()
+    store.syncMachines('t1', ['A02-A', 'A02-B'])
+    assert.deepEqual(useElCopyStore.getState().machines, ['A02-A', 'A02-B'])
+
+    store.setMachines([])
+    store.syncMachines('t1', ['A02-A', 'A02-B'])
+    assert.deepEqual(
+      useElCopyStore.getState().machines,
+      [],
+      '用户取消全选后，同一任务的同步不能把机台补回来',
+    )
+
+    store.syncMachines('t2', ['B01-A'])
+    assert.deepEqual(
+      useElCopyStore.getState().machines,
+      ['B01-A'],
+      '换了扫描任务要重新默认全选',
+    )
+
+    useElCopyStore.getState().reset()
+  })
+
+  await test('复制: 实时网速按最近 5 秒滑动窗口', async () => {
+    const meter = new SpeedMeter(5000, 250)
+
+    meter.reset(0, 0)
+    assert.equal(meter.value(0, 0), 0)
+    assert.equal(meter.value(1000, 1_000_000), 1_000_000)
+    assert.equal(meter.value(2000, 2_000_000), 1_000_000)
+    // 窗口内没有新字节：旧样本被裁掉，速度归零而不是一直显示旧值
+    assert.equal(meter.value(9000, 2_000_000), 0)
+  })
+
+  await test('厂区: EL 机台名首字母决定东西区', async () => {
+    assert.equal(elPlantOf('A02-A'), 'east')
+    assert.equal(elPlantOf('a-LXJC-01'), 'east')
+    assert.equal(elPlantOf('B-LXJC-01'), 'west')
+    assert.equal(elPlantOf('C01-A'), null)
+    assert.equal(elPlantOf(''), null)
   })
 }
 
@@ -1193,10 +1274,10 @@ const breakerTests = async () => {
 
 const logFormatTests = async () => {
   await test('log: 文件名、日期解析与 7 天保留', async () => {
-    assert.equal(logFileName('2026-11-04'), 'shx-2026-11-04.log')
-    assert.equal(parseLogDay('shx-2026-11-04.log'), '2026-11-04')
+    assert.equal(logFileName('2026-11-04'), 'quickfetch-2026-11-04.log')
+    assert.equal(parseLogDay('quickfetch-2026-11-04.log'), '2026-11-04')
     assert.equal(parseLogDay('other.log'), null)
-    assert.equal(parseLogDay('shx-2026-02-31.log'), null)
+    assert.equal(parseLogDay('quickfetch-2026-02-31.log'), null)
     assert.equal(retentionCutoffDay('2026-11-04', 7), '2026-10-29')
     assert.equal(retentionCutoffDay('2026-01-02', 7), '2025-12-27')
     assert.equal(retentionCutoffDay('2024-03-01', 7), '2024-02-24')
@@ -1273,7 +1354,7 @@ const logFormatTests = async () => {
 
 const loggerRuntimeTests = async () => {
   await test('log: 关闭不写、开启写入、跨天分文件、close 幂等', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'shx-log-'))
+    const dir = await mkdtemp(join(tmpdir(), 'qf-log-'))
     let now = new Date(2026, 10, 4, 10, 0, 0)
     const instance = createLogger({
       dir,
@@ -1319,7 +1400,7 @@ const loggerRuntimeTests = async () => {
   })
 
   await test('log: 清理只删过期且匹配命名的文件', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'shx-prune-'))
+    const dir = await mkdtemp(join(tmpdir(), 'qf-prune-'))
     const old1 = logFileName('2026-10-27')
     const old2 = logFileName('2026-10-28')
     const keep = logFileName('2026-10-29')
@@ -1335,6 +1416,491 @@ const loggerRuntimeTests = async () => {
 
     const left = (await readdir(dir)).sort()
     assert.deepEqual(left, [keep, today, 'notes.txt'].sort())
+  })
+}
+
+const diagnosisTests = async () => {
+  const readResult = (
+    status: DirReadResult['status'],
+    extra: Partial<DirReadResult> = {},
+  ): DirReadResult => ({
+    status,
+    dirs: [],
+    files: [],
+    elapsedMs: 0,
+    ...extra,
+  })
+
+  await test('诊断: 读取状态 → 不可达原因是唯一映射', async () => {
+    assert.deepEqual(classifyReadStatus('unreachable'), {
+      reason: 'network',
+      networkSample: true,
+    })
+    assert.deepEqual(classifyReadStatus('unreadable'), {
+      reason: 'auth',
+      networkSample: false,
+    })
+    assert.deepEqual(classifyReadStatus('denied'), {
+      reason: 'denied',
+      networkSample: false,
+    })
+    assert.deepEqual(classifyReadStatus('missing'), { networkSample: false })
+
+    // 越靠近主机的失败优先
+    assert.equal(
+      classifyFailureStatuses(['missing', 'denied']).reason,
+      'denied',
+    )
+    assert.equal(
+      classifyFailureStatuses(['denied', 'unreadable']).reason,
+      'auth',
+    )
+    assert.equal(
+      classifyFailureStatuses(['unreadable', 'unreachable']).reason,
+      'network',
+    )
+  })
+
+  await test('诊断: 逐目录失败文案与断网样本', async () => {
+    const network = describeLeafFailure({
+      result: readResult('unreachable', { code: 'ETIMEDOUT' }),
+      where: '\\\\host\\share',
+      brokenAt: '日期',
+    })
+    assert.equal(network.status, 'unreachable')
+    assert.equal(network.reason, 'network')
+    assert.equal(network.networkSample, true)
+    assert.match(network.message, /不可达（ETIMEDOUT）/)
+    assert.match(network.message, /JA-PDA/)
+
+    const auth = describeLeafFailure({
+      result: readResult('unreadable'),
+      where: '\\\\host\\share',
+      brokenAt: '日期',
+    })
+    assert.equal(auth.reason, 'auth')
+    assert.equal(auth.networkSample, false)
+    assert.match(auth.message, /未认证/)
+    assert.match(auth.message, /然后重新扫描/)
+
+    const denied = describeLeafFailure({
+      result: readResult('denied'),
+      where: '\\\\host\\share',
+      brokenAt: '类型',
+    })
+    assert.equal(denied.reason, 'denied')
+    assert.match(denied.message, /该共享的读权限/)
+
+    const missing = describeLeafFailure({
+      result: readResult('missing'),
+      where: '\\\\host\\share',
+      brokenAt: '类型',
+      detail: { expected: '8', actual: ['9', '10'] },
+    })
+    assert.equal(missing.status, 'missing')
+    assert.equal(missing.missingName, '8')
+    assert.match(missing.message, /实际存在：9、10/)
+
+    const elMissing = describeLeafFailure({
+      result: readResult('missing'),
+      where: 'A01-A',
+      brokenAt: 'EL',
+    })
+    assert.equal(elMissing.missingName, 'EL')
+  })
+
+  await test('诊断: 入口读取错误文案统一', async () => {
+    const enoent = Object.assign(new Error('missing'), { code: 'ENOENT' })
+    const eacces = Object.assign(new Error('denied'), { code: 'EACCES' })
+
+    assert.equal(
+      describeAccessError(enoent, 'D:\\entry', { noun: '入口目录' }),
+      '入口目录不存在或已被移动：D:\\entry，请重新选择',
+    )
+    assert.match(
+      describeAccessError(eacces, 'D:\\entry', {
+        permissionSuffix: '共享目录访问权限',
+      }),
+      /请检查共享目录访问权限/,
+    )
+  })
+}
+
+const shareProbeTests = async () => {
+  const result = (
+    status: DirReadResult['status'],
+    dirs: string[] = [],
+  ): DirReadResult => ({
+    status,
+    dirs,
+    files: [],
+    elapsedMs: 0,
+  })
+
+  const parseCompactDate = (value: string): number | null => {
+    if (!/^\d{8}$/.test(value)) return null
+
+    return Date.UTC(
+      Number(value.slice(0, 4)),
+      Number(value.slice(4, 6)) - 1,
+      Number(value.slice(6, 8)),
+    )
+  }
+
+  await test('共享探测: 两步读取与 30 天日期窗口', async () => {
+    const calls: string[] = []
+    const read = async (path: string): Promise<DirReadResult> => {
+      calls.push(path)
+      return path.endsWith('A-01-B')
+        ? result('ok', ['20261104', '20261010', '20260901'])
+        : result('ok')
+    }
+
+    const candidate = await readShareCandidate({
+      host: '\\\\10.108.8.230',
+      share: 'SaveImages',
+      child: 'A-01-B',
+      taskDate: '20261104',
+      parseDate: parseCompactDate,
+      read,
+    })
+
+    assert.equal(candidate.status, 'ok')
+    assert.equal(candidate.rootStatus, 'ok')
+    assert.equal(candidate.hasTaskDate, true)
+    assert.equal(candidate.hasRecentDate, true)
+    assert.equal(calls.length, 2)
+
+    const rootOnly: string[] = []
+    const unreadable = await readShareCandidate({
+      host: '\\\\10.108.8.230',
+      share: 'el',
+      child: 'A-01-B',
+      taskDate: '20261104',
+      parseDate: parseCompactDate,
+      read: async (path) => {
+        rootOnly.push(path)
+        return result('unreadable')
+      },
+    })
+
+    assert.equal(unreadable.rootStatus, 'unreadable')
+    assert.equal(unreadable.status, 'unreadable')
+    assert.equal(unreadable.hasTaskDate, false)
+    assert.equal(rootOnly.length, 1, '共享根读不通时不应再读固定子目录')
+  })
+
+  await test('共享探测: 网络失败重试一次', async () => {
+    let calls = 0
+    const read = async (): Promise<DirReadResult> => {
+      calls += 1
+      return calls === 1 ? result('unreachable') : result('ok')
+    }
+
+    const probed = await probeSharePath('\\\\10.108.8.230\\el', read)
+
+    assert.equal(probed.status, 'ok')
+    assert.equal(calls, 2)
+  })
+}
+
+const scanParamsTests = async () => {
+  const base = {
+    configured: true,
+    plant: '东区',
+    selectedMachines: ['东区/1A'],
+    date: '20261104',
+    shift: '夜班' as const,
+    slots: ['20'],
+    types: ['NG'],
+    levels: [],
+    typeCatalog: ['NG'],
+  }
+
+  await test('页面参数: 标准类别包含时段与厂区指纹', async () => {
+    const derived = deriveScanParams({
+      ...base,
+      hasSlots: true,
+      requiresLevels: false,
+    })
+
+    assert.equal(derived.ready, true)
+    assert.deepEqual(derived.missing, [])
+    assert.equal(derived.params.slots[0], '20')
+    assert.ok(derived.filterSignature.startsWith('东区|20261104'))
+    assert.ok(derived.filterSignature.includes('20'))
+  })
+
+  await test('页面参数: AOI 无时段层、利珀需要等级', async () => {
+    const aoi = deriveScanParams({
+      ...base,
+      slots: ['20'],
+      hasSlots: false,
+      requiresLevels: false,
+    })
+    assert.equal(aoi.ready, true)
+    assert.deepEqual(aoi.params.slots, [])
+    assert.equal(
+      aoi.filterSignature.split('|')[3],
+      '',
+      '无时段层的类别不应把时段写进指纹',
+    )
+
+    const pl = deriveScanParams({
+      ...base,
+      levels: [],
+      hasSlots: true,
+      requiresLevels: true,
+    })
+    assert.equal(pl.ready, false)
+    assert.ok(pl.missing.includes('等级'))
+
+    const plWithLevel = deriveScanParams({
+      ...base,
+      levels: ['A'],
+      hasSlots: true,
+      requiresLevels: true,
+    })
+    assert.equal(plWithLevel.ready, true)
+    assert.deepEqual(plWithLevel.params.levels, ['A'])
+  })
+
+  await test('页面参数: 类型清单为空时提示去编辑', async () => {
+    const derived = deriveScanParams({
+      ...base,
+      types: [],
+      typeCatalog: [],
+      hasSlots: true,
+      requiresLevels: false,
+    })
+
+    assert.equal(derived.ready, false)
+    assert.ok(derived.missing.includes('类型（点「编辑」添加）'))
+  })
+}
+
+const taskTableTests = async () => {
+  await test('任务表: 只淘汰最早的已结束任务', async () => {
+    type FakeTask = { id: string; createdAt: number; final: boolean }
+    const evicted: string[] = []
+    const table = createTaskTable<FakeTask>({
+      max: 2,
+      isFinal: (task) => task.final,
+      onEvict: (task) => evicted.push(task.id),
+    })
+
+    table.add({ id: 'old', createdAt: 1, final: true })
+    table.add({ id: 'running', createdAt: 2, final: false })
+    table.add({ id: 'new', createdAt: 3, final: true })
+
+    assert.deepEqual(evicted, ['old'])
+    assert.equal(table.size(), 2)
+    assert.equal(table.get('old'), null)
+    assert.equal(table.get('running')?.id, 'running')
+    assert.deepEqual(
+      table.values().map((task) => task.id),
+      ['running', 'new'],
+    )
+  })
+}
+
+const copyReadModelTests = async () => {
+  const copyTask = (status: CopyTask['status']): CopyTask =>
+    ({
+      id: 'copy-1',
+      scanTaskId: 'scan-1',
+      status,
+      progress: {
+        status,
+        copied: 5,
+        total: 10,
+        copyTotal: 10,
+        failed: 1,
+        batchIndex: 1,
+        batchTotal: 1,
+        targetDir: '/old',
+        layout: 'flat',
+        renamed: 0,
+        alreadyExists: 1,
+        skipped: 1,
+        conflict: 'skip',
+        totalBytes: 0,
+        copiedBytes: 0,
+        failedBytes: 0,
+        bytesPerSecond: 0,
+        sizeUnknown: 0,
+        currentPath: '',
+        startedAt: 1,
+        finishedAt: null,
+        pausedMs: 0,
+        elapsedMs: 1,
+        etaMs: null,
+      },
+      error: null,
+      failures: [],
+      manifestPath: null,
+    }) as unknown as CopyTask
+
+  const input = {
+    task: copyTask('running'),
+    machines: ['A'],
+    machineStats: [
+      { machine: 'A', images: 10 },
+      { machine: 'B', images: 5 },
+    ],
+    targetDir: '/new',
+  }
+
+  await test('复制 read model: done / percent / 有效目录只算一次', async () => {
+    const running = deriveCopyReadModel(input)
+
+    assert.equal(running.done, 8)
+    assert.equal(running.percent, 80)
+    assert.equal(running.selectedCount, 1)
+    assert.equal(running.allSelected, false)
+    assert.equal(running.pickedCount, 10)
+    assert.equal(running.running, true)
+    assert.equal(running.activeDir, '/old', '运行中以任务实际目录为准')
+
+    const completed = deriveCopyReadModel({
+      ...input,
+      task: copyTask('completed'),
+    })
+    assert.equal(completed.finished, true)
+    assert.equal(completed.running, false)
+    assert.equal(completed.activeDir, '/new', '结束后优先显示新选目录')
+  })
+}
+
+const historyStoreTests = async () => {
+  const image = (index: number) => ({
+    path: `A/EL/20261104/夜班/8/NG/x${index}.jpg`,
+    absolutePath: `/tmp/x${index}.jpg`,
+    name: `x${index}.jpg`,
+    machine: 'A',
+  })
+
+  const task = (
+    id: string,
+    status: ScanTask['status'],
+    images = 1,
+    branches = [{ machine: 'A', status: 'hit', matchedDirs: 1, images }],
+  ): ScanTask =>
+    ({
+      id,
+      status,
+      params: {
+        category: 'el',
+        machines: ['A'],
+        date: '20261104',
+        shift: '夜班',
+        slots: ['8'],
+        types: ['NG'],
+      },
+      progress: {
+        phase: 'done',
+        percent: 100,
+        dirsScanned: 1,
+        dirsHit: 1,
+        dirsSkipped: 0,
+        dirsUnreachable: 0,
+        images,
+        currentPath: '',
+        detailsPending: 0,
+        concurrency: 1,
+        batchIndex: 1,
+        batchTotal: 1,
+        detailTotal: 1,
+        detailDone: 1,
+        machinesPending: 0,
+        etaMs: 0,
+      },
+      branches,
+      pauseReason: null,
+      error: null,
+      createdAt: 1,
+      startedAt: 2,
+      finishedAt: 3,
+      totalImages: images,
+      preview: [],
+      elapsedMs: 1,
+    }) as unknown as ScanTask
+
+  await test('历史 store: 资格判定、原子落盘与读取', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'qf-history-'))
+    const store = createHistoryStore(dir)
+
+    await store.saveRecord(task('running', 'running'), [image(0)])
+    assert.equal(
+      existsSync(join(dir, 'running.json')),
+      false,
+      '运行中的任务不落盘',
+    )
+
+    await store.saveRecord(
+      task('empty', 'canceled', 0, [
+        { machine: 'A', status: 'skipped', matchedDirs: 0, images: 0 },
+      ]),
+      [],
+    )
+    assert.equal(
+      existsSync(join(dir, 'empty.json')),
+      false,
+      '取消且没有诊断结论的任务不落盘',
+    )
+
+    await store.saveRecord(
+      task('interrupted', 'running', 0, [
+        { machine: 'A', status: 'skipped', matchedDirs: 0, images: 0 },
+      ]),
+      [],
+      { interrupted: true },
+    )
+
+    const interrupted = await store.readRecord('interrupted')
+    assert.equal(interrupted?.status, 'interrupted')
+    assert.ok(interrupted?.finishedAt)
+
+    await store.saveRecord(task('done', 'completed'), [image(0)])
+    const records = await store.listRecords()
+    assert.deepEqual(
+      records.map((item) => item.id),
+      ['done', 'interrupted'],
+    )
+    assert.equal((await store.listHistory())[0].category, 'el')
+    assert.equal(
+      existsSync(join(dir, 'done.json.summary.json')),
+      true,
+      '历史列表应优先读摘要 sidecar',
+    )
+  })
+
+  await test('历史 store: 裁剪只删最旧且保留条数生效', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'qf-history-trim-'))
+    const store = createHistoryStore(dir)
+
+    for (const [index, id] of ['old', 'mid', 'new'].entries()) {
+      const record = task(id, 'completed')
+      record.createdAt = index + 1
+      await store.saveRecord(record, [image(index)])
+    }
+
+    await store.trimRecords(2)
+    const left = (await store.listRecords()).map((item) => item.id)
+    assert.deepEqual(left, ['new', 'mid'])
+  })
+
+  await test('历史 store: 恢复快照的预览上限与实时一致', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'qf-history-preview-'))
+    const store = createHistoryStore(dir)
+    const images = Array.from({ length: 201 }, (_, index) => image(index))
+
+    await store.saveRecord(task('preview', 'completed', 201), images)
+    const record = await store.readRecord('preview')
+
+    assert.ok(record)
+    assert.equal(toTask(record).preview.length, 200)
+    assert.equal(toTask(record).totalImages, 201)
   })
 }
 
@@ -1410,6 +1976,18 @@ const main = async () => {
   await loggerRuntimeTests()
   console.log('\n[9] 日志 IPC 摘要与设置归一化')
   await logIpcTests()
+  console.log('\n[10] 目录失败诊断')
+  await diagnosisTests()
+  console.log('\n[11] 共享名探测')
+  await shareProbeTests()
+  console.log('\n[12] 历史记录 store')
+  await historyStoreTests()
+  console.log('\n[13] 扫描页参数派生')
+  await scanParamsTests()
+  console.log('\n[14] 复制 read model')
+  await copyReadModelTests()
+  console.log('\n[15] 任务表淘汰')
+  await taskTableTests()
 
   const failed = results.filter((r) => !r.ok)
   console.log(`\n共 ${results.length} 项，失败 ${failed.length} 项`)

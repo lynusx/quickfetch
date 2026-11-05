@@ -11,11 +11,12 @@ import type {
 } from '../../../shared/ipc'
 
 import { PL_LEVELS } from '../../../shared/ipc'
-import { AUTH_HINT, NETWORK_HINT } from '../../../shared/networkHint'
+import { PREVIEW_LIMIT } from '../../../shared/historyLimit'
 import { timeoutForConcurrency, createAdaptiveGate } from '../../utils/adaptive'
 import type { AdaptiveGate } from '../../utils/adaptive'
 import { isNetworkError, readDirSafe } from './fsx'
 import type { DirReadResult } from './fsx'
+import { describeLeafFailure, summarize } from './diagnosis'
 import { isImageFile } from '../../../shared/imageExtensions'
 import { createLimiter } from './limiter'
 import type { Limiter } from './limiter'
@@ -65,9 +66,6 @@ const NETWORK_FAILURE_MIN = 8
  */
 const BATCH_UNREACHABLE_MIN = 3
 
-/** 回传给渲染层的预览条数，全量结果留在主进程 */
-const PREVIEW_LIMIT = 200
-
 /** 探测阶段在进度条上占的权重，其余留给收图 */
 const PROBE_WEIGHT = 20
 
@@ -105,13 +103,6 @@ const timeoutFor = (concurrency: number): number =>
   )
 
 /** 期望值过长时截断，避免提示文案撑满面板 */
-const summarize = (values: string[], max = 6): string =>
-  values.length === 0
-    ? '（空目录）'
-    : values.length > max
-      ? `${values.slice(0, max).join('、')} 等 ${values.length} 项`
-      : values.join('、')
-
 /**
  * 「类型目录在、但里面没有图片」的提示。
  *
@@ -1238,46 +1229,25 @@ export class ScanTaskRunner {
     this.progress.dirsSkipped += skipped
     this.finishedMachines += 1
 
+    // 分类、文案、断网样本统一由 diagnosis 决定；这里只落到 branch
+    const diagnosis = describeLeafFailure({
+      result,
+      where,
+      brokenAt,
+      detail,
+      baseName: this.shape.baseName,
+    })
+
     // 能走到这里说明路径已经解析出来了，至少共享根是通的。
-    // 除非这一读本身就是网络超时，否则不算这台机台"连不上"。
-    this.noteMachineReachability(result.status !== 'unreachable')
+    // 只有真正的网络失败才算这台机台"连不上"。
+    this.noteMachineReachability(!diagnosis.networkSample)
 
     branch.brokenAt = brokenAt
-
-    // 原始报错单独存：现场要的是「哪台机器什么错」，而文案要的是人话。
-    // 以前把 result.error 首行直接拼进 message，界面上就是
-    // 「UNKNOWN: unknown error, scandir '\\10.108.8.203\SaveImages\'」——
-    // 用户看完不知道这是没认证还是没这个目录。
-    const raw = result.code ?? result.error?.split('\n')[0]?.trim()
-    if (raw) branch.detail = raw
-
-    if (result.status === 'unreachable') {
-      branch.status = 'unreachable'
-      branch.unreachableReason = 'network'
-      branch.message = `「${where}」不可达（${raw ?? '网络超时'}），${NETWORK_HINT}`
-    } else if (result.status === 'denied') {
-      branch.status = 'unreachable'
-      branch.unreachableReason = 'denied'
-      branch.message = `没有读取「${where}」的权限，请联系 IT 开通该共享的读权限`
-    } else if (result.status === 'unreadable') {
-      // 未认证在 Windows 上就是这个样子：码是 UNKNOWN，没有更细的信息。
-      // 与其猜成「目录不存在」，不如直接说清楚要做什么。
-      branch.status = 'unreachable'
-      branch.unreachableReason = 'auth'
-      branch.message = `「${where}」读取失败，多半是未认证：${AUTH_HINT}，然后重新扫描`
-    } else if (detail) {
-      branch.status = 'missing'
-      branch.missingName = detail.expected
-      branch.message = `「${where}」下没有「${detail.expected}」，实际存在：${summarize(detail.actual)}`
-    } else {
-      branch.status = 'missing'
-      // 结构化记住缺失的目录名，界面据此显示「20261103 目录不存在」这类短文案
-      if (brokenAt === 'EL') branch.missingName = 'EL'
-      else if (brokenAt === '共享名' && this.shape.baseName) {
-        branch.missingName = this.shape.baseName
-      }
-      branch.message = `「${where}」不存在`
-    }
+    branch.status = diagnosis.status
+    branch.unreachableReason = diagnosis.reason
+    branch.missingName = diagnosis.missingName
+    branch.message = diagnosis.message
+    branch.detail = diagnosis.detail
 
     this.probedMachines += 1
 

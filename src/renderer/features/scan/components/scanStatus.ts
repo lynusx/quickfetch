@@ -94,7 +94,7 @@ const layerName = (
  * 从旧的完整 message 里提取缺失目录名。
  *
  * 历史记录原样保存了 message，旧记录没有 missingName；这里只做展示层收敛，
- * 不迁移旧 JSON。
+ * 兼容既有 JSON。
  */
 const missingNameFromMessage = (message?: string): string | null => {
   if (!message) return null

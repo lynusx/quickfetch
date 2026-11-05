@@ -83,10 +83,17 @@ const PlantFilterPanel = ({
   )
 
   useEffect(() => {
-    setDate(currentDate)
-    setShift(currentShift)
-    if (hasSlots) setSlots(shapeSlot(currentSlots))
-    if (levelOptions?.length && levels.length === 0) {
+    // 只在首次进入（还没有日期）时带出默认值；切页面回来保留上次范围，
+    // 否则会把刚恢复的历史任务当成"改了筛选"清掉
+    const state = filter.getState()
+
+    if (!state.date) {
+      setDate(currentDate)
+      setShift(currentShift)
+      if (hasSlots) setSlots(shapeSlot(currentSlots))
+    }
+
+    if (levelOptions?.length && state.levels.length === 0) {
       setLevels([...levelOptions])
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

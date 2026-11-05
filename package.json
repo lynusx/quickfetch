@@ -1,7 +1,8 @@
 {
-  "name": "shx-tools",
+  "name": "quickfetch",
+  "productName": "QuickFetch",
   "private": true,
-  "version": "1.28.0",
+  "version": "2.0.0",
   "description": "RCA EL、力禧特EL、利珀PL、森标 AOI 图片拷贝与 Excel 解析桌面工具",
   "author": "lynusx",
   "type": "module",

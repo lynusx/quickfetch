@@ -163,20 +163,65 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
 
       // 先把界面上的值改掉，滑杆与单选不会等一次 IPC 往返才跟手
       if (before) {
-        set({
-          settings: {
-            ...before,
-            preferences: { ...before.preferences, ...patch },
-          },
-        })
+        set((state) =>
+          state.settings
+            ? {
+                settings: {
+                  ...state.settings,
+                  preferences: { ...state.settings.preferences, ...patch },
+                },
+              }
+            : state,
+        )
       }
 
       try {
-        set({ settings: await window.electronAPI.savePreferences(patch) })
+        const saved = await window.electronAPI.savePreferences(patch)
+
+        // 只合并本次 patch 的字段：并发的另一个 patch 可能已经更新了
+        // 其他字段，整份替换会把它的结果盖掉。
+        set((state) => {
+          if (!state.settings) return { settings: saved, error: null }
+
+          const preferences = { ...state.settings.preferences }
+
+          for (const key of Object.keys(patch) as (keyof AppPreferences)[]) {
+            // 同一字段若已被后一次写入改过，不要用这次较早的响应覆盖
+            if (preferences[key] === patch[key]) {
+              Object.assign(preferences, { [key]: saved.preferences[key] })
+            }
+          }
+
+          return {
+            settings: {
+              ...state.settings,
+              preferences,
+              updatedAt: saved.updatedAt,
+              envOverrides: saved.envOverrides,
+            },
+            error: null,
+          }
+        })
       } catch (error) {
-        set({
-          settings: before,
-          error: toErrorMessage(error, '保存设置失败'),
+        // 只回滚本次字段，且仅当它仍是本次乐观写入的值；
+        // 已经被后续写入改过的字段保持不变。
+        set((state) => {
+          if (!state.settings) {
+            return { error: toErrorMessage(error, '保存设置失败') }
+          }
+
+          const preferences = { ...state.settings.preferences }
+
+          for (const key of Object.keys(patch) as (keyof AppPreferences)[]) {
+            if (preferences[key] === patch[key] && before) {
+              Object.assign(preferences, { [key]: before.preferences[key] })
+            }
+          }
+
+          return {
+            settings: { ...state.settings, preferences },
+            error: toErrorMessage(error, '保存设置失败'),
+          }
         })
       }
     },

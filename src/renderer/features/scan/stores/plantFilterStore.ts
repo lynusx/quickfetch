@@ -46,9 +46,17 @@ export interface PlantFilterActions {
 }
 
 /** 从复合键「厂区/机台」里取厂区，用于互斥判定；无斜杠时视为无厂区 */
-const plantOf = (key: string): string => {
+const plantOfKey = (key: string): string => {
   const idx = key.indexOf('/')
   return idx === -1 ? '' : key.slice(0, idx)
+}
+
+export interface PlantFilterOptions {
+  /**
+   * 选中值 → 厂区。默认按「厂区/机台」复合键取第一段；
+   * EL 的选中值是纯机台名，由 elPlantOf 决定。
+   */
+  plantOf?: (value: string) => string
 }
 
 /**
@@ -56,8 +64,13 @@ const plantOf = (key: string): string => {
  *
  * category 只用于 devtools 里区分两份实例，不影响行为。
  */
-export const createPlantFilterStore = (category: ScanCategory) =>
-  create<PlantFilterSlice & PlantFilterActions>()(
+export const createPlantFilterStore = (
+  category: ScanCategory,
+  options: PlantFilterOptions = {},
+) => {
+  const plantOf = options.plantOf ?? plantOfKey
+
+  return create<PlantFilterSlice & PlantFilterActions>()(
     devtools(
       persist<
         PlantFilterSlice & PlantFilterActions,
@@ -76,8 +89,12 @@ export const createPlantFilterStore = (category: ScanCategory) =>
           types: [],
           levels: [],
 
-          // 切厂区 = 互斥切换：清掉上一区的选中，从零开始
-          setPlant: (plant) => set({ plant, selectedMachines: [] }),
+          // 切厂区 = 互斥切换：清掉上一区的选中，从零开始。
+          // 点当前厂区不算切换，否则会莫名把已勾选的机台全部清掉。
+          setPlant: (plant) =>
+            set((state) =>
+              state.plant === plant ? state : { plant, selectedMachines: [] },
+            ),
           setKeyword: (keyword) => set({ keyword }),
           // 只允许一个厂区的机台同时被选中；跨区传进来的键一律按当前 plant 过滤
           setSelectedMachines: (selectedMachines) =>
@@ -116,5 +133,6 @@ export const createPlantFilterStore = (category: ScanCategory) =>
       { name: `filter:${category}` },
     ),
   )
+}
 
 export type PlantFilterStore = ReturnType<typeof createPlantFilterStore>

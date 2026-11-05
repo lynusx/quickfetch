@@ -30,7 +30,7 @@ if (!existsSync(pathFile)) {
 // 沙箱初始化会在主进程脚本执行前直接崩掉，pnpm dev 只剩一个退出码
 // 0x80000003（终端里显示 2147483651），没有任何日志可查。
 // 这里真跑一次 --version，失败时把排查方向直接打出来。
-if (process.env['SHX_SKIP_ELECTRON_CHECK'] === '1') {
+if (process.env['QUICKFETCH_SKIP_ELECTRON_CHECK'] === '1') {
   process.exit(0)
 }
 
@@ -102,6 +102,8 @@ try {
     console.error('')
   }
 
-  console.error('确认环境无误后，可设 SHX_SKIP_ELECTRON_CHECK=1 跳过此检查。')
+  console.error(
+    '确认环境无误后，可设 QUICKFETCH_SKIP_ELECTRON_CHECK=1 跳过此检查。',
+  )
   process.exit(1)
 }

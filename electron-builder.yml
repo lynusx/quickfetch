@@ -1,5 +1,6 @@
-appId: com.lynusx.shx-tools
-productName: SHX Tools
+appId: com.lynusx.quickfetch
+# userData 目录名由 package.json 的 productName 决定；这里只影响 exe、快捷方式与标题
+productName: QuickFetch
 copyright: Copyright © 2026 lynusx
 
 directories:
@@ -33,7 +34,7 @@ win:
       arch:
         - x64
   icon: build/icon.png
-  artifactName: SHX-Tools-${version}-win-x64.${ext}
+  artifactName: QuickFetch-${version}-win-x64.${ext}
 
 # 安装包配置保留：换回 nsis 目标即可恢复
 nsis:
@@ -43,5 +44,5 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: SHX Tools
+  shortcutName: 秒取
   deleteAppDataOnUninstall: false

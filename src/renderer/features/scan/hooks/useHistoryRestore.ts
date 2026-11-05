@@ -1,15 +1,15 @@
 import { useCallback } from 'react'
 
 import { useToast } from '@/hooks/useToast'
-import { useImageFilterStore } from '../stores/imageFilterStore'
+import { useElFilterStore } from '../stores/elFilterStore'
 import { useAoiFilterStore } from '../stores/aoiFilterStore'
 import { useLxtFilterStore } from '../stores/lxtFilterStore'
 import { usePlFilterStore } from '../stores/plFilterStore'
 import type { PlantFilterStore } from '../stores/plantFilterStore'
 import { copyStoreOf } from '@/features/copy'
 import { scanStoreOf } from '../stores/scanStore'
-import { useSettingsStore } from '@/features/settings'
-import type { Plant, ScanCategory, ScanHistoryItem } from '@shared/ipc'
+import { elPlantOf } from '@shared/ipc'
+import type { ScanCategory, ScanHistoryItem } from '@shared/ipc'
 import { toErrorMessage } from '@/utils/error'
 
 /**
@@ -37,21 +37,15 @@ const fillFilters = (category: ScanCategory, item: ScanHistoryItem): void => {
   const { machines: picked, date, shift, slots, types, levels } = item.params
 
   if (category === 'el') {
-    const filters = useImageFilterStore.getState()
-    const settings = useSettingsStore.getState().settings
+    const filters = useElFilterStore.getState()
 
-    // 厂区跟着历史里的机台走：否则机台已选中却不在当前厂区的列表里，
-    // 用户只看到「机台 3/10」却找不到高亮的那几个
-    const plants = new Set(
-      picked
-        .map(
-          (name) =>
-            settings?.machines.find((machine) => machine.name === name)?.plant,
-        )
-        .filter(Boolean),
-    )
+    // 厂区跟着历史里的第一台机台走：否则机台已选中却不在当前厂区的列表里，
+    // 用户只看到「机台 3/10」却找不到高亮的那几个。
+    // 旧记录可能混着东西区，setPlant 会清空选择，setSelectedMachines 再按
+    // 首字母规则把另一区剔掉 —— 同一次扫描不允许跨区。
+    const plant = picked.length ? elPlantOf(picked[0]) : null
 
-    if (plants.size === 1) filters.setPlant([...plants][0] as Plant)
+    if (plant) filters.setPlant(plant)
 
     filters.setSelectedMachines(picked)
     filters.setDate(date)
@@ -108,9 +102,11 @@ export const useHistoryRestore = (category: ScanCategory) => {
 
         // 上一轮的复制进度属于另一次结果，留着会让「复制」按钮状态错乱
         copyStoreOf(category).getState().reset()
-        // 恢复也会改筛选，先打个标记，避免 useResetOnParamChange 把
-        // 刚载入的任务当成"范围变了"清掉（第一次点击面板为空的原因）
-        scanStoreOf(category).getState().markRestored()
+
+        // 等筛选面板把历史参数归一化（剪掉不存在的类型/机台）后再落任务。
+        // 这样参数回填不会被 useResetOnParamChange 当成"用户改了范围"，
+        // 也不再需要原来的 500ms 墙钟窗口。
+        await new Promise((resolve) => setTimeout(resolve, 0))
         scanStoreOf(category).getState().setTask(loaded)
 
         showToast(

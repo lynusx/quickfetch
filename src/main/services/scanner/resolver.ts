@@ -9,8 +9,15 @@ import {
   PL_FIXED,
 } from '../../../shared/ipc'
 import { splitMachine } from '../discovery/shortcuts'
-import { AUTH_HINT, NETWORK_HINT } from '../../../shared/networkHint'
 import { readDirSafe } from './fsx'
+import {
+  authFailureMessage,
+  classifyFailureStatuses,
+  classifyReadStatus,
+  deniedFailureMessage,
+  networkFailureMessage,
+} from './diagnosis'
+import { readShareCandidate } from './shareProbe'
 import type { DirReadResult } from './fsx'
 import { logger } from '../log'
 
@@ -117,32 +124,34 @@ export const createElResolver = (
     if (result.status === 'ok') return { ok: true, base, reason: '' }
 
     // 三种失败方向完全不同：没连网、没认证、目录真的不在。
-    // 以前后两种都走同一个「不可用」，现场分不清该去连网还是去认证。
-    if (result.status === 'unreachable') {
+    // 分类与文案统一走 diagnosis，避免与执行器的失败阶梯分叉。
+    const failure = classifyReadStatus(result.status)
+
+    if (failure.reason === 'network') {
       return {
         ok: false,
         base: '',
-        reason: `「${machine}」不可达，${NETWORK_HINT}`,
+        reason: networkFailureMessage(machine, { quote: true }),
         brokenAt: 'EL',
         unreachable: 'network',
       }
     }
 
-    if (result.status === 'unreadable') {
+    if (failure.reason === 'auth') {
       return {
         ok: false,
         base: '',
-        reason: `「${base}」读取失败，多半是未认证：${AUTH_HINT}`,
+        reason: authFailureMessage(base, { quote: true }),
         brokenAt: 'EL',
         unreachable: 'auth',
       }
     }
 
-    if (result.status === 'denied') {
+    if (failure.reason === 'denied') {
       return {
         ok: false,
         base: '',
-        reason: `没有读取「${machine}/${entry}」的权限，请联系 IT 开通`,
+        reason: deniedFailureMessage(`${machine}/${entry}`, { quote: true }),
         brokenAt: 'EL',
         unreachable: 'denied',
       }
@@ -177,52 +186,8 @@ export interface LxtResolverOptions {
 /** 力禧特：每台机器一个 IP，第二层的共享名逐台探测 */
 export const LXT_FIXED_DIR = 'A-01-B'
 
-/**
- * 探测超时。比扫描阶段的 20 秒短：逐台探共享名时，每台卡 20 秒
- * 会让「接错网」和「有几台没开机」看起来一模一样。
- */
-const PROBE_TIMEOUT_MS = 8_000
-
-/**
- * 探测专用读取：网络闪断时再试一次。
- *
- * 首次连某台机器的共享要先做 SMB 会话协商，慢起来十几秒很常见；
- * 一次超时就判「没接专用内网」会把整批机台带偏，所以重试一次再下结论。
- */
-const probeRead = async (path: string): Promise<DirReadResult> => {
-  const first = await readDirSafe(path, { timeoutMs: PROBE_TIMEOUT_MS })
-
-  if (first.status !== 'unreachable') return first
-
-  logger.debug('resolver', 'probe.retry', {
-    path,
-    status: first.status,
-    code: first.code,
-    elapsedMs: first.elapsedMs,
-    error: first.raw,
-  })
-
-  await new Promise((resolve) => setTimeout(resolve, 600))
-
-  const second = await readDirSafe(path, { timeoutMs: PROBE_TIMEOUT_MS })
-
-  logger.debug('resolver', 'probe.retry.result', {
-    path,
-    status: second.status,
-    code: second.code,
-    elapsedMs: second.elapsedMs,
-    error: second.raw,
-  })
-
-  return second
-}
-
 /** 日期目录名；A-01-B 下除日期外可能还有别的目录，只认这种 */
 const LXT_DATE_DIR = /^\d{8}$/
-
-/** 近 30 天窗口，按任务日期往前推 */
-const LXT_RECENT_DAYS = 30
-const DAY_MS = 86_400_000
 
 /** 把 YYYYMMDD 解析成 UTC 时间戳；非法日期返回 null，避免本地时区偏移 */
 const parseLxtDate = (value: string): number | null => {
@@ -268,34 +233,13 @@ const readLxtCandidate = async (
   share: LxtShare,
   taskDate: string,
 ): Promise<LxtCandidate> => {
-  const root = await probeRead(join(host, share))
-  const result =
-    root.status === 'ok'
-      ? await probeRead(join(host, share, LXT_FIXED_DIR))
-      : { ...root, dirs: [] as string[] }
-
-  const dates =
-    result.status === 'ok'
-      ? result.dirs.filter((name) => LXT_DATE_DIR.test(name))
-      : []
-
-  const taskStamp = parseLxtDate(taskDate)
-  const floor = taskStamp === null ? null : taskStamp - LXT_RECENT_DAYS * DAY_MS
-  const hasRecentDate =
-    taskStamp !== null &&
-    floor !== null &&
-    dates.some((name) => {
-      const stamp = parseLxtDate(name)
-      return stamp !== null && stamp >= floor && stamp <= taskStamp
-    })
-
-  return {
+  return readShareCandidate({
+    host,
     share,
-    status: result.status,
-    rootStatus: root.status,
-    hasTaskDate: dates.includes(taskDate),
-    hasRecentDate,
-  }
+    child: LXT_FIXED_DIR,
+    taskDate,
+    parseDate: parseLxtDate,
+  })
 }
 
 /**
@@ -353,15 +297,11 @@ export const probeLxtShare = async (
 
   if (picked) return picked
 
-  const roots = candidates.map((item) => item.rootStatus)
-  const inconclusive = roots.some(
-    (status) =>
-      status === 'unreachable' ||
-      status === 'unreadable' ||
-      status === 'denied',
+  const failure = classifyFailureStatuses(
+    candidates.map((item) => item.rootStatus),
   )
 
-  return inconclusive ? null : ''
+  return failure.reason ? null : ''
 }
 
 /**
@@ -401,15 +341,9 @@ export const probePlShare = async (
 
   if (picked) return picked
 
-  const roots = probed.map((item) => item.rootStatus)
-  const inconclusive = roots.some(
-    (status) =>
-      status === 'unreachable' ||
-      status === 'unreadable' ||
-      status === 'denied',
-  )
+  const failure = classifyFailureStatuses(probed.map((item) => item.rootStatus))
 
-  return inconclusive ? null : ''
+  return failure.reason ? null : ''
 }
 
 /**
@@ -425,31 +359,35 @@ const lxtFailure = (
   candidates: LxtCandidate[],
   cached?: LxtShare | null,
 ): ResolveResult => {
-  if (candidates.some((item) => item.rootStatus === 'unreachable')) {
+  const failure = classifyFailureStatuses(
+    candidates.map((item) => item.rootStatus),
+  )
+
+  if (failure.reason === 'network') {
     return {
       ok: false,
       base: '',
-      reason: `${host} 不可达，${NETWORK_HINT}`,
+      reason: networkFailureMessage(host),
       brokenAt: '共享名',
       unreachable: 'network',
     }
   }
 
-  if (candidates.some((item) => item.rootStatus === 'unreadable')) {
+  if (failure.reason === 'auth') {
     return {
       ok: false,
       base: '',
-      reason: `${host} 的共享读不通，多半是未认证：${AUTH_HINT}`,
+      reason: authFailureMessage(host, { style: 'share-unreadable' }),
       brokenAt: '共享名',
       unreachable: 'auth',
     }
   }
 
-  if (candidates.some((item) => item.rootStatus === 'denied')) {
+  if (failure.reason === 'denied') {
     return {
       ok: false,
       base: '',
-      reason: `没有读取 ${host} 共享的权限，请联系 IT 开通`,
+      reason: deniedFailureMessage(host, { between: ' 共享' }),
       brokenAt: '共享名',
       unreachable: 'denied',
     }
@@ -651,7 +589,6 @@ const plShareCandidates = (machineName: string, plant: string): string[] => {
 /** PL 的日期目录常见形态是 2026.11.02，也兼容 20261102 */
 const PL_DATE_DIR = /^(\d{4})\.(\d{2})\.(\d{2})$/
 const PL_COMPACT_DATE = /^(\d{4})(\d{2})(\d{2})$/
-const PL_RECENT_DAYS = 30
 
 /** 把 PL 日期目录解析成 UTC 时间戳；非法/非日期目录返回 null */
 const parsePlDate = (value: string): number | null => {
@@ -683,43 +620,20 @@ interface PlCandidate {
 }
 
 /** 读一次 \\host\<标识>\Matting，同时验证固定层并拿到日期目录 */
-const readPlCandidate = async (
+const readPlCandidate = (
   host: string,
   share: string,
   taskDate: string,
   order: number,
-): Promise<PlCandidate> => {
-  // 与力禧特同样的两步：先确认标识目录能进去，再看 Matting。
-  // 少了这一步，没认证的机器会被报成「没有匹配的标识目录」，
-  // 而那句话会让现场去改 .lnk，方向完全错了。
-  const root = await probeRead(join(host, share))
-  const result =
-    root.status === 'ok'
-      ? await probeRead(join(host, share, PL_FIXED.matting))
-      : { ...root, dirs: [] as string[] }
-
-  const dates = result.status === 'ok' ? result.dirs : []
-  const taskStamp = parsePlDate(taskDate)
-  const floor = taskStamp === null ? null : taskStamp - PL_RECENT_DAYS * DAY_MS
-  const hasTaskDate =
-    taskStamp !== null && dates.some((name) => parsePlDate(name) === taskStamp)
-  const hasRecentDate =
-    taskStamp !== null &&
-    floor !== null &&
-    dates.some((name) => {
-      const stamp = parsePlDate(name)
-      return stamp !== null && stamp >= floor && stamp <= taskStamp
-    })
-
-  return {
+): Promise<PlCandidate> =>
+  readShareCandidate({
+    host,
     share,
+    child: PL_FIXED.matting,
+    taskDate,
+    parseDate: parsePlDate,
     order,
-    status: result.status,
-    rootStatus: root.status,
-    hasTaskDate,
-    hasRecentDate,
-  }
-}
+  })
 
 /** 多个候选可用时：本次日期优先 → 近30天 → 候选顺序（缓存/首选名靠前） */
 const pickPlCandidate = (candidates: PlCandidate[]): string | null => {
@@ -797,33 +711,35 @@ const plFailure = (
   probe: PlProbeResult,
   cached: string | null,
 ): ResolveResult => {
-  const rootStates = probe.candidates.map((item) => item.rootStatus)
+  const failure = classifyFailureStatuses(
+    probe.candidates.map((item) => item.rootStatus),
+  )
 
-  if (rootStates.includes('unreachable')) {
+  if (failure.reason === 'network') {
     return {
       ok: false,
       base: '',
-      reason: `${host} 不可达，${NETWORK_HINT}`,
+      reason: networkFailureMessage(host),
       brokenAt: '机台标识',
       unreachable: 'network',
     }
   }
 
-  if (rootStates.includes('unreadable')) {
+  if (failure.reason === 'auth') {
     return {
       ok: false,
       base: '',
-      reason: `${host} 的共享读不通，多半是未认证：${AUTH_HINT}`,
+      reason: authFailureMessage(host, { style: 'share-unreadable' }),
       brokenAt: '机台标识',
       unreachable: 'auth',
     }
   }
 
-  if (rootStates.includes('denied')) {
+  if (failure.reason === 'denied') {
     return {
       ok: false,
       base: '',
-      reason: `没有读取 ${host} 的权限，请联系 IT 开通`,
+      reason: deniedFailureMessage(host),
       brokenAt: '机台标识',
       unreachable: 'denied',
     }

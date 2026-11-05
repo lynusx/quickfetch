@@ -12,7 +12,6 @@ import type {
   LxtSettings,
   LxtShare,
   MachineInfo,
-  Plant,
   PlMachine,
   PlSettings,
   ShareState,
@@ -20,6 +19,7 @@ import type {
 
 import {
   DEFAULT_PREFERENCES,
+  elPlantOf,
   LXT_SHARES,
   PREFERENCE_RANGE,
 } from '../../../shared/ipc'
@@ -32,6 +32,7 @@ import { aoiKey } from '../discovery/aoi'
 import { lxtKey } from '../discovery/lxt'
 import { plKey } from '../discovery/pl'
 import { logger } from '../log'
+import { describeAccessError } from '../scanner/diagnosis'
 import { toFsPath } from '../../utils/pathx'
 
 const SETTINGS_VERSION = 1 as const
@@ -83,7 +84,7 @@ const clampPreference = (
 /**
  * 归一化偏好：枚举值认不出就回落默认，数值按范围 clamp。
  *
- * 旧版本的 settings.json 没有 preferences 字段，这里必须能接住 ——
+ * 既有 settings.json 可能没有 preferences 字段，这里必须能接住 ——
  * 用户升级后不该因为缺字段被重置根目录。
  */
 export const normalizePreferences = (
@@ -319,14 +320,6 @@ export const normalizeAoi = (raw: unknown): AoiSettings => {
   }
 }
 
-/** 机台目录名首字母决定厂区：A 为东区、B 为西区 */
-const plantOf = (name: string): Plant | null => {
-  const head = name[0]?.toUpperCase()
-  if (head === 'A') return 'east'
-  if (head === 'B') return 'west'
-  return null
-}
-
 /** 机台名按自然序排列，A02 排在 A01 之后而不是 A10 之后 */
 const compareMachine = (a: string, b: string): number =>
   a.localeCompare(b, 'zh-CN', { numeric: true })
@@ -352,15 +345,10 @@ export const discoverMachines = async (
   try {
     entries = await readdir(toFsPath(rootPath), { withFileTypes: true })
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException | undefined)?.code
-    if (code === 'ENOENT') {
-      throw new Error(`目录不存在或已被移动：${rootPath}，请重新选择`)
-    }
-    if (code === 'EACCES' || code === 'EPERM') {
-      throw new Error(`没有读取「${rootPath}」的权限，请检查共享目录访问权限`)
-    }
     throw new Error(
-      `无法访问「${rootPath}」：${(error as Error)?.message ?? '未知错误'}`,
+      describeAccessError(error, rootPath, {
+        permissionSuffix: '共享目录访问权限',
+      }),
     )
   }
 
@@ -369,7 +357,7 @@ export const discoverMachines = async (
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name.startsWith('.')) continue
 
-    const plant = plantOf(entry.name)
+    const plant = elPlantOf(entry.name)
     if (!plant) continue
 
     machines.push({ name: entry.name, plant })
@@ -385,30 +373,86 @@ const isAppSettings = (value: unknown): value is AppSettings =>
   value !== null &&
   (value as AppSettings).version === SETTINGS_VERSION
 
+const fallbackSettings = (): AppSettings => ({
+  ...defaultSettings(),
+  envOverrides: envOverriddenKeys(),
+})
+
+/**
+ * 把损坏/版本不认识的配置文件留档，避免下一次写入把现场配置直接覆盖掉。
+ * 留档失败不阻塞启动，只记录日志。
+ */
+const quarantineSettings = async (reason: string): Promise<void> => {
+  const target = settingsFile()
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const backup = `${target}.corrupt-${stamp}`
+
+  try {
+    await rename(target, backup)
+    logger.warn('settings', 'settings.quarantined', {
+      path: target,
+      backup,
+      reason,
+    })
+  } catch (error) {
+    logger.error('settings', 'settings.quarantine.failed', {
+      path: target,
+      reason,
+      error,
+    })
+  }
+}
+
 /** 读取配置；文件缺失或损坏时回落到默认值，不让应用起不来 */
 export const readSettings = async (): Promise<AppSettings> => {
+  let raw: string
+
   try {
-    const raw = await readFile(settingsFile(), 'utf-8')
-    const parsed: unknown = JSON.parse(raw)
-
-    if (!isAppSettings(parsed)) return defaultSettings()
-
-    return {
-      ...defaultSettings(),
-      ...parsed,
-      entry: ENTRY,
-      // 老版本配置文件没有该字段，回落到默认值而不是 undefined
-      historyLimit: normalizeHistoryLimit(parsed.historyLimit),
-      // 同理：1.10.x 及更早的配置没有 preferences
-      preferences: normalizePreferences(parsed.preferences),
-      lxt: normalizeLxt(parsed.lxt),
-      pl: normalizePl(parsed.pl),
-      aoi: normalizeAoi(parsed.aoi),
-      // 运行期字段，不落盘，每次读的时候按当前环境算
-      envOverrides: envOverriddenKeys(),
+    raw = await readFile(settingsFile(), 'utf-8')
+  } catch (error) {
+    // 只有“文件不存在”能安全回落默认值。权限/占用等临时错误如果也当成
+    // 没配置，接下来的任意写入都会把现场配置覆盖成默认值。
+    if ((error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
+      return fallbackSettings()
     }
+
+    logger.error('settings', 'settings.read.failed', {
+      path: settingsFile(),
+      error,
+    })
+
+    throw new Error(
+      `读取配置文件失败：${(error as Error)?.message ?? '未知错误'}`,
+    )
+  }
+
+  let parsed: unknown
+
+  try {
+    parsed = JSON.parse(raw)
   } catch {
-    return { ...defaultSettings(), envOverrides: envOverriddenKeys() }
+    await quarantineSettings('invalid-json')
+    return fallbackSettings()
+  }
+
+  if (!isAppSettings(parsed)) {
+    await quarantineSettings('unsupported-version')
+    return fallbackSettings()
+  }
+
+  return {
+    ...defaultSettings(),
+    ...parsed,
+    entry: ENTRY,
+    // 老版本配置文件没有该字段，回落到默认值而不是 undefined
+    historyLimit: normalizeHistoryLimit(parsed.historyLimit),
+    // 同理：1.10.x 及更早的配置没有 preferences
+    preferences: normalizePreferences(parsed.preferences),
+    lxt: normalizeLxt(parsed.lxt),
+    pl: normalizePl(parsed.pl),
+    aoi: normalizeAoi(parsed.aoi),
+    // 运行期字段，不落盘，每次读的时候按当前环境算
+    envOverrides: envOverriddenKeys(),
   }
 }
 

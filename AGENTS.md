@@ -39,5 +39,5 @@
 - 改业务配置 → 只走 `src/main/services/settings/settings.ts`，不要在渲染层用 `localStorage` 存业务配置。
 - 改扫描/断网逻辑 → 先读 `src/main/services/scanner/fsx.ts` 的 `NETWORK_CODES` 与断网熔断规则。
 - 新增扫描类别 → 必须挂 `HistoryPanel`，并接 `useHistoryRestore`。
-- 改应用名/`productName` → `userData` 目录会从 `%APPDATA%\shx-tools` 改变，老设置与历史会“消失”，必须同时写迁移。
+- 改应用名/`productName` → `userData` 目录会变；当前项目未正式投入使用，不需要兼容旧目录，改名时同步更新 README/AGENTS 里的路径说明。
 - 提交/打包 → 版本号由提交钩子管理，不要手改 `package.json` 的 version；打包与截图只在明确要求时做。

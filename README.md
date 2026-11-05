@@ -1,4 +1,4 @@
-# SHX Tools
+# QuickFetch（秒取）
 
 RCA EL、力禧特EL、利珀PL、森标 AOI 图片拷贝与 Excel 解析工具，基于 Electron + React 的桌面应用（Windows x64）。
 
@@ -14,13 +14,14 @@ RCA EL、力禧特EL、利珀PL、森标 AOI 图片拷贝与 Excel 解析工具�
 - 利珀PL 的机台标识目录同样按日期选择：优先本次日期，其次近 30 天；
   缓存不可用或过期时重新探测候选目录，`null` 表示尚未确定
 - 根目录只需配置一次，会持久化到用户数据目录，再次打开直接复用：
-  `%APPDATA%\shx-tools\settings.json`。扫描历史同样落在同目录的 `history\` 下。
+  `%APPDATA%\QuickFetch\settings.json`。扫描历史同样落在同目录的 `history\` 下。
   配置时自动识别 `DC` 下的机台目录，首字母 `A` 归东区、`B` 归西区
 
-  > 目录名取的是应用名，Electron 启动时读 `app.asar\package.json` 的 `productName`，
-  > 没有该字段则退回 `name`（本项目为 `shx-tools`）。`electron-builder.yml` 里的
-  > `productName: SHX Tools` 只决定 exe 文件名、快捷方式和窗口标题，**不参与**目录命名。
+  > 目录名取的是应用名，Electron 启动时读 `app.asar\package.json` 的 `productName`
+  > （本项目为 `QuickFetch`）。`electron-builder.yml` 里的 `productName: QuickFetch`
+  > 只决定 exe 文件名、快捷方式和窗口标题，**不参与**目录命名。
   > 因此打包版与开发态共用同一个目录，同一台机器上开发调试会读写到现场那份配置。
+  > 环境变量使用 `QUICKFETCH_*`。
 
 - 支持扩展名：`.png` `.jpg` `.jpeg` `.webp` `.gif`
 - 扫描在主进程用 `fs.readdir` 完成（不再受浏览器 File System Access API 限制），分三段执行：
@@ -81,11 +82,11 @@ icacls . /setintegritylevel "(OI)(CI)Medium" /T /C
 
 必须加 `/T`：只改项目根不够，`node_modules\electron\dist\electron.exe` 本身也得是
 Medium。修完重新 `pnpm dev` 即可。从这种目录复制出来的其它副本（例如桌面上的
-`shx-tools2`）会有同样的问题，要一起处理。
+项目副本（例如 `quickfetch2`）会有同样的问题，要一起处理。
 
 `pnpm dev` / `pnpm start` 都会先执行 `scripts/ensure-electron.cjs`，它现在会实际跑一次
 `electron --version`，失败时直接打印上面的排查和修复命令；确认环境无误、需要临时跳过时设
-`SHX_SKIP_ELECTRON_CHECK=1`。
+`QUICKFETCH_SKIP_ELECTRON_CHECK=1`。
 
 > 这类 Low 完整性 ACL 不是 Windows 或 git 自己产生的，通常来自某个沙箱 / 受限运行工具，
 > 或者用 `robocopy /COPYALL`、`xcopy /O`、7-Zip「还原文件安全信息」等保留 ACL 的方式搬过
@@ -133,7 +134,7 @@ chmod +x node_modules/electron/dist/Electron.app/Contents/MacOS/Electron
 
 ```bash
 pnpm build                    # 产物输出到 out/（main、preload、renderer）
-pnpm dist:win                 # 先 build，再打 Windows x64 zip 免安装包，输出到 release/
+pnpm dist:win                 # 先 build，再打 Windows x64 zip（QuickFetch-<version>-win-x64.zip）到 release/
 ```
 
 `pnpm start` 使用上一次 `pnpm build` 的产物预览；改完源码要先重新构建。
@@ -213,12 +214,12 @@ src/
 
 改档位在应用侧边栏底部的**设置页**里调，落盘到 `settings.json`，不必重新打包。
 EL / 力禧特EL / 利珀PL / 森标 AOI 共用同一套设置，包括分组方式、重名策略与全部性能档位。
-临时压降仍可用环境变量 `SHX_READ_CONCURRENCY`、`SHX_MACHINE_BATCH`、
-`SHX_COPY_CONCURRENCY`、`SHX_COPY_BATCH`——**环境变量优先于设置页**，
+临时压降仍可用环境变量 `QUICKFETCH_READ_CONCURRENCY`、`QUICKFETCH_MACHINE_BATCH`、
+`QUICKFETCH_COPY_CONCURRENCY`、`QUICKFETCH_COPY_BATCH`——**环境变量优先于设置页**，
 被接管的项在设置页会标出变量名并禁用输入。
 
 设置页还有**调试日志**开关（默认关闭，开启后立即生效）：日志写到
-`%APPDATA%\shx-tools\logs\shx-YYYY-MM-DD.log`，记录扫描/复制、网络探测、IPC 与渲染层异常，
+`%APPDATA%\QuickFetch\logs\quickfetch-YYYY-MM-DD.log`，记录扫描/复制、网络探测、IPC 与渲染层异常，
 按天分文件并保留最近 7 天。现场复现问题前先打开它，出问题后点「打开日志目录」取文件。
 
 三条硬约束：

@@ -105,9 +105,6 @@ const api: ElectronAPI = {
     }
   },
 
-  copyTaskToNewDir: (taskId, targetDir) =>
-    ipcRenderer.invoke('copy:to-new-dir', taskId, targetDir),
-
   revealCopyTarget: (targetDir) => ipcRenderer.invoke('copy:reveal', targetDir),
 
   reprobeShares: (category, keys) =>

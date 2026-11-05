@@ -4,6 +4,7 @@ import AoiFilterPanel from '../components/aoi-filter-panel'
 import AoiMachinePicker from '../components/aoi-machine-picker'
 import PlantScanPage from '../components/plant-scan-page'
 import { NETWORK_HINT } from '@shared/networkHint'
+import { usePlantScanPage } from '../hooks/usePlantScanPage'
 import { useAoiFilterStore } from '../stores/aoiFilterStore'
 import {
   selectAoi,
@@ -21,34 +22,21 @@ import {
 const AoiScanPage = () => {
   const aoi = useSettingsStore(selectAoi)
   const load = useSettingsStore((state) => state.load)
+  const aoiTypes = useUserPreferencesStore((state) => state.aoiTypes)
 
   useEffect(() => {
     void load()
   }, [load])
 
-  const date = useAoiFilterStore((state) => state.date)
-  const shift = useAoiFilterStore((state) => state.shift)
-  const types = useAoiFilterStore((state) => state.types)
-  const plant = useAoiFilterStore((state) => state.plant)
-  const selectedMachines = useAoiFilterStore((state) => state.selectedMachines)
-  const aoiTypes = useUserPreferencesStore((state) => state.aoiTypes)
-
   const configured = Boolean(aoi.entryRoot)
   const active = aoi.machines.filter((item) => !item.stale)
-  const ready =
-    configured &&
-    selectedMachines.length > 0 &&
-    types.length > 0 &&
-    Boolean(date)
-
-  // 类型默认是空的，缺它时要说清楚是「还没添加」还是「添加了没勾」
-  const missing = configured
-    ? [
-        selectedMachines.length ? '' : '机台',
-        date ? '' : '日期',
-        types.length ? '' : aoiTypes.length ? '类型' : '类型（点「编辑」添加）',
-      ].filter(Boolean)
-    : []
+  const { ready, missing, filterSignature, getParams } = usePlantScanPage({
+    store: useAoiFilterStore,
+    configured,
+    hasSlots: false,
+    requiresLevels: false,
+    typeCatalog: aoiTypes,
+  })
 
   return (
     <PlantScanPage
@@ -64,20 +52,8 @@ const AoiScanPage = () => {
       activeMachines={active.length}
       ready={ready}
       missing={missing}
-      getParams={() => ({
-        machines: selectedMachines,
-        date,
-        shift,
-        slots: [],
-        types,
-      })}
-      filterSignature={[
-        plant,
-        date,
-        shift,
-        types.join(','),
-        selectedMachines.join(','),
-      ].join('|')}
+      getParams={getParams}
+      filterSignature={filterSignature}
       picker={<AoiMachinePicker machines={aoi.machines} />}
       filterPanel={<AoiFilterPanel />}
     />

@@ -108,8 +108,6 @@ const buildSummary = (
         taskId: args[0],
         targetDir: truncatePath(args[1]),
       })
-    case 'copy:to-new-dir':
-      return { copyId: args[0], targetDir: truncatePath(args[1]) }
     case 'copy:reveal':
       return { targetDir: truncatePath(args[0]) }
     case 'copy:pause':

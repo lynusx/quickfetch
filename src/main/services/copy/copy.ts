@@ -1,4 +1,12 @@
-import { copyFile, mkdir, readdir, stat, writeFile } from 'node:fs/promises'
+import {
+  copyFile,
+  mkdir,
+  readdir,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 
 import type {
@@ -29,6 +37,19 @@ export const DEFAULT_COPY_BATCH_SIZE = 50
 
 const PROGRESS_INTERVAL_MS = 120
 
+/**
+ * 文件之间没有进度事件时，也按秒推一次快照。
+ *
+ * 一个几百 MB 的文件 copyFile 期间不会回调，如果只在文件完成时 touch，
+ * 界面上的「已用 / 剩余 / 预计完成 / 网速」会整段冻住，看起来像卡死。
+ */
+const PROGRESS_TICK_MS = 1000
+
+/** 实时网速的滑动窗口：只统计最近 5 秒的字节增量 */
+const SPEED_WINDOW_MS = 5000
+/** 采样间隔：没必要每个 120ms 事件都记一个点 */
+const SPEED_SAMPLE_MS = 250
+
 const MANIFEST_NAME = 'source.txt'
 
 export interface CopyLoadOptions {
@@ -44,6 +65,60 @@ const abortError = (): Error => {
 
 const isAbortError = (error: unknown): boolean =>
   error instanceof Error && error.name === 'AbortError'
+
+/**
+ * 滑动窗口测速。
+ *
+ * 累计平均速度在长任务里几乎不动：刚开始慢、后来快，界面上的数字要很久
+ * 才追上；暂停十分钟再继续又会被摊薄。这里只看最近几秒的字节增量。
+ *
+ * 窗口内不足两个采样点（刚启动、或长时间没有新字节）返回 0，
+ * 让界面显示「计算中 / 0」而不是一个过时的旧值。
+ */
+export class SpeedMeter {
+  private samples: { at: number; bytes: number }[] = []
+  private last = 0
+  private readonly windowMs: number
+  private readonly sampleMs: number
+
+  constructor(windowMs = SPEED_WINDOW_MS, sampleMs = SPEED_SAMPLE_MS) {
+    this.windowMs = windowMs
+    this.sampleMs = sampleMs
+  }
+
+  reset(at = Date.now(), bytes = 0): void {
+    this.samples = [{ at, bytes }]
+    this.last = 0
+  }
+
+  value(now: number, bytes: number): number {
+    const last = this.samples[this.samples.length - 1]
+
+    if (!last || now - last.at >= this.sampleMs) {
+      this.samples.push({ at: now, bytes })
+    }
+
+    const cutoff = now - this.windowMs
+
+    while (this.samples.length > 1 && this.samples[0].at < cutoff) {
+      this.samples.shift()
+    }
+
+    if (this.samples.length < 2) {
+      this.last = 0
+      return 0
+    }
+
+    const first = this.samples[0]
+    const span = now - first.at
+
+    if (span <= 0) return this.last
+
+    this.last = Math.max(0, Math.round(((bytes - first.bytes) / span) * 1000))
+
+    return this.last
+  }
+}
 
 /**
  * 把文件名拆成「主名 + 末尾数字 + 扩展名」，用于数字自增。
@@ -78,7 +153,7 @@ const splitIndex = (
  * img1.jpg 重名 → img2.jpg（拆开已有数字递增，不会得到 img11.jpg）
  *
  * Windows 文件名大小写不敏感，比较统一转小写，避免 a.jpg 与 A.jpg 互相覆盖。
- * 刻意不识别旧版本生成的「img (2).jpg」——跨版本重跑时它会当成另一个文件。
+ * 刻意不识别「img (2).jpg」这种带空格的副本名——重跑时它会当成另一个文件。
  */
 const indexedName = (name: string, taken: Set<string>): string => {
   if (!taken.has(name.toLowerCase())) return name
@@ -134,14 +209,19 @@ export const folderOf = (image: ScannedImage, layout: CopyLayout): string[] => {
   }
 }
 
-/** 过滤出勾选的机台；machines 为空表示全选 */
+/**
+ * 过滤出勾选的机台。
+ *
+ * 空数组表示一台都没选，返回空结果 —— 不再兼作「全选」。
+ * 渲染层默认全选并显式传机台名，主进程不再猜调用方的意图。
+ */
 export const filterByMachines = (
   images: ScannedImage[],
   machines: string[],
 ): ScannedImage[] => {
-  if (!machines.length) return images
-
   const allowed = new Set(machines)
+
+  if (!allowed.size) return []
 
   return images.filter((image) => allowed.has(machineOf(image)))
 }
@@ -157,7 +237,7 @@ export const planPreview = async (
 ): Promise<CopyPlanPreview> => {
   // 只统计图片：界面给的是「将复制 N 张图」，不该把手工放进类型目录的
   // 说明文件、表格一起算进去。扫描侧已经按同一套扩展名过滤过，
-  // 这里再挡一次是为了兼容从旧版历史里恢复的结果集。
+  // 这里再挡一次是为了兼容既有历史记录里的结果集。
   const picked = filterByMachines(images, params.machines).filter((image) =>
     isImageFile(image.name),
   )
@@ -331,6 +411,10 @@ export class CopyTaskRunner {
   private startedAt: number | null = null
   private finishedAt: number | null = null
   private lastEmitAt = 0
+  /** 最近几秒的字节采样，用于实时网速 */
+  private readonly speed = new SpeedMeter()
+  /** 运行中按秒推快照，让进度信息在长文件复制期间也能刷新 */
+  private ticker: ReturnType<typeof setInterval> | null = null
 
   /**
    * 是否已经规划过。
@@ -348,14 +432,14 @@ export class CopyTaskRunner {
   private resumeWaiters: (() => void)[] = []
   /**
    * 每次 run 重新创建：取消过的信号会一直是 aborted，
-   * 重试或换目录重跑时沿用它会让任务一启动就自己取消。
+   * 重试时沿用它会让任务一启动就自己取消。
    */
   private abortController = new AbortController()
   /**
    * 本轮执行的终态信号。
    *
    * 不能只在构造时建一次：Promise 一旦 resolve 就永远保持 resolved，
-   * 重试 / 换目录之后 waitSettled() 会立刻返回，调用方以为新的一轮已经跑完。
+   * 重试之后 waitSettled() 会立刻返回，调用方以为新的一轮已经跑完。
    * 所以每次 run() 都换一个新的。
    */
   private settled: Promise<void> = Promise.resolve()
@@ -405,6 +489,8 @@ export class CopyTaskRunner {
 
     this.status = 'running'
     this.startedAt = Date.now()
+    this.speed.reset(this.startedAt, this.copiedBytes)
+    this.startTicker()
 
     logger.info('copy', 'copy.start', {
       copyId: this.id,
@@ -430,6 +516,7 @@ export class CopyTaskRunner {
     this.paused = true
     this.pausedAt = Date.now()
     this.status = 'paused'
+    this.stopTicker()
 
     logger.info('copy', 'copy.pause', {
       copyId: this.id,
@@ -454,6 +541,9 @@ export class CopyTaskRunner {
 
     this.paused = false
     this.status = 'running'
+    // 暂停期间没有字节流动，重新开始计时，别把暂停时长摊进网速
+    this.speed.reset(Date.now(), this.copiedBytes)
+    this.startTicker()
 
     logger.info('copy', 'copy.resume', {
       copyId: this.id,
@@ -475,6 +565,7 @@ export class CopyTaskRunner {
       this.pausedAt = null
     }
 
+    this.stopTicker()
     this.abortController.abort()
     this.paused = false
 
@@ -558,55 +649,8 @@ export class CopyTaskRunner {
     this.pausedAt = null
     this.status = 'running'
     this.startedAt = Date.now()
-    this.touch('', true)
-    void this.run()
-
-    return this.snapshot()
-  }
-
-  /**
-   * 换一个目标目录，按最初勾选的机台与分组方式完整重跑一次。
-   *
-   * 已经在跑的任务不允许改目录 —— 一半文件在 A 一半在 B，事后没人能说清。
-   */
-  retargetTo(targetDir: string): CopyTask {
-    if (!this.isFinal()) {
-      throw new Error('复制正在进行，请先取消再更换目标目录')
-    }
-    if (!targetDir.trim()) throw new Error('目标目录不能为空')
-    if (targetDir === this.targetDir) return this.snapshot()
-
-    logger.info('copy', 'copy.retarget', {
-      copyId: this.id,
-      from: this.targetDir,
-      to: targetDir,
-      failures: this.failures.length,
-    })
-
-    this.targetDir = targetDir
-    this.plan = []
-    // 换了目录，旧计划里的 to 全部作废，必须重新规划
-    this.planned = false
-    this.cursor = 0
-    this.copied = 0
-    this.renamed = 0
-    this.skipped = 0
-    this.alreadyExists = 0
-    this.roundTotal = 0
-    this.copyTotal = 0
-    this.totalBytes = 0
-    this.copiedBytes = 0
-    this.failedBytes = 0
-    this.sizeUnknown = 0
-    this.failures = []
-    this.error = null
-    this.manifestPath = null
-    this.currentPath = ''
-    this.finishedAt = null
-    this.pausedMs = 0
-    this.pausedAt = null
-    this.startedAt = Date.now()
-    this.status = 'running'
+    this.speed.reset(this.startedAt, this.copiedBytes)
+    this.startTicker()
     this.touch('', true)
     void this.run()
 
@@ -668,8 +712,15 @@ export class CopyTaskRunner {
     const batchTotal =
       this.copyTotal > 0 ? Math.ceil(this.copyTotal / this.batchSize) : 0
     const batchDone = this.copied + this.failures.length
-    const bytesPerSecond =
+    const averageBytesPerSecond =
       elapsed > 0 ? Math.round((this.copiedBytes / elapsed) * 1000) : 0
+    // 运行中显示最近 5 秒的实时速度；终态/暂停给出整轮平均，供界面标注「平均网速」
+    const bytesPerSecond =
+      this.status === 'running'
+        ? this.speed.value(Date.now(), this.copiedBytes)
+        : averageBytesPerSecond
+    // 窗口刚开始时还没有样本，ETA 仍有累计平均可用
+    const etaSpeed = bytesPerSecond > 0 ? bytesPerSecond : averageBytesPerSecond
 
     // 有完整字节信息时优先按字节估剩余；否则回退到按张数
     let etaMs: number | null = null
@@ -681,10 +732,10 @@ export class CopyTaskRunner {
       if (
         this.sizeUnknown === 0 &&
         remainingBytes > 0 &&
-        bytesPerSecond > 0 &&
+        etaSpeed > 0 &&
         elapsed >= 3000
       ) {
-        etaMs = Math.round((remainingBytes / bytesPerSecond) * 1000)
+        etaMs = Math.round((remainingBytes / etaSpeed) * 1000)
       } else if (ratio >= 0.03) {
         // 张数回退：3% 以后估算才稳，又比原来的 10% 更早给出预期
         etaMs = Math.round((elapsed / ratio) * (1 - ratio))
@@ -719,13 +770,14 @@ export class CopyTaskRunner {
       currentPath: this.currentPath,
       startedAt: this.startedAt,
       finishedAt: this.finishedAt,
+      pausedMs: activePausedMs,
       elapsedMs: elapsed,
       etaMs,
     }
   }
 
   private async run(): Promise<void> {
-    // 新一轮执行必须用干净的中断信号，否则「取消后再重试/换目录」会秒退
+    // 新一轮执行必须用干净的中断信号，否则「取消后再重试」会秒退
     this.abortController = new AbortController()
     this.resetSettled()
 
@@ -769,6 +821,7 @@ export class CopyTaskRunner {
   }
 
   private finish(status: CopyTask['status']): void {
+    this.stopTicker()
     this.finishedAt = Date.now()
     this.status = status
     this.currentPath = ''
@@ -993,13 +1046,16 @@ export class CopyTaskRunner {
     // 重试失败项时 plan 只剩失败子集，不能让它覆盖掉全量清单
     const images = this.taskImages()
 
+    const temp = `${target}.${process.pid}.tmp`
+
     try {
       await mkdir(toFsPath(this.targetDir), { recursive: true })
       await writeFile(
-        toFsPath(target),
+        toFsPath(temp),
         images.map((image) => image.path).join('\n'),
         'utf-8',
       )
+      await rename(toFsPath(temp), toFsPath(target))
       this.manifestPath = target
 
       logger.info('copy', 'copy.manifest', {
@@ -1009,6 +1065,7 @@ export class CopyTaskRunner {
       })
     } catch (error) {
       // 清单只是辅助信息，写不进去不该让整次复制失败
+      await rm(toFsPath(temp), { force: true }).catch(() => undefined)
       this.manifestPath = null
       logger.warn('copy', 'copy.manifest.failed', {
         copyId: this.id,
@@ -1114,8 +1171,32 @@ export class CopyTaskRunner {
       // 失败率过高时降档：共享盘抖动下越并发越糟
       this.gate.sample(true)
     } finally {
+      // 文件刚写完，把字节增量立刻记进窗口，网速不用等下一次心跳
+      this.speed.value(Date.now(), this.copiedBytes)
       this.touch(item.to)
     }
+  }
+
+  /** 运行中每秒推一次快照；暂停/取消/结束时必须停掉，否则会一直发事件 */
+  private startTicker(): void {
+    if (this.ticker) return
+
+    this.ticker = setInterval(() => {
+      if (this.status !== 'running') return
+
+      this.speed.value(Date.now(), this.copiedBytes)
+      this.touch('', true)
+    }, PROGRESS_TICK_MS)
+
+    // 不让计时器拖住进程退出；Electron 主进程里 Timeout 有 unref
+    this.ticker.unref?.()
+  }
+
+  private stopTicker(): void {
+    if (!this.ticker) return
+
+    clearInterval(this.ticker)
+    this.ticker = null
   }
 
   private touch(currentPath: string, force = false): void {

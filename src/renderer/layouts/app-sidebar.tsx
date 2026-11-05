@@ -58,7 +58,7 @@ export const AppSidebar = () => (
       <BrandMark />
       <Box>
         <Text as="div" className="brand-name">
-          SHX Tools
+          秒取
         </Text>
         <Text as="div" className="brand-sub">
           产线检验工作台

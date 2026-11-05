@@ -21,22 +21,13 @@ import {
 import { ChoiceList, ChoiceRadio } from '@/components/choice-list'
 import { DatePicker } from '@/components/date-picker/date-picker'
 import { Field, Step } from '@/components/field'
-import { useImageFilterStore } from '../stores/imageFilterStore'
+import { useElFilterStore } from '../stores/elFilterStore'
 import { useUserPreferencesStore } from '@/features/settings'
 import { getAllAvailableTimes, getShiftInfo } from '@/utils/common'
 
 const ElFilterPanel = () => {
-  const {
-    date,
-    shift,
-    slots,
-    types,
-    setDate,
-    setShift,
-    setSlots,
-    setTypes,
-    removeType,
-  } = useImageFilterStore()
+  const { date, shift, slots, types, setDate, setShift, setSlots, setTypes } =
+    useElFilterStore()
   const { ngTypes, addNgType, removeNgType } = useUserPreferencesStore()
 
   const [newType, setNewType] = useState('')
@@ -51,6 +42,10 @@ const ElFilterPanel = () => {
   } = getShiftInfo(new Date())
 
   useEffect(() => {
+    // 只在首次进入（还没有日期）时带出默认值；切页面回来保留上次范围，
+    // 否则会把刚恢复的历史任务当成"改了筛选"清掉
+    if (useElFilterStore.getState().date) return
+
     setDate(currentDate)
     setShift(currentShift)
     setSlots(currentSlots)
@@ -80,7 +75,7 @@ const ElFilterPanel = () => {
 
   const handleRemoveType = (type: string) => {
     removeNgType(type)
-    removeType(type)
+    setTypes(types.filter((item) => item !== type))
   }
 
   return (

@@ -49,7 +49,7 @@ const createWindow = (): BrowserWindow => {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#ffffff',
-    title: 'SHX Tools',
+    title: '秒取',
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
@@ -144,7 +144,7 @@ if (!hasSingleInstanceLock) {
 
   app.whenReady().then(async () => {
     // Windows 任务栏分组与通知标识
-    app.setAppUserModelId('com.lynusx.shx-tools')
+    app.setAppUserModelId('com.lynusx.quickfetch')
 
     // 先按已落盘的开关初始化日志，后续启动步骤与现场操作都能被记录
     const settings = await readSettings().catch(() => null)

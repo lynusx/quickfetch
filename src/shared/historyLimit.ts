@@ -6,6 +6,9 @@
  */
 export const DEFAULT_HISTORY_LIMIT = 10
 
+/** 任务快照里保留的预览条数；实时快照与历史恢复共用，避免两边口径漂移 */
+export const PREVIEW_LIMIT = 200
+
 /**
  * 上限别放太开：结果文件包含全部图片绝对路径，
  * 单次任务几千张图就是几百 KB 到几 MB，留太多会拖慢启动时的列表读取。

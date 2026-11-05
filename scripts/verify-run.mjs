@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const work = mkdtempSync(join(tmpdir(), 'shx-verify-'))
+const work = mkdtempSync(join(tmpdir(), 'quickfetch-verify-'))
 
 /**
  * esbuild 是 vite 的传递依赖，pnpm 不会把它提升到 node_modules 根，
@@ -31,7 +31,7 @@ const stub = join(work, 'electron-stub.mjs')
 writeFileSync(
   stub,
   [
-    'export const app = { getPath: () => process.cwd(), getName: () => "shx-tools", getVersion: () => "0.0.0", whenReady: async () => undefined, on: () => undefined, quit: () => undefined }',
+    'export const app = { getPath: () => process.cwd(), getName: () => "QuickFetch", getVersion: () => "0.0.0", whenReady: async () => undefined, on: () => undefined, quit: () => undefined }',
     'export const ipcMain = { handle: () => undefined, on: () => undefined, removeHandler: () => undefined }',
     'export const shell = { openPath: async () => "" }',
     'export const dialog = { showOpenDialog: async () => ({ canceled: true, filePaths: [] }) }',

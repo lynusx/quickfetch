@@ -5,11 +5,17 @@ import type { CopyTask } from '../../../shared/ipc'
 import { CopyTaskRunner } from './copy'
 import type { CopyRunnerOptions } from './copy'
 import { logger } from '../log'
+import { createTaskTable } from '../../utils/taskTable'
 
 /** 同时保留的复制任务数。复制任务比扫描任务轻，但也不该无限留着 */
 const MAX_COPY_TASKS = 10
 
-const runners = new Map<string, CopyTaskRunner>()
+const runners = createTaskTable<CopyTaskRunner>({
+  max: MAX_COPY_TASKS,
+  isFinal: (runner) => runner.isFinal(),
+  onEvict: (runner) =>
+    logger.debug('copy', 'copy.task.evicted', { copyId: runner.id }),
+})
 
 /**
  * 复制任务快照推送。
@@ -25,34 +31,18 @@ const broadcast = (task: CopyTask): void => {
   }
 }
 
-/** 淘汰最早的已结束任务，运行中/暂停中的永远保留 */
-const evict = (): void => {
-  if (runners.size <= MAX_COPY_TASKS) return
-
-  const finished = [...runners.values()]
-    .filter((runner) => runner.isFinal())
-    .sort((a, b) => a.createdAt - b.createdAt)
-
-  for (const runner of finished) {
-    if (runners.size <= MAX_COPY_TASKS) break
-    runners.delete(runner.id)
-    logger.debug('copy', 'copy.task.evicted', { copyId: runner.id })
-  }
-}
-
 export const startCopy = (
   options: Omit<CopyRunnerOptions, 'emit'>,
 ): CopyTask => {
   const runner = new CopyTaskRunner({ ...options, emit: broadcast })
 
-  runners.set(runner.id, runner)
-  evict()
+  runners.add(runner)
 
   return runner.start()
 }
 
 export const getCopyRunner = (id: string): CopyTaskRunner | null =>
-  runners.get(id) ?? null
+  runners.get(id)
 
 export const getCopyTask = (id: string): CopyTask | null =>
   runners.get(id)?.snapshot() ?? null

@@ -8,7 +8,7 @@ import { Button, Flex, IconButton, Text, TextField } from '@radix-ui/themes'
 
 import { ChoiceList, ChoiceRadio } from '@/components/choice-list'
 import { Field, Step } from '@/components/field'
-import { useImageFilterStore } from '../stores/imageFilterStore'
+import { useElFilterStore } from '../stores/elFilterStore'
 import { useSettingsStore } from '@/features/settings'
 import type { Plant } from '@shared/ipc'
 import { plantLabel } from '@shared/ipc'
@@ -26,7 +26,7 @@ const ElSetupPanel = () => {
     setPlant,
     setKeyword,
     setSelectedMachines,
-  } = useImageFilterStore()
+  } = useElFilterStore()
 
   const [draft, setDraft] = useState(settings?.rootPath ?? '')
   const [prevRootPath, setPrevRootPath] = useState(settings?.rootPath)
@@ -51,6 +51,13 @@ const ElSetupPanel = () => {
     if (!plants.length) return
     if (!plants.includes(plant)) setPlant(plants[0])
   }, [plants, plant, setPlant])
+
+  // 根目录重新识别后，已被删掉的机台从选中里剔掉；与共享 picker 的行为一致
+  useEffect(() => {
+    useElFilterStore
+      .getState()
+      .pruneSelected(machines.map((machine) => machine.name))
+  }, [machines])
 
   const visible = useMemo(() => {
     const list = machines.filter((item) => item.plant === plant)

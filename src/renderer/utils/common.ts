@@ -114,9 +114,17 @@ export const formatFileSize = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-/** 毫秒转可读耗时：<1s 显示毫秒，其余保留一位小数秒 */
-export const formatDuration = (ms: number): string =>
-  ms < 1000 ? `${ms} 毫秒` : `${(ms / 1000).toFixed(1)} 秒`
+/** 毫秒转可读耗时：<1s 显示毫秒，<1min 保留一位小数秒，再长按分秒展示 */
+export const formatDuration = (ms: number): string => {
+  if (ms < 1000) return `${ms} 毫秒`
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} 秒`
+
+  const totalSeconds = Math.round(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+
+  return seconds > 0 ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分`
+}
 
 /** 完成时刻：HH:mm；跨天时补上日期，避免「预计 02:10 完成」看不出是哪天 */
 export const formatClockTime = (timestamp: number): string => {

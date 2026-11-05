@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import {
-  CheckCircledIcon,
   DownloadIcon,
   ExclamationTriangleIcon,
   OpenInNewWindowIcon,
@@ -11,7 +10,6 @@ import {
   StopIcon,
 } from '@radix-ui/react-icons'
 import {
-  Badge,
   Box,
   Button,
   Callout,
@@ -19,7 +17,6 @@ import {
   Dialog,
   Flex,
   Grid,
-  Progress,
   ScrollArea,
   Spinner,
   Strong,
@@ -31,32 +28,12 @@ import { EmptyState } from '@/components/empty-state/empty-state'
 import { ROUTES } from '@/routes/paths'
 import { useImageCopy } from './useImageCopy'
 import { copyStoreOf } from './copyStore'
+import CopyProgress from './copy-progress'
+import { deriveCopyReadModel } from './copyReadModel'
 import { selectPreferences, useSettingsStore } from '@/features/settings'
-import type { CopyConflictPolicy, CopyStatus, ScanCategory } from '@shared/ipc'
+import type { CopyConflictPolicy, ScanCategory } from '@shared/ipc'
 import { COPY_CONFLICT_LABEL, COPY_LAYOUT_LABEL } from '@shared/ipc'
-import {
-  formatClockTime,
-  formatDuration,
-  formatEta,
-  formatFileSize,
-} from '@/utils/common'
 import './copy.css'
-
-const STATUS_META: Record<
-  CopyStatus,
-  {
-    label: string
-    color: 'blue' | 'gray' | 'green' | 'red' | 'amber'
-    variant: 'solid' | 'soft' | 'outline' | 'surface'
-  }
-> = {
-  pending: { label: '待开始', color: 'gray', variant: 'outline' },
-  running: { label: '复制中', color: 'blue', variant: 'soft' },
-  paused: { label: '已暂停', color: 'amber', variant: 'soft' },
-  completed: { label: '已完成', color: 'green', variant: 'soft' },
-  canceled: { label: '已取消', color: 'gray', variant: 'surface' },
-  failed: { label: '失败', color: 'red', variant: 'soft' },
-}
 
 const CONFLICT_VERB: Record<CopyConflictPolicy, string> = {
   rename: '自动编号后全部复制',
@@ -78,22 +55,17 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
 
   const {
     machineStats,
-    pickedCount,
     preview,
     previewing,
     targetDir,
     busy,
     error,
-    running,
-    paused,
-    percent,
     canCopy,
     handleStart,
     handlePause,
     handleResume,
     handleCancel,
     handleRetry,
-    handleChangeTarget,
     handleReveal,
     handlePickTarget,
   } = useImageCopy({ category, showToast })
@@ -102,6 +74,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
   const showFailures = copyStore((state) => state.showFailures)
   const toggleMachine = copyStore((state) => state.toggleMachine)
   const setMachines = copyStore((state) => state.setMachines)
+  const selectAll = copyStore((state) => state.selectAll)
   const setShowFailures = copyStore((state) => state.setShowFailures)
 
   const preferences = useSettingsStore(selectPreferences)
@@ -111,31 +84,17 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
   const task = copyStore((state) => state.task)
   const [confirmOverwrite, setConfirmOverwrite] = useState(false)
 
-  const allPicked = machines.length === 0
-  const meta = task ? STATUS_META[task.status] : null
-  const finished = task
-    ? task.status === 'completed' ||
-      task.status === 'canceled' ||
-      task.status === 'failed'
-    : false
-
-  const eta =
-    task && task.status === 'running' ? formatEta(task.progress.etaMs) : null
-
-  /**
-   * 预计完成时刻按「快照开始时间 + 已用时 + 剩余」推算，
-   * 不直接用 Date.now()，避免进度事件之间的空档让预计时间越漂越晚。
-   */
-  const finishAt =
-    task &&
-    task.status === 'running' &&
-    task.progress.etaMs !== null &&
-    task.progress.startedAt !== null
-      ? task.progress.startedAt + task.progress.elapsedMs + task.progress.etaMs
-      : null
-
-  const activeDir = task?.progress.targetDir ?? targetDir
-  const activeDirName = activeDir.split(/[\\/]/).filter(Boolean).pop() ?? ''
+  const {
+    selectedCount,
+    allSelected,
+    pickedCount,
+    running,
+    paused,
+    finished,
+    activeDir,
+    done,
+    percent,
+  } = deriveCopyReadModel({ task, machines, machineStats, targetDir })
 
   const optionSummary = (
     <Flex align="center" justify="between" gap="2">
@@ -185,7 +144,12 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
         }
         hint={
           activeDir
-            ? undefined
+            ? finished &&
+              targetDir &&
+              task?.progress.targetDir &&
+              targetDir !== task.progress.targetDir
+              ? '已更换目标目录，点「重新复制」后才会写入新目录。'
+              : undefined
             : '复制前必须选好目标目录；主进程不会自己弹框，避免对话框关掉了任务却已经开始。'
         }
       >
@@ -204,11 +168,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
             variant="outline"
             size="2"
             disabled={busy || running || paused}
-            onClick={() =>
-              void (task && finished && task.progress.targetDir
-                ? handleChangeTarget()
-                : handlePickTarget())
-            }
+            onClick={() => void handlePickTarget()}
           >
             {activeDir ? '更换' : '选择目录'}
           </Button>
@@ -218,39 +178,31 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
       {/* 勾选机台 */}
       <Field
         label="要复制的机台"
-        count={`已选 ${allPicked ? machineStats.length : machines.length}/${machineStats.length} 台 · ${pickedCount} 张`}
+        count={`已选 ${selectedCount}/${machineStats.length} 台 · ${pickedCount} 张`}
         actions={
           <Button
             variant="ghost"
             size="1"
             color="gray"
+            disabled={running || paused}
             onClick={() =>
-              setMachines(
-                allPicked ? [] : machineStats.map((item) => item.machine),
-              )
+              allSelected
+                ? setMachines([])
+                : selectAll(machineStats.map((item) => item.machine))
             }
           >
-            {allPicked ? '取消全选' : '全选'}
+            {allSelected ? '取消全选' : '全选'}
           </Button>
         }
-        hint="不勾选任何机台等同于复制全部机台的图片。"
+        hint="至少勾选 1 台机台后才能开始复制。"
       >
         <ScrollArea type="auto" scrollbars="vertical" className="choice-scroll">
           <Grid className="machine-grid" gap="1">
             {machineStats.map((item) => {
-              const checked = allPicked || machines.includes(item.machine)
+              const checked = machines.includes(item.machine)
 
               const handleToggle = () => {
                 if (running || paused) return
-
-                if (allPicked) {
-                  const rest = machineStats
-                    .map((entry) => entry.machine)
-                    .filter((name) => name !== item.machine)
-
-                  setMachines(rest)
-                  return
-                }
 
                 toggleMachine(item.machine)
               }
@@ -416,196 +368,14 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
         </Callout.Root>
       ) : null}
 
-      {/* 进度：取消后只留一行摘要，不把进度条冻在 13% 让人以为还在跑 */}
-      {task && task.status === 'canceled' ? (
-        <Flex className="copy-canceled" align="center" gap="2" wrap="wrap">
-          <Badge color="gray" variant="surface">
-            已取消
-          </Badge>
-          <Text size="1" color="gray">
-            已复制 {task.progress.copied} / {task.progress.copyTotal} 张
-            {task.progress.alreadyExists > 0
-              ? ` · 已存在 ${task.progress.alreadyExists}`
-              : ''}
-            {task.progress.failed > 0 ? ` · 失败 ${task.progress.failed}` : ''}
-          </Text>
-        </Flex>
-      ) : task ? (
-        <Box className="copy-progress">
-          <Flex direction="column" gap="2">
-            <Flex justify="between" align="center">
-              <Flex align="center" gap="2">
-                {meta ? (
-                  <Badge color={meta.color} variant={meta.variant}>
-                    {meta.label}
-                  </Badge>
-                ) : null}
-                {task.progress.batchTotal > 1 ? (
-                  <Text size="1" color="gray" className="tabular">
-                    第 {task.progress.batchIndex}/{task.progress.batchTotal} 批
-                  </Text>
-                ) : null}
-              </Flex>
-              <Text size="1" color="gray" className="tabular">
-                {task.progress.alreadyExists > 0 || task.progress.skipped > 0
-                  ? `已完成 ${task.progress.copied + task.progress.failed + task.progress.skipped + task.progress.alreadyExists} / ${task.progress.total} 张`
-                  : `${task.progress.copied} / ${task.progress.total} 张`}
-                {task.progress.alreadyExists > 0
-                  ? ` · 已存在 ${task.progress.alreadyExists}`
-                  : ''}
-                {task.progress.skipped > 0
-                  ? ` · 重名跳过 ${task.progress.skipped}`
-                  : ''}
-                {task.progress.failed > 0
-                  ? ` · 失败 ${task.progress.failed}`
-                  : ''}
-                {task.progress.renamed > 0
-                  ? ` · 改名 ${task.progress.renamed}`
-                  : ''}
-              </Text>
-            </Flex>
-
-            <Flex
-              className="copy-progress-head"
-              align="baseline"
-              justify="between"
-              gap="3"
-            >
-              <Flex align="center" gap="2">
-                {running ? <Spinner size="1" /> : null}
-                <Text
-                  as="span"
-                  size="1"
-                  color="gray"
-                  className="copy-progress-label"
-                >
-                  完成进度
-                </Text>
-              </Flex>
-              <Text as="span" className="copy-progress-value">
-                {percent}%
-              </Text>
-            </Flex>
-
-            <Progress value={percent} size="2" />
-
-            <Flex className="copy-progress-meta" wrap="wrap">
-              {task.progress.elapsedMs > 0 || finished ? (
-                <Text as="span" size="1" color="gray">
-                  {finished ? '总耗时' : '已用'}{' '}
-                  {formatDuration(task.progress.elapsedMs)}
-                </Text>
-              ) : null}
-              {eta ? (
-                <Text as="span" size="1" color="gray">
-                  剩余 {eta}
-                </Text>
-              ) : null}
-              {finishAt !== null ? (
-                <Text as="span" size="1" color="gray">
-                  预计 {formatClockTime(finishAt)} 完成
-                </Text>
-              ) : null}
-              {task.progress.totalBytes > 0 ? (
-                <Text as="span" size="1" color="gray" className="tabular">
-                  {formatFileSize(task.progress.copiedBytes)} /{' '}
-                  {formatFileSize(task.progress.totalBytes)}
-                  {running && task.progress.bytesPerSecond > 0
-                    ? ` · ${formatFileSize(task.progress.bytesPerSecond)}/s`
-                    : ''}
-                  {task.progress.sizeUnknown > 0
-                    ? ` · ${task.progress.sizeUnknown} 个大小未知`
-                    : ''}
-                </Text>
-              ) : null}
-              <Text
-                as="span"
-                size="1"
-                color="gray"
-                truncate
-                className="mono copy-progress-path"
-                title={task.progress.currentPath}
-              >
-                {task.progress.currentPath}
-              </Text>
-            </Flex>
-
-            {task.status === 'completed' &&
-            task.progress.targetDir &&
-            activeDirName ? (
-              <Flex align="center" gap="1">
-                <CheckCircledIcon
-                  width={14}
-                  height={14}
-                  className="success-icon"
-                />
-                <Text size="1" color="gray">
-                  已写入{' '}
-                  <Text className="mono" title={task.progress.targetDir}>
-                    {task.progress.targetDir}
-                  </Text>
-                </Text>
-              </Flex>
-            ) : null}
-
-            {task.manifestPath ? (
-              <Text size="1" color="gray" truncate>
-                清单：
-                <Text ml="1" className="mono">
-                  {task.manifestPath}
-                </Text>
-              </Text>
-            ) : null}
-
-            {task.failures.length > 0 ? (
-              <Flex direction="column" gap="1">
-                <Button
-                  variant="ghost"
-                  color="red"
-                  size="1"
-                  className="self-start"
-                  onClick={() => setShowFailures(!showFailures)}
-                >
-                  {showFailures
-                    ? '收起失败明细'
-                    : `查看失败明细（${task.failures.length}）`}
-                </Button>
-                {showFailures ? (
-                  <ScrollArea
-                    type="auto"
-                    scrollbars="vertical"
-                    className="failure-list"
-                  >
-                    {task.failures.map((failure) => (
-                      <Box
-                        className="failure-row"
-                        key={`${failure.path}-${failure.to}`}
-                        p="2"
-                      >
-                        <Text
-                          size="1"
-                          truncate
-                          className="mono"
-                          title={failure.path}
-                        >
-                          {failure.path}
-                        </Text>
-                        <Text
-                          size="1"
-                          color="red"
-                          truncate
-                          title={failure.reason}
-                        >
-                          {failure.reason}
-                        </Text>
-                      </Box>
-                    ))}
-                  </ScrollArea>
-                ) : null}
-              </Flex>
-            ) : null}
-          </Flex>
-        </Box>
+      {task ? (
+        <CopyProgress
+          task={task}
+          percent={percent}
+          done={done}
+          showFailures={showFailures}
+          onToggleFailures={() => setShowFailures(!showFailures)}
+        />
       ) : null}
 
       {/* 确认覆盖弹窗 */}

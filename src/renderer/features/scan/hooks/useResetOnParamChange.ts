@@ -19,9 +19,8 @@ const FINAL_STATUS: ScanTaskStatus[] = [
  *
  * 两条约束：
  * - 只清已结束的任务。运行中清掉会让进度面板凭空消失，用户以为程序崩了。
- * - 历史恢复不能被当成"范围变了"。恢复会先改筛选再载入任务，筛选面板
- *   还可能把历史里不在当前类型清单中的类型剪掉，造成第二次签名变化。
- *   恢复后 1 秒内不做清理，等参数归一化完；之后手动改筛选仍会清空。
+ * - 历史恢复不能被当成"范围变了"。恢复由 useScanSession 在筛选归一化
+ *   之后再落任务，因此这里只负责用户后续改筛选时的清理，不再依赖墙钟窗口。
  *
  * signature 由调用方拼：日期、班次、时段、类型、厂区、机台任何一项变化都算。
  */
@@ -41,9 +40,6 @@ export const useResetOnParamChange = (
     if (previous.current === signature) return
 
     previous.current = signature
-
-    // 恢复后的短暂窗口：签名变化来自参数回填/归一化，不是用户改范围
-    if (Date.now() < store.getState().restoreUntil) return
 
     const current = store.getState().task
 

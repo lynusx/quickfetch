@@ -1,4 +1,4 @@
-import { useCallback, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import {
   DownloadIcon,
   ExclamationTriangleIcon,
@@ -12,11 +12,8 @@ import { PageHeader } from '@/components/page-header/page-header'
 import { Panel, PanelBody, PanelHeader } from '@/components/panel'
 import { ScanStatusBadge } from './scan-status-badge'
 import { ScanTaskPanel } from './scan-task-panel'
-import { useHistoryRestore } from '../hooks/useHistoryRestore'
-import { useResetOnParamChange } from '../hooks/useResetOnParamChange'
-import { useScanTask } from '../hooks/useScanTask'
+import { useScanSession } from '../hooks/useScanSession'
 import { useToast } from '@/hooks/useToast'
-import { scanStoreOf } from '../stores/scanStore'
 import type { ScanCategory, ScanTaskParams } from '@shared/ipc'
 import '../scan.css'
 
@@ -30,10 +27,13 @@ const EYEBROW: Record<ScanCategory, string> = {
 interface PlantScanPageProps {
   category: ScanCategory
   title: string
+  /** EL 与入口类页面的说明不同；不传时用入口类默认文案 */
+  description?: string
   unconfigured: { title: string; description: string }
   networkHint: string
   configured: boolean
-  activeMachines: number
+  /** 入口类页面传机台数；EL 没有入口概念，不传就不显示那条提示 */
+  activeMachines?: number
   ready: boolean
   missing?: string[]
   getParams: () => Omit<ScanTaskParams, 'category'>
@@ -49,6 +49,7 @@ interface PlantScanPageProps {
 const PlantScanPage = ({
   category,
   title,
+  description = '按入口目录中的快捷方式识别机台，按日期、班次与类型收集图片，并批量复制到本地。',
   unconfigured,
   networkHint,
   configured,
@@ -61,9 +62,6 @@ const PlantScanPage = ({
   filterPanel,
 }: PlantScanPageProps) => {
   const { showToast } = useToast()
-  const store = scanStoreOf(category)
-
-  useResetOnParamChange(category, filterSignature)
 
   const {
     task,
@@ -76,24 +74,18 @@ const PlantScanPage = ({
     pause,
     resume,
     cancel,
-  } = useScanTask({ category, showToast, getParams })
-
-  const scanError = store((state) => state.error)
-
-  const restoreHistory = useHistoryRestore(category)
+    restoreHistory,
+    clearResult,
+  } = useScanSession({ category, showToast, getParams, filterSignature })
 
   const canStart = ready && !busy && !creating && !other
-
-  const clearResult = useCallback(() => {
-    store.getState().setTask(null)
-  }, [store])
 
   return (
     <Box>
       <PageHeader
         eyebrow={EYEBROW[category]}
         title={title}
-        description="按入口目录中的快捷方式识别机台，按日期、班次与类型收集图片，并批量复制到本地。"
+        description={description}
         badge={task ? <ScanStatusBadge status={task.status} /> : null}
       />
 
@@ -118,7 +110,7 @@ const PlantScanPage = ({
             ready={ready}
             missing={missing}
             canStart={canStart}
-            error={scanError ?? error}
+            error={error}
             other={other}
             otherLabel={otherLabel}
             networkHint={networkHint}
@@ -136,7 +128,9 @@ const PlantScanPage = ({
                   </Callout.Root>
                 ) : null}
 
-                {configured && !activeMachines ? (
+                {activeMachines !== undefined &&
+                configured &&
+                !activeMachines ? (
                   <Callout.Root color="amber" size="1">
                     <Callout.Icon>
                       <ExclamationTriangleIcon width={14} height={14} />

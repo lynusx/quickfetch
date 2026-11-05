@@ -23,6 +23,21 @@ export const PLANT_LABEL: Record<string, string> = {
 /** 老配置里的 east / west 统一换成中文，其余标签原样保留 */
 export const plantLabel = (plant: Plant): string => PLANT_LABEL[plant] ?? plant
 
+/**
+ * EL 机台目录名首字母决定厂区：A 为东区、B 为西区。
+ *
+ * 主进程识别机台与渲染层限制「一次只扫一个厂区」必须用同一条规则，
+ * 放在共享层避免两边各写一份后慢慢漂移。
+ */
+export const elPlantOf = (name: string): Plant | null => {
+  const head = name[0]?.toUpperCase()
+
+  if (head === 'A') return 'east'
+  if (head === 'B') return 'west'
+
+  return null
+}
+
 export interface MachineInfo {
   /** DC 下的机台目录名，如 A03-B、A-LXJC-01 */
   name: string
@@ -89,10 +104,10 @@ export type PreferenceKey =
 
 /** 环境变量名 → 偏好字段，主进程解析与界面提示共用一份 */
 export const PREFERENCE_ENV: Record<PreferenceKey, string> = {
-  scanConcurrency: 'SHX_READ_CONCURRENCY',
-  scanBatchSize: 'SHX_MACHINE_BATCH',
-  copyConcurrency: 'SHX_COPY_CONCURRENCY',
-  copyBatchSize: 'SHX_COPY_BATCH',
+  scanConcurrency: 'QUICKFETCH_READ_CONCURRENCY',
+  scanBatchSize: 'QUICKFETCH_MACHINE_BATCH',
+  copyConcurrency: 'QUICKFETCH_COPY_CONCURRENCY',
+  copyBatchSize: 'QUICKFETCH_COPY_BATCH',
 }
 
 /**
@@ -120,7 +135,7 @@ export interface AppSettings {
   /**
    * 被环境变量接管的偏好项。
    *
-   * 现场临时用 SHX_* 压降时，设置页里改这几项不会有实际效果，
+   * 现场临时用 QUICKFETCH_* 压降时，设置页里改这几项不会有实际效果，
    * 与其让用户猜「是不是没保存上」，不如直接标出来。
    */
   envOverrides: PreferenceKey[]
@@ -508,7 +523,7 @@ export const PREFERENCE_RANGE = {
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
 export interface LogInfo {
-  /** 日志目录绝对路径，如 C:\Users\x\AppData\Roaming\shx-tools\logs */
+  /** 日志目录绝对路径，如 C:\Users\x\AppData\Roaming\QuickFetch\logs */
   dir: string
   /** 今天的日志文件绝对路径 */
   todayFile: string
@@ -526,7 +541,7 @@ export interface RendererLogEntry {
 }
 
 export interface CopyTaskParams {
-  /** 要复制的机台目录名；为空表示全部 */
+  /** 显式勾选的机台目录名；为空表示一台都不复制 */
   machines: string[]
   layout: CopyLayout
   /** 重名策略，缺省为 rename */
@@ -586,7 +601,10 @@ export interface CopyProgress {
   copiedBytes: number
   /** 失败文件对应的字节数（已知 size 的部分） */
   failedBytes: number
-  /** 平均吞吐（字节/秒），按扣除暂停后的用时计算 */
+  /**
+   * 运行中的实时吞吐（字节/秒），按最近 5 秒滑动窗口计算；
+   * 非运行态为 0，终态平均速度由渲染层按已复制字节/用时推算。
+   */
   bytesPerSecond: number
   /** 拿不到 size 的待写盘文件数；大于 0 时 ETA 回退到按张数估算 */
   sizeUnknown: number
@@ -594,6 +612,8 @@ export interface CopyProgress {
   currentPath: string
   startedAt: number | null
   finishedAt: number | null
+  /** 累计暂停时长；预计完成时刻 = startedAt + elapsedMs + pausedMs + etaMs */
+  pausedMs: number
   elapsedMs: number
   /** 预计剩余毫秒，样本不足时为 null */
   etaMs: number | null
@@ -761,11 +781,6 @@ export interface ElectronAPI {
   getCopyTask: (taskId: string) => Promise<CopyTask | null>
   /** 订阅复制任务快照变更 */
   onCopyTaskUpdate: (listener: (task: CopyTask) => void) => () => void
-  /** 重新选择目标目录后，把已完成的复制任务改指向新目录并用原计划重跑 */
-  copyTaskToNewDir: (
-    taskId: string,
-    targetDir: string,
-  ) => Promise<CopyTask | null>
   /** 在系统文件管理器里打开目标目录；失败时返回可读错误，成功返回 null */
   revealCopyTarget: (targetDir: string) => Promise<string | null>
 

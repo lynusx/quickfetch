@@ -1,10 +1,12 @@
 import type {
   AppSettings,
   LxtShare,
+  Plant,
   ScanTask,
   ScanTaskParams,
   ShareState,
 } from '../../shared/ipc'
+import { elPlantOf } from '../../shared/ipc'
 import {
   createAoiResolver,
   createElResolver,
@@ -16,8 +18,8 @@ import {
   createTask,
   getRunner,
   getTask,
-  readRecord,
   startTask,
+  taskImagePage,
 } from '../services/scanner'
 import {
   readSettings,
@@ -37,6 +39,30 @@ const requireRunner = (taskId: string) => {
   return runner
 }
 
+/** 「厂区/机台」复合键的第一段就是厂区；无斜杠时视为未知 */
+const keyPlantOf = (key: string): Plant | null => {
+  const index = key.indexOf('/')
+  return index === -1 ? null : key.slice(0, index)
+}
+
+/**
+ * 同一次扫描只能选一个厂区。
+ *
+ * 渲染层已经按厂区互斥，这里再挡一道：历史记录、旧配置或其它调用方
+ * 仍可能送来东、西区混在一起的机台列表，混扫会让进度与复制分组都失去意义。
+ */
+const assertSinglePlant = (plants: (Plant | null | undefined)[]): void => {
+  const distinct = new Set(
+    plants.filter((plant): plant is Plant => Boolean(plant)),
+  )
+
+  if (distinct.size > 1) {
+    throw new Error(
+      '同一次扫描只能选择一个厂区（东区或西区）的机台，请取消另一区的勾选',
+    )
+  }
+}
+
 const validateParams = (params: ScanTaskParams): void => {
   if (!params.machines.length) {
     throw new Error('请至少选择一个机台')
@@ -53,11 +79,34 @@ const validateParams = (params: ScanTaskParams): void => {
   }
 }
 
-const createLxtTask = (
-  settings: AppSettings,
-  params: ScanTaskParams,
-): ScanTask => {
-  const active = settings.lxt.machines.filter((item) => !item.stale)
+interface EntryMachine {
+  key: string
+  host: string
+  stale: boolean
+}
+
+interface EntryTaskOptions {
+  category: 'lxt' | 'pl' | 'aoi'
+  settings: AppSettings
+  params: ScanTaskParams
+  active: EntryMachine[]
+  buildResolver: (hosts: Map<string, string>) => MachineResolver
+  /** 覆盖参数里的时段；森标 AOI 固定清空 */
+  slots?: string[]
+}
+
+/**
+ * 入口类扫描任务的共同装配：过滤已知机台、厂区互斥、host 表、createTask。
+ * 解析器由各 category 的 adapter 构造，差异不泄漏到装配流程。
+ */
+const createEntryTask = ({
+  category,
+  settings,
+  params,
+  active,
+  buildResolver,
+  slots = params.slots,
+}: EntryTaskOptions): ScanTask => {
   const known = new Set(active.map((item) => item.key))
   const machines = params.machines.filter((key) => known.has(key))
 
@@ -65,28 +114,45 @@ const createLxtTask = (
     throw new Error('所选机台已不在入口目录中，请点击「重新识别」刷新机台列表')
   }
 
-  const hosts = new Map(active.map((item) => [item.key, item.host]))
-  const shares = new Map<string, ShareState<LxtShare>>(
-    active.map((item) => [item.key, item.share]),
-  )
+  assertSinglePlant(machines.map(keyPlantOf))
 
-  const resolver: MachineResolver = createLxtResolver({
-    hosts,
-    shares,
-    date: params.date,
-    onShare: (machine, share, host) => {
-      void rememberLxtShare(machine, share, host)
-    },
-  })
+  const hosts = new Map(active.map((item) => [item.key, item.host]))
+  const resolver = buildResolver(hosts)
 
   return createTask(
-    { ...params, category: 'lxt', machines },
+    { ...params, category, machines, slots },
     {
-      category: 'lxt',
+      category,
       resolver,
       load: loadFrom(settings.preferences),
     },
   )
+}
+
+const createLxtTask = (
+  settings: AppSettings,
+  params: ScanTaskParams,
+): ScanTask => {
+  const active = settings.lxt.machines.filter((item) => !item.stale)
+  const shares = new Map<string, ShareState<LxtShare>>(
+    active.map((item) => [item.key, item.share]),
+  )
+
+  return createEntryTask({
+    category: 'lxt',
+    settings,
+    params,
+    active,
+    buildResolver: (hosts) =>
+      createLxtResolver({
+        hosts,
+        shares,
+        date: params.date,
+        onShare: (machine, share, host) => {
+          void rememberLxtShare(machine, share, host)
+        },
+      }),
+  })
 }
 
 const createPlTask = (
@@ -94,62 +160,40 @@ const createPlTask = (
   params: ScanTaskParams,
 ): ScanTask => {
   const active = settings.pl.machines.filter((item) => !item.stale)
-  const known = new Set(active.map((item) => item.key))
-  const machines = params.machines.filter((key) => known.has(key))
-
-  if (!machines.length) {
-    throw new Error('所选机台已不在入口目录中，请点击「重新识别」刷新机台列表')
-  }
-
-  const hosts = new Map(active.map((item) => [item.key, item.host]))
   const shares = new Map<string, ShareState>(
     active.map((item) => [item.key, item.share]),
   )
 
-  const resolver: MachineResolver = createPlResolver({
-    hosts,
-    shares,
-    date: params.date,
-    onShare: (machine, share, host) => {
-      void rememberPlShare(machine, share, host)
-    },
+  return createEntryTask({
+    category: 'pl',
+    settings,
+    params,
+    active,
+    buildResolver: (hosts) =>
+      createPlResolver({
+        hosts,
+        shares,
+        date: params.date,
+        onShare: (machine, share, host) => {
+          void rememberPlShare(machine, share, host)
+        },
+      }),
   })
-
-  return createTask(
-    { ...params, category: 'pl', machines },
-    {
-      category: 'pl',
-      resolver,
-      load: loadFrom(settings.preferences),
-    },
-  )
 }
 
 const createAoiTask = (
   settings: AppSettings,
   params: ScanTaskParams,
-): ScanTask => {
-  const active = settings.aoi.machines.filter((item) => !item.stale)
-  const known = new Set(active.map((item) => item.key))
-  const machines = params.machines.filter((key) => known.has(key))
-
-  if (!machines.length) {
-    throw new Error('所选机台已不在入口目录中，请点击「重新识别」刷新机台列表')
-  }
-
-  const hosts = new Map(active.map((item) => [item.key, item.host]))
-  const resolver: MachineResolver = createAoiResolver({ hosts })
-
-  return createTask(
+): ScanTask =>
+  createEntryTask({
+    category: 'aoi',
+    settings,
+    params,
+    active: settings.aoi.machines.filter((item) => !item.stale),
     // 森标 AOI 没有时段层，强制清空，避免调用方误传后多探一层目录
-    { ...params, category: 'aoi', machines, slots: [] },
-    {
-      category: 'aoi',
-      resolver,
-      load: loadFrom(settings.preferences),
-    },
-  )
-}
+    slots: [],
+    buildResolver: (hosts) => createAoiResolver({ hosts }),
+  })
 
 export const registerScanIpc = (): void => {
   handle('scan:create', async (_event, params: ScanTaskParams) => {
@@ -179,6 +223,13 @@ export const registerScanIpc = (): void => {
     if (!machines.length) {
       throw new Error('所选机台已不存在，请点击「重新识别」刷新机台列表')
     }
+
+    const plantByName = new Map(
+      settings.machines.map((item) => [item.name, item.plant]),
+    )
+    assertSinglePlant(
+      machines.map((name) => plantByName.get(name) ?? elPlantOf(name)),
+    )
 
     const resolver = createElResolver(settings.rootPath, settings.entry)
 
@@ -217,22 +268,7 @@ export const registerScanIpc = (): void => {
 
   handle(
     'scan:images',
-    async (_event, taskId: string, offset: number, limit: number) => {
-      const runner = getRunner(taskId)
-
-      if (runner) {
-        const all = runner.getImages()
-        return { images: all.slice(offset, offset + limit), total: all.length }
-      }
-
-      const record = await readRecord(taskId)
-
-      if (!record) return { images: [], total: 0 }
-
-      return {
-        images: record.images.slice(offset, offset + limit),
-        total: record.images.length,
-      }
-    },
+    (_event, taskId: string, offset: number, limit: number) =>
+      taskImagePage(taskId, offset, limit),
   )
 }

@@ -4,6 +4,7 @@ import PlFilterPanel from '../components/pl-filter-panel'
 import PlMachinePicker from '../components/pl-machine-picker'
 import PlantScanPage from '../components/plant-scan-page'
 import { NETWORK_HINT } from '@shared/networkHint'
+import { usePlantScanPage } from '../hooks/usePlantScanPage'
 import { usePlFilterStore } from '../stores/plFilterStore'
 import {
   selectPl,
@@ -20,40 +21,21 @@ import {
 const PlScanPage = () => {
   const pl = useSettingsStore(selectPl)
   const load = useSettingsStore((state) => state.load)
+  const plTypes = useUserPreferencesStore((state) => state.plTypes)
 
   useEffect(() => {
     void load()
   }, [load])
 
-  const date = usePlFilterStore((state) => state.date)
-  const shift = usePlFilterStore((state) => state.shift)
-  const slots = usePlFilterStore((state) => state.slots)
-  const types = usePlFilterStore((state) => state.types)
-  const levels = usePlFilterStore((state) => state.levels)
-  const plant = usePlFilterStore((state) => state.plant)
-  const selectedMachines = usePlFilterStore((state) => state.selectedMachines)
-  const plTypes = useUserPreferencesStore((state) => state.plTypes)
-
   const configured = Boolean(pl.entryRoot)
   const active = pl.machines.filter((item) => !item.stale)
-  const ready =
-    configured &&
-    selectedMachines.length > 0 &&
-    slots.length > 0 &&
-    levels.length > 0 &&
-    types.length > 0 &&
-    Boolean(date)
-
-  // 类型默认是空的，缺它时要说清楚是「还没添加」还是「添加了没勾」
-  const missing = configured
-    ? [
-        selectedMachines.length ? '' : '机台',
-        date ? '' : '日期',
-        slots.length ? '' : '时段',
-        levels.length ? '' : '等级',
-        types.length ? '' : plTypes.length ? '类型' : '类型（点「编辑」添加）',
-      ].filter(Boolean)
-    : []
+  const { ready, missing, filterSignature, getParams } = usePlantScanPage({
+    store: usePlFilterStore,
+    configured,
+    hasSlots: true,
+    requiresLevels: true,
+    typeCatalog: plTypes,
+  })
 
   return (
     <PlantScanPage
@@ -69,23 +51,8 @@ const PlScanPage = () => {
       activeMachines={active.length}
       ready={ready}
       missing={missing}
-      getParams={() => ({
-        machines: selectedMachines,
-        date,
-        shift,
-        slots,
-        types,
-        levels,
-      })}
-      filterSignature={[
-        plant,
-        date,
-        shift,
-        slots.join(','),
-        levels.join(','),
-        types.join(','),
-        selectedMachines.join(','),
-      ].join('|')}
+      getParams={getParams}
+      filterSignature={filterSignature}
       picker={<PlMachinePicker machines={pl.machines} />}
       filterPanel={<PlFilterPanel />}
     />

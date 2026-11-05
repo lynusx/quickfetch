@@ -8,11 +8,17 @@ import { saveRecord, trimRecords } from './history'
 import { ScanTaskRunner } from './task'
 import type { TaskContext } from './task'
 import { logger } from '../log'
+import { createTaskTable } from '../../utils/taskTable'
 
 /** 内存中保留的任务上限，超出时淘汰最早的已结束任务 */
 const MAX_TASKS = 20
 
-const tasks = new Map<string, ScanTaskRunner>()
+const tasks = createTaskTable<ScanTaskRunner>({
+  max: MAX_TASKS,
+  isFinal: (runner) => isFinished(runner.getStatus()),
+  onEvict: (runner) =>
+    logger.debug('scan', 'scan.task.evicted', { taskId: runner.id }),
+})
 
 /** 已经触发过落盘的任务，避免重复写同一个文件 */
 const persisted = new Set<string>()
@@ -25,6 +31,10 @@ const broadcast = (task: ScanTask): void => {
     }
   }
 }
+
+const currentHistoryLimit = async (): Promise<number> =>
+  (await readSettings().catch(() => null))?.historyLimit ??
+  DEFAULT_HISTORY_LIMIT
 
 const isFinished = (status: string): boolean =>
   status === 'completed' ||
@@ -58,13 +68,13 @@ const persistWhenSettled = async (runner: ScanTaskRunner): Promise<void> => {
 
     await saveRecord(task, runner.getImages())
 
-    const settings = await readSettings()
-    await trimRecords(settings.historyLimit ?? DEFAULT_HISTORY_LIMIT)
+    const limit = await currentHistoryLimit()
+    await trimRecords(limit)
 
     logger.info('history', 'history.persist.done', {
       taskId: task.id,
       elapsedMs: Date.now() - startedAt,
-      historyLimit: settings.historyLimit,
+      historyLimit: limit,
     })
   } catch (error) {
     console.error('保存扫描历史失败:', error)
@@ -75,29 +85,13 @@ const persistWhenSettled = async (runner: ScanTaskRunner): Promise<void> => {
   }
 }
 
-/** 清理超额的历史任务，只淘汰已结束的，运行中的任务永远保留 */
-const evict = (): void => {
-  if (tasks.size <= MAX_TASKS) return
-
-  const finished = [...tasks.values()]
-    .filter((runner) => isFinished(runner.getStatus()))
-    .sort((a, b) => a.createdAt - b.createdAt)
-
-  for (const runner of finished) {
-    if (tasks.size <= MAX_TASKS) break
-    tasks.delete(runner.id)
-    logger.debug('scan', 'scan.task.evicted', { taskId: runner.id })
-  }
-}
-
 export const createTask = (
   params: ScanTaskParams,
   context: TaskContext,
 ): ScanTask => {
   const runner = new ScanTaskRunner(params, context, broadcast)
 
-  tasks.set(runner.id, runner)
-  evict()
+  tasks.add(runner)
 
   logger.info('scan', 'scan.task.created', {
     taskId: runner.id,
@@ -113,10 +107,24 @@ export const createTask = (
 }
 
 /** 启动任务并挂上落盘逻辑；由 IPC 层调用，保证每轮扫描只落盘一次 */
+const isActive = (status: string): boolean =>
+  status === 'pending' || status === 'running' || status === 'paused'
+
 export const startTask = (id: string): ScanTask | null => {
   const runner = tasks.get(id)
 
   if (!runner) return null
+
+  // 渲染层已经互斥；主进程再挡一道，未来新增入口也不会同时跑两个任务
+  const active = tasks
+    .values()
+    .find((item) => item !== runner && isActive(item.getStatus()))
+
+  if (active) {
+    throw new Error(
+      `已有扫描任务在进行（${active.params.category ?? 'el'}），请先完成或取消`,
+    )
+  }
 
   const snapshot = runner.start()
   void persistWhenSettled(runner)
@@ -142,7 +150,7 @@ export const getRunner = (id: string): ScanTaskRunner | null =>
  * 用正常终态覆盖同一条记录，比这里的中途快照更准。
  */
 export const persistUnfinished = async (): Promise<void> => {
-  const pending = [...tasks.values()].filter((runner) => {
+  const pending = tasks.values().filter((runner) => {
     const status = runner.getStatus()
 
     // 待开始的任务一个目录都没读过，存下来只是一条空记录
@@ -156,7 +164,7 @@ export const persistUnfinished = async (): Promise<void> => {
     taskIds: pending.map((runner) => runner.id),
   })
 
-  const limit = (await readSettings().catch(() => null))?.historyLimit
+  const limit = await currentHistoryLimit()
 
   for (const runner of pending) {
     try {
@@ -172,5 +180,5 @@ export const persistUnfinished = async (): Promise<void> => {
     }
   }
 
-  if (limit) await trimRecords(limit).catch(() => undefined)
+  await trimRecords(limit).catch(() => undefined)
 }

@@ -1,182 +1,48 @@
-import { useCallback } from 'react'
-import {
-  DownloadIcon,
-  ExclamationTriangleIcon,
-  MagnifyingGlassIcon,
-} from '@radix-ui/react-icons'
-import { Box, Callout, Flex, Grid, Strong } from '@radix-ui/themes'
-
 import { NETWORK_HINT } from '@shared/networkHint'
 
-import { CopyPanel } from '@/features/copy'
-import { HistoryPanel } from '@/features/history'
-import { PageHeader } from '@/components/page-header/page-header'
-import { Panel, PanelBody, PanelHeader } from '@/components/panel'
-import { ScanStatusBadge } from '../components/scan-status-badge'
-import { ScanTaskPanel } from '../components/scan-task-panel'
+import { useSettingsStore, useUserPreferencesStore } from '@/features/settings'
+import PlantScanPage from '../components/plant-scan-page'
 import ElFilterPanel from '../components/el-filter-panel'
 import ElSetupPanel from '../components/el-setup-panel'
-import { useHistoryRestore } from '../hooks/useHistoryRestore'
-import { useResetOnParamChange } from '../hooks/useResetOnParamChange'
-import { useScanTask } from '../hooks/useScanTask'
-import { useToast } from '@/hooks/useToast'
-import { useImageFilterStore } from '../stores/imageFilterStore'
-import { useElScanStore } from '../stores/scanStore'
-import { useSettingsStore, useUserPreferencesStore } from '@/features/settings'
+import { usePlantScanPage } from '../hooks/usePlantScanPage'
+import { useElFilterStore } from '../stores/elFilterStore'
 import '../scan.css'
 
+/**
+ * EL 页与入口类页面共用同一个 page skeleton，只提供 DC 根目录 setup、
+ * filter panel 与参数来源；scan/copy/history 的接线不再重复一份。
+ */
 const ElScanPage = () => {
-  const { showToast } = useToast()
-
-  const {
-    task,
-    creating,
-    busy,
-    other,
-    otherLabel,
-    start,
-    pause,
-    resume,
-    cancel,
-  } = useScanTask({
-    category: 'el',
-    showToast,
-    getParams: () => {
-      const filters = useImageFilterStore.getState()
-
-      return {
-        machines: filters.selectedMachines,
-        date: filters.date,
-        shift: filters.shift,
-        slots: filters.slots,
-        types: filters.types,
-      }
-    },
-  })
-
   const settings = useSettingsStore((state) => state.settings)
-  const scanError = useElScanStore((state) => state.error)
-
-  const restoreHistory = useHistoryRestore('el')
-  const clearResult = useCallback(() => {
-    useElScanStore.getState().setTask(null)
-  }, [])
-
+  const ngTypes = useUserPreferencesStore((state) => state.ngTypes)
   const configured = Boolean(settings?.rootPath)
 
-  const filters = useImageFilterStore()
-  const ngTypes = useUserPreferencesStore((state) => state.ngTypes)
-
-  // 扫描范围一变，上一轮的结果就不再对应当前条件，收起来免得看串
-  useResetOnParamChange(
-    'el',
-    [
-      filters.plant,
-      filters.date,
-      filters.shift,
-      filters.slots.join(','),
-      filters.types.join(','),
-      filters.selectedMachines.join(','),
-    ].join('|'),
-  )
-
-  const ready =
-    filters.selectedMachines.length > 0 &&
-    filters.slots.length > 0 &&
-    filters.types.length > 0 &&
-    Boolean(filters.date)
-  const canStart = !busy && !creating && ready && !other && configured
-
-  const missing = configured
-    ? [
-        filters.selectedMachines.length ? '' : '机台',
-        filters.date ? '' : '日期',
-        filters.slots.length ? '' : '时段',
-        filters.types.length
-          ? ''
-          : ngTypes.length
-            ? '类型'
-            : '类型（点「编辑」添加）',
-      ].filter(Boolean)
-    : []
+  const { ready, missing, filterSignature, getParams } = usePlantScanPage({
+    store: useElFilterStore,
+    configured,
+    hasSlots: true,
+    requiresLevels: false,
+    typeCatalog: ngTypes,
+  })
 
   return (
-    <Box>
-      <PageHeader
-        eyebrow="找图 · EL"
-        title="EL 图片批量拷贝"
-        description="按日期、班次与类型从 DC 共享盘收集 EL 图片，支持暂停续跑，并把命中的图片批量复制到本地。"
-        badge={task ? <ScanStatusBadge status={task.status} /> : null}
-      />
-
-      <Grid className="workbench-grid">
-        <Panel>
-          <PanelHeader
-            icon={<MagnifyingGlassIcon width={13} height={13} />}
-            title="扫描范围"
-            description="按顺序选好根目录、机台、时间与类型"
-          />
-          <PanelBody>
-            <ElSetupPanel />
-            <Box className="panel-section">
-              <ElFilterPanel />
-            </Box>
-          </PanelBody>
-        </Panel>
-
-        <Flex className="panel-stack" direction="column">
-          <ScanTaskPanel
-            task={task}
-            creating={creating}
-            busy={busy}
-            ready={ready}
-            missing={missing}
-            canStart={canStart}
-            error={scanError}
-            other={other}
-            otherLabel={otherLabel}
-            networkHint={`${NETWORK_HINT}；点「继续」即可接着扫，已扫到的结果不会丢`}
-            notices={
-              !configured ? (
-                <Callout.Root color="amber" size="1">
-                  <Callout.Icon>
-                    <ExclamationTriangleIcon width={14} height={14} />
-                  </Callout.Icon>
-                  <Callout.Text>
-                    <Strong>还没有配置 DC 根目录：</Strong>
-                    在左侧填入或选择根目录后，才能开始扫描。
-                  </Callout.Text>
-                </Callout.Root>
-              ) : null
-            }
-            onStart={() => void start()}
-            onPause={() => void pause()}
-            onResume={() => void resume()}
-            onCancel={() => void cancel()}
-            onClear={clearResult}
-          />
-
-          <Panel>
-            <PanelHeader
-              icon={<DownloadIcon width={13} height={13} />}
-              title="复制到本地"
-              description="按机台勾选，平铺或分组写入目标目录"
-            />
-            <PanelBody>
-              <CopyPanel category="el" showToast={showToast} />
-            </PanelBody>
-          </Panel>
-
-          <HistoryPanel
-            category="el"
-            onRestore={(item) => void restoreHistory(item)}
-            showToast={showToast}
-            activeId={task?.id ?? null}
-            activeStatus={task?.status ?? null}
-          />
-        </Flex>
-      </Grid>
-    </Box>
+    <PlantScanPage
+      category="el"
+      title="EL 图片批量拷贝"
+      description="按日期、班次与类型从 DC 共享盘收集 EL 图片，支持暂停续跑，并把命中的图片批量复制到本地。"
+      unconfigured={{
+        title: '还没有配置 DC 根目录',
+        description: '在左侧填入或选择根目录后，才能开始扫描。',
+      }}
+      networkHint={`${NETWORK_HINT}；点「继续」即可接着扫，已扫到的结果不会丢`}
+      configured={configured}
+      ready={ready}
+      missing={missing}
+      getParams={getParams}
+      filterSignature={filterSignature}
+      picker={<ElSetupPanel />}
+      filterPanel={<ElFilterPanel />}
+    />
   )
 }
 

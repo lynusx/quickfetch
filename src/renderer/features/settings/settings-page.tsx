@@ -591,7 +591,7 @@ const SettingsPage = () => {
             >
               设置保存在
               <Code size="1" mx="1">
-                %APPDATA%\shx-tools\settings.json
+                %APPDATA%\QuickFetch\settings.json
               </Code>
               ，换台电脑需要重新设置。
             </Text>

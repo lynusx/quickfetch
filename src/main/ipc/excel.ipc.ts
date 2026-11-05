@@ -1,5 +1,5 @@
 import { dialog } from 'electron'
-import { writeFile } from 'node:fs/promises'
+import { rename, rm, writeFile } from 'node:fs/promises'
 
 import { getParentWindow } from './settings.ipc'
 import { handle } from './handle'
@@ -24,9 +24,18 @@ export const registerExcelIpc = (): void => {
 
       if (result.canceled || !result.filePath) return null
 
-      await writeFile(result.filePath, Buffer.from(params.data))
+      const target = result.filePath
+      const temp = `${target}.${process.pid}.tmp`
 
-      return result.filePath
+      try {
+        await writeFile(temp, Buffer.from(params.data))
+        await rename(temp, target)
+      } catch (error) {
+        await rm(temp, { force: true }).catch(() => undefined)
+        throw error
+      }
+
+      return target
     },
   )
 }

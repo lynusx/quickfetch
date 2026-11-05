@@ -4,6 +4,7 @@ import LxtFilterPanel from '../components/lxt-filter-panel'
 import LxtMachinePicker from '../components/lxt-machine-picker'
 import PlantScanPage from '../components/plant-scan-page'
 import { NETWORK_HINT } from '@shared/networkHint'
+import { usePlantScanPage } from '../hooks/usePlantScanPage'
 import { useLxtFilterStore } from '../stores/lxtFilterStore'
 import {
   selectLxt,
@@ -20,37 +21,21 @@ import {
 const LxtScanPage = () => {
   const lxt = useSettingsStore(selectLxt)
   const load = useSettingsStore((state) => state.load)
+  const lxtTypes = useUserPreferencesStore((state) => state.lxtTypes)
 
   useEffect(() => {
     void load()
   }, [load])
 
-  const date = useLxtFilterStore((state) => state.date)
-  const shift = useLxtFilterStore((state) => state.shift)
-  const slots = useLxtFilterStore((state) => state.slots)
-  const types = useLxtFilterStore((state) => state.types)
-  const plant = useLxtFilterStore((state) => state.plant)
-  const selectedMachines = useLxtFilterStore((state) => state.selectedMachines)
-  const lxtTypes = useUserPreferencesStore((state) => state.lxtTypes)
-
   const configured = Boolean(lxt.entryRoot)
   const active = lxt.machines.filter((item) => !item.stale)
-  const ready =
-    configured &&
-    selectedMachines.length > 0 &&
-    slots.length > 0 &&
-    types.length > 0 &&
-    Boolean(date)
-
-  // 类型默认是空的，缺它时要说清楚是「还没添加」还是「添加了没勾」
-  const missing = configured
-    ? [
-        selectedMachines.length ? '' : '机台',
-        date ? '' : '日期',
-        slots.length ? '' : '时段',
-        types.length ? '' : lxtTypes.length ? '类型' : '类型（点「编辑」添加）',
-      ].filter(Boolean)
-    : []
+  const { ready, missing, filterSignature, getParams } = usePlantScanPage({
+    store: useLxtFilterStore,
+    configured,
+    hasSlots: true,
+    requiresLevels: false,
+    typeCatalog: lxtTypes,
+  })
 
   return (
     <PlantScanPage
@@ -66,21 +51,8 @@ const LxtScanPage = () => {
       activeMachines={active.length}
       ready={ready}
       missing={missing}
-      getParams={() => ({
-        machines: selectedMachines,
-        date,
-        shift,
-        slots,
-        types,
-      })}
-      filterSignature={[
-        plant,
-        date,
-        shift,
-        slots.join(','),
-        types.join(','),
-        selectedMachines.join(','),
-      ].join('|')}
+      getParams={getParams}
+      filterSignature={filterSignature}
       picker={<LxtMachinePicker machines={lxt.machines} />}
       filterPanel={<LxtFilterPanel />}
     />

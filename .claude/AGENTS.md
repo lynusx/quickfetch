@@ -34,12 +34,16 @@
 所以走 `userPreferencesStore` / 各 `filterStore` 的 `persist`。**类型清单一律默认空**，不替用户预设
 （现场命名差异大，猜错一次就得先删），谁用谁加。
 
-**userData 目录名是 `shx-tools`，不是 `SHX Tools`**：Electron 启动时由 `LoadAppPackage()` 读
-`app.asar/package.json` 的 `productName`，没有则退回 `name`（本项目为 `shx-tools`），再 `SetName()`。
-`electron-builder.yml` 的 `productName: SHX Tools` 只影响 exe 名、快捷方式、窗口标题，不参与目录命名。
-Windows 上实际位置是 `%APPDATA%\shx-tools\`，**和开发态是同一个目录**，同一台机器调试会碰到现场配置。
-想改用 `SHX Tools`，得往项目 `package.json` 加 `productName` 字段——那会让老用户的历史与设置"消失"，
-必须同时写迁移。
+**持久化失败语义**：`readSettings` 只有 `ENOENT` 才能回落默认值，权限/占用等读取错误必须抛出，
+否则后续写入会把现场配置覆盖成默认值；损坏 JSON 会留档为 `settings.json.corrupt-*`。
+渲染层偏好写入只合并本次 patch、失败只回滚本次字段，不要恢复整份旧快照。
+历史列表读 `<id>.json.summary.json`，完整记录只在恢复/复制时读；导出文件同样用 temp + rename。
+
+**userData 目录名是 `QuickFetch`**：Electron 启动时由 `LoadAppPackage()` 读
+`app.asar/package.json` 的 `productName`（本项目已显式设为 `QuickFetch`），没有才退回 `name`。
+`electron-builder.yml` 的 `productName: QuickFetch` 只影响 exe 名、快捷方式、窗口标题，不参与目录命名。
+Windows 上实际位置是 `%APPDATA%\QuickFetch\`，**和开发态是同一个目录**，同一台机器调试会碰到现场配置。
+项目尚未正式投入使用，改名不需要兼容旧 userData 目录。
 
 **环境变量优先级**：`环境变量 > 设置页 > 默认值`，实现在 `src/main/services/settings/load.ts` 的 `loadFrom()`。
 被环境变量接管的项，设置页会把输入框标灰（`AppSettings.envOverrides`）。加新档位时这个字段要同步。
@@ -50,6 +54,14 @@ Windows 上实际位置是 `%APPDATA%\shx-tools\`，**和开发态是同一个�
 不要读 `\\IP` 这种只有主机的 UNC 根——Windows 枚举它会返回 EINVAL/ERROR_BAD_NETPATH，
 跟断网的表现一模一样，要按已知候选名直接读子目录。森标 AOI 的第二层固定为
 `SaveImages`，不需要探测，但仍必须读 `\\IP\SaveImages` 而不是 `\\IP`。
+
+**诊断、探测与页面派生各有唯一落点**：目录读取失败的状态 → 原因 → 文案 → 断网样本只在
+`src/main/services/scanner/diagnosis.ts`；LXT/PL 的共享名两步读取、30 天日期窗口与网络重试只在
+`src/main/services/scanner/shareProbe.ts`。渲染层的 ready/missing/参数指纹只在
+`src/renderer/features/scan/scanParams.ts` + `usePlantScanPage`；扫描页的 scan/copy/history 接线走
+`useScanSession`；复制的 done/percent/有效目录走 `copyReadModel`；任务容量与淘汰走
+`src/main/utils/taskTable.ts`；历史文件读写用 `createHistoryStore(dir)` 注入目录，测试不要依赖 app userData。
+改这些规则时改对应 module，不要在 resolver、页面或 registry 里再抄一份。
 
 **扫描历史是四类页面的公共能力**：EL / 力禧特EL / 利珀PL / 森标 AOI 都必须挂 `HistoryPanel`，
 四处共用 `hooks/useHistoryRestore` 回填参数与载入快照。当前任务快照只存在内存里，
@@ -63,7 +75,7 @@ Windows 上实际位置是 `%APPDATA%\shx-tools\`，**和开发态是同一个�
 平时不传这个参数——正常结束的任务只认 completed / canceled / failed 三种终态。
 
 **调试日志只走 `src/main/services/log/`**：默认关闭，设置页开关实时生效；日志写在
-`userData/logs/shx-YYYY-MM-DD.log`，按天分文件保留 7 天，零运行时依赖。业务代码里不要再
+`userData/logs/quickfetch-YYYY-MM-DD.log`，按天分文件保留 7 天，零运行时依赖。业务代码里不要再
 直接 `appendFile` 或另起一套日志；热点路径（逐目录/逐文件）用函数型 fields，关闭日志时不会
 执行对象构造。不要记录图片内容、Excel 字节或每帧进度快照。
 

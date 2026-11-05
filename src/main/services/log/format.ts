@@ -8,10 +8,10 @@ import type { LogLevel } from '../../../shared/ipc'
  */
 
 export const LOG_RETENTION_DAYS = 7
-export const LOG_FILE_PREFIX = 'shx-'
+export const LOG_FILE_PREFIX = 'quickfetch-'
 export const LOG_MAX_META_CHARS = 8192
 
-const LOG_FILE_PATTERN = /^shx-(\d{4})-(\d{2})-(\d{2})\.log$/
+const LOG_FILE_PATTERN = /^quickfetch-(\d{4})-(\d{2})-(\d{2})\.log$/
 const TOKEN_PATTERN = /[^A-Za-z0-9_.:-]/g
 
 const pad2 = (value: number): string => String(value).padStart(2, '0')
