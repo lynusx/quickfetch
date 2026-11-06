@@ -1,4 +1,10 @@
-import PlantFilterPanel from './plant-filter-panel'
+import PlantFilterPanel, {
+  FilterDateShift,
+  FilterLevels,
+  FilterSlots,
+  FilterTypes,
+} from './plant-filter-panel'
+import { usePlantFilterDefaults } from './plant-filter-defaults'
 import { usePlFilterStore } from '../stores/plFilterStore'
 import { useUserPreferencesStore } from '@/features/settings'
 import { PL_LEVELS } from '@shared/ipc'
@@ -13,18 +19,30 @@ const PlFilterPanel = () => {
   const plTypes = useUserPreferencesStore((state) => state.plTypes)
   const addPlType = useUserPreferencesStore((state) => state.addPlType)
   const removePlType = useUserPreferencesStore((state) => state.removePlType)
+  const levels = usePlFilterStore((state) => state.levels)
+
+  usePlantFilterDefaults(usePlFilterStore, { slots: true, paddedSlots: true })
 
   return (
-    <PlantFilterPanel
-      filter={usePlFilterStore}
-      types={plTypes}
-      onAddType={addPlType}
-      onRemoveType={removePlType}
-      levelOptions={PL_LEVELS}
-      paddedSlots
-      typePlaceholder="脏污"
-      typeExample="脏污、面划伤"
-    />
+    <PlantFilterPanel>
+      <FilterDateShift
+        filter={usePlFilterStore}
+        index={3}
+        extraDone={levels.length > 0}
+      >
+        <FilterLevels filter={usePlFilterStore} options={PL_LEVELS} />
+      </FilterDateShift>
+      <FilterSlots filter={usePlFilterStore} index={4} padded />
+      <FilterTypes
+        filter={usePlFilterStore}
+        index={5}
+        types={plTypes}
+        onAddType={addPlType}
+        onRemoveType={removePlType}
+        placeholder="脏污"
+        example="脏污、面划伤"
+      />
+    </PlantFilterPanel>
   )
 }
 
