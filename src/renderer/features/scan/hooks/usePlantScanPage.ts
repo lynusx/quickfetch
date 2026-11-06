@@ -11,6 +11,8 @@ interface UsePlantScanPageOptions {
   requiresLevels: boolean
   /** 该类别的类型清单，用于区分「还没添加」与「添加了没勾」 */
   typeCatalog: string[]
+  /** 是否有「整体/局部」可选；只有森标 AOI 用得到 */
+  hasImageKind?: boolean
 }
 
 /**
@@ -25,6 +27,7 @@ export const usePlantScanPage = ({
   hasSlots,
   requiresLevels,
   typeCatalog,
+  hasImageKind = false,
 }: UsePlantScanPageOptions) => {
   const plant = store((state) => state.plant)
   const selectedMachines = store((state) => state.selectedMachines)
@@ -33,6 +36,7 @@ export const usePlantScanPage = ({
   const slots = store((state) => state.slots)
   const types = store((state) => state.types)
   const levels = store((state) => state.levels)
+  const imageKind = store((state) => state.imageKind)
 
   const derived = deriveScanParams({
     configured,
@@ -46,6 +50,7 @@ export const usePlantScanPage = ({
     hasSlots,
     requiresLevels,
     typeCatalog,
+    imageKind: hasImageKind ? imageKind : undefined,
   })
 
   return {

@@ -150,12 +150,24 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
   )
   const pickedCount = pickedStats.reduce((sum, item) => sum + item.images, 0)
 
+  /**
+   * 预检查的请求序号。
+   *
+   * 预检查现在要 stat 一遍选中文件，慢的时候可能上一轮还没回来、
+   * 用户已经改了勾选。只认最后一次发起的请求，避免旧结果覆盖新选择。
+   */
+  const previewSeq = useRef(0)
+
   /** 预检查：勾选变化后重算一次，让界面实时显示「将复制 N 张、建 M 个目录」 */
   const refreshPreview = useCallback(async () => {
+    const seq = (previewSeq.current += 1)
+
     // 一台都没选时不请求预检查：否则主进程会按空列表返回 0 张，
     // 界面上「将复制 0 张」像是任务本身没图。
     if (!task || !machineStats.length || !machines.length) {
       setPreview(null)
+      // 上一轮请求还在路上时，它会因为序号过期而不去关「计算中」，这里补上
+      setPreviewing(false)
       return
     }
 
@@ -168,12 +180,16 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
         targetDir || undefined,
       )
 
+      if (seq !== previewSeq.current) return
+
       setPreview(result)
     } catch (cause) {
+      if (seq !== previewSeq.current) return
+
       setPreview(null)
       setError(toErrorMessage(cause, '无法计算复制计划'))
     } finally {
-      setPreviewing(false)
+      if (seq === previewSeq.current) setPreviewing(false)
     }
   }, [
     task,
@@ -189,8 +205,14 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
     setError,
   ])
 
+  // 预检查现在还要 stat 一遍选中文件（体积），连续勾几个机台时不能每点一次
+  // 就发一轮网络请求：等手停下来 250ms 再算。
   useEffect(() => {
-    void refreshPreview()
+    const timer = window.setTimeout(() => {
+      void refreshPreview()
+    }, 250)
+
+    return () => window.clearTimeout(timer)
   }, [refreshPreview])
 
   const handlePickTarget = useCallback(async (): Promise<string | null> => {

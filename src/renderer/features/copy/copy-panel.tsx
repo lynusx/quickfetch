@@ -29,7 +29,7 @@ import { ROUTES } from '@/routes/paths'
 import { useImageCopy } from './useImageCopy'
 import { copyStoreOf } from './copyStore'
 import CopyProgress from './copy-progress'
-import { deriveCopyReadModel } from './copyReadModel'
+import { deriveCopyReadModel, previewSizeLabel } from './copyReadModel'
 import { selectPreferences, useSettingsStore } from '@/features/settings'
 import type { CopyConflictPolicy, ScanCategory } from '@shared/ipc'
 import { COPY_CONFLICT_LABEL, COPY_LAYOUT_LABEL } from '@shared/ipc'
@@ -95,6 +95,8 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
     done,
     percent,
   } = deriveCopyReadModel({ task, machines, machineStats, targetDir })
+
+  const sizeLabel = previewSizeLabel(preview, previewing)
 
   const optionSummary = (
     <Flex align="center" justify="between" gap="2">
@@ -178,7 +180,9 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
       {/* 勾选机台 */}
       <Field
         label="要复制的机台"
-        count={`已选 ${selectedCount}/${machineStats.length} 台 · ${pickedCount} 张`}
+        count={`已选 ${selectedCount}/${machineStats.length} 台 · ${pickedCount} 张${
+          sizeLabel ? ` · ${sizeLabel}` : ''
+        }`}
         actions={
           <Button
             variant="ghost"

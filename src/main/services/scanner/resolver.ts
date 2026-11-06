@@ -1,10 +1,15 @@
 import { join } from 'node:path'
 
-import type { LxtShare, ScanCategory, ShareState } from '../../../shared/ipc'
-
+import type {
+  AoiImageKind,
+  LxtShare,
+  ScanCategory,
+  ShareState,
+} from '../../../shared/ipc'
 import {
-  AOI_SHARE,
+  AOI_IMAGE_DIRS,
   AOI_SHIFT_DIRS,
+  DEFAULT_AOI_IMAGE_KIND,
   LXT_SHARES,
   PL_FIXED,
 } from '../../../shared/ipc'
@@ -885,10 +890,12 @@ export const createPlResolver = (
 export interface AoiResolverOptions {
   /** 机台复合键 → 入口里解析出的目标主机 */
   hosts: Map<string, string>
+  /** 第二层读整张扫描图（SaveImages）还是局部裁图（SaveSmallImages） */
+  imageKind?: AoiImageKind
 }
 
 /**
- * 森标 AOI：每台机器一个 IP，第二层固定 SaveImages。
+ * 森标 AOI：每台机器一个 IP，第二层按图片类型选 SaveImages / SaveSmallImages。
  *
  * 这里刻意不做目录读取：`base` 交给执行器的 this.read() 去读，
  * 这样主机不可达会计入断网熔断；同时也避免枚举只有主机的 `\\IP` 根目录
@@ -896,44 +903,51 @@ export interface AoiResolverOptions {
  */
 export const createAoiResolver = (
   options: AoiResolverOptions,
-): MachineResolver => ({
-  category: 'aoi',
-  // \\IP\SaveImages\{日期}\{8.5|20.5}\{类型}\x.jpg
-  shape: {
-    shiftDir: (shift) => AOI_SHIFT_DIRS[shift],
-    hasSlots: false,
-    baseBrokenAt: '共享名',
-    // 未认证机台占多数：前缀层只给 5 秒，读不通立即按 auth 跳过，
-    // 不再逐层拼接日期/班次后等满自适应超时。
-    baseReadTimeoutMs: 5_000,
-    baseName: AOI_SHARE,
-  },
-  validate: () =>
-    options.hosts.size ? null : '尚未识别森标 AOI 入口，请先选择并识别入口目录',
-  resolve: async (machine) => {
-    const host = options.hosts.get(machine)
+): MachineResolver => {
+  // 老历史记录没有 imageKind，按整张扫描图处理
+  const shareDir = AOI_IMAGE_DIRS[options.imageKind ?? DEFAULT_AOI_IMAGE_KIND]
 
-    if (!host) {
-      return {
-        ok: false,
-        base: '',
-        reason: '该机台已不在入口目录中，请重新识别入口',
-        brokenAt: '共享名',
+  return {
+    category: 'aoi',
+    // \\IP\{SaveImages|SaveSmallImages}\{日期}\{8.5|20.5}\{类型}\x.bmp|.jpg
+    shape: {
+      shiftDir: (shift) => AOI_SHIFT_DIRS[shift],
+      hasSlots: false,
+      baseBrokenAt: '共享名',
+      // 未认证机台占多数：前缀层只给 5 秒，读不通立即按 auth 跳过，
+      // 不再逐层拼接日期/班次后等满自适应超时。
+      baseReadTimeoutMs: 5_000,
+      baseName: shareDir,
+    },
+    validate: () =>
+      options.hosts.size
+        ? null
+        : '尚未识别森标 AOI 入口，请先选择并识别入口目录',
+    resolve: async (machine) => {
+      const host = options.hosts.get(machine)
+
+      if (!host) {
+        return {
+          ok: false,
+          base: '',
+          reason: '该机台已不在入口目录中，请重新识别入口',
+          brokenAt: '共享名',
+        }
       }
-    }
 
-    return {
-      ok: true,
-      base: join(host, AOI_SHARE),
-      reason: '',
-    }
-  },
-  // 厂区/机台/日期/8.5|20.5/类型/x.jpg
-  segments: (machine, dir) => {
-    const [plant, name] = splitMachine(machine)
-    const host = options.hosts.get(machine) ?? ''
-    const base = host ? join(host, AOI_SHARE) : ''
+      return {
+        ok: true,
+        base: join(host, shareDir),
+        reason: '',
+      }
+    },
+    // 厂区/机台/日期/8.5|20.5/类型/x.bmp|.jpg
+    segments: (machine, dir) => {
+      const [plant, name] = splitMachine(machine)
+      const host = options.hosts.get(machine) ?? ''
+      const base = host ? join(host, shareDir) : ''
 
-    return [plant, name, ...(base ? tailOf(base, dir) : [])].filter(Boolean)
-  },
-})
+      return [plant, name, ...(base ? tailOf(base, dir) : [])].filter(Boolean)
+    },
+  }
+}

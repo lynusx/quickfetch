@@ -52,8 +52,9 @@ Windows 上实际位置是 `%APPDATA%\QuickFetch\`，**和开发态是同一个�
 「目录不可用」处理。断网熔断全靠这个判定，把路径问题算成断网会直接暂停整个任务并提示
 「请接专用内网」，现场极难查。同理，探测第二层目录（力禧特EL的共享名、利珀PL的标识目录）
 不要读 `\\IP` 这种只有主机的 UNC 根——Windows 枚举它会返回 EINVAL/ERROR_BAD_NETPATH，
-跟断网的表现一模一样，要按已知候选名直接读子目录。森标 AOI 的第二层固定为
-`SaveImages`，不需要探测，但仍必须读 `\\IP\SaveImages` 而不是 `\\IP`。
+跟断网的表现一模一样，要按已知候选名直接读子目录。森标 AOI 的第二层按图片类型二选一
+（`SaveImages` 整张扫描图 / `SaveSmallImages` 局部裁图），不需要探测，但仍必须读
+`\\IP\{SaveImages|SaveSmallImages}` 而不是 `\\IP`。
 
 **诊断、探测与页面派生各有唯一落点**：目录读取失败的状态 → 原因 → 文案 → 断网样本只在
 `src/main/services/scanner/diagnosis.ts`；LXT/PL 的共享名两步读取、30 天日期窗口与网络重试只在

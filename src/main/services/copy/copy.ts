@@ -4,7 +4,6 @@ import {
   readdir,
   rename,
   rm,
-  stat,
   writeFile,
 } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
@@ -24,6 +23,7 @@ import type { AdaptiveGate } from '../../utils/adaptive'
 import { toFsPath } from '../../utils/pathx'
 import { isImageFile } from '../../../shared/imageExtensions'
 import { logger } from '../log'
+import { cachedSizeOf, measureImageSizes } from './measure'
 
 /**
  * 同时打开的文件句柄上限。现场机器 8G 内存，10 路并发复制 +
@@ -257,6 +257,10 @@ export const planPreview = async (
     ? await countConflicts(picked, params, targetDir)
     : 0
 
+  // 体积用于「要复制的机台」标题行，让用户在点开始前就知道这批图多大；
+  // 命中缓存的项不再打网络 IO，第一次勾选的代价才是一次 stat。
+  const sizes = await measureImageSizes(picked)
+
   return {
     machines: [...perMachine.keys()].sort(compareName),
     total: picked.length,
@@ -265,6 +269,8 @@ export const planPreview = async (
       .sort((a, b) => compareName(a.machine, b.machine)),
     folders: [...folders].sort(compareName),
     conflicts,
+    totalBytes: sizes.totalBytes,
+    sizeUnknown: sizes.sizeUnknown,
   }
 }
 
@@ -991,14 +997,17 @@ export class CopyTaskRunner {
     }
 
     await this.pool(items, async (item) => {
-      try {
-        const info = await stat(toFsPath(item.from))
-        item.size = info.size
-        this.totalBytes += info.size
-      } catch {
+      // 预检查已经量过的项直接命中缓存，不再为同一批文件重复打网络 IO
+      const size = await cachedSizeOf(item.from)
+
+      if (size === null) {
         // 源文件不可读时复制本来就会失败，大小按未知处理即可
         this.sizeUnknown += 1
+        return
       }
+
+      item.size = size
+      this.totalBytes += size
     })
 
     logger.info('copy', 'copy.measure', {
@@ -1239,11 +1248,14 @@ export class CopyTaskRunner {
     const lanes = Array.from(
       { length: Math.min(this.concurrency, items.length) },
       async () => {
-        while (next < items.length) {
+        while (true) {
+          // checkpoint 在暂停时会一直等到恢复，所以它之后不必再判 paused；
+          // 号必须紧接着同步领走 —— 两条 lane 同时等完 checkpoint 再判越界
+          // 和取号，会出现两个 lane 取到同一个号甚至越界，worker 拿到
+          // undefined。以前 stat 放在 try 里把这个问题吞成了「大小未知」。
           await this.checkpoint()
 
-          // 暂停期间不领新活；恢复后接着从 next 走
-          if (this.paused) continue
+          if (next >= items.length) return
 
           const index = next
           next += 1

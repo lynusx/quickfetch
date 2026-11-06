@@ -36,6 +36,7 @@ const AoiScanPage = () => {
     hasSlots: false,
     requiresLevels: false,
     typeCatalog: aoiTypes,
+    hasImageKind: true,
   })
 
   return (

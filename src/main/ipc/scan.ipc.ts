@@ -6,7 +6,7 @@ import type {
   ScanTaskParams,
   ShareState,
 } from '../../shared/ipc'
-import { elPlantOf } from '../../shared/ipc'
+import { DEFAULT_AOI_IMAGE_KIND, elPlantOf } from '../../shared/ipc'
 import {
   createAoiResolver,
   createElResolver,
@@ -184,16 +184,23 @@ const createPlTask = (
 const createAoiTask = (
   settings: AppSettings,
   params: ScanTaskParams,
-): ScanTask =>
-  createEntryTask({
+): ScanTask => {
+  // 老记录或调用方传了不认识的值时按整张扫描图处理，不要因此拒绝扫描
+  const imageKind =
+    params.aoiImageKind === 'partial' ? 'partial' : DEFAULT_AOI_IMAGE_KIND
+
+  return createEntryTask({
     category: 'aoi',
     settings,
-    params,
+    // 把归一化后的图片类型写回参数：历史记录里永远带着「这次实际读了哪个目录」，
+    // 恢复时不必再猜老记录缺字段该怎么补
+    params: { ...params, aoiImageKind: imageKind },
     active: settings.aoi.machines.filter((item) => !item.stale),
     // 森标 AOI 没有时段层，强制清空，避免调用方误传后多探一层目录
     slots: [],
-    buildResolver: (hosts) => createAoiResolver({ hosts }),
+    buildResolver: (hosts) => createAoiResolver({ hosts, imageKind }),
   })
+}
 
 export const registerScanIpc = (): void => {
   handle('scan:create', async (_event, params: ScanTaskParams) => {

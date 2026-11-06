@@ -1,4 +1,4 @@
-import type { ScanTaskParams } from '@shared/ipc'
+import type { AoiImageKind, ScanTaskParams } from '@shared/ipc'
 
 /**
  * 扫描页的参数派生：四个类别共用一份 ready / missing / signature / params 规则。
@@ -22,6 +22,8 @@ export interface ScanParamsInput {
   requiresLevels: boolean
   /** 该类别的类型清单；为空时提示去「编辑」添加 */
   typeCatalog: string[]
+  /** 森标 AOI 的图片类型；其余类别传 undefined */
+  imageKind?: AoiImageKind
 }
 
 export interface ScanParamsResult {
@@ -44,6 +46,7 @@ export const deriveScanParams = (input: ScanParamsInput): ScanParamsResult => {
     hasSlots,
     requiresLevels,
     typeCatalog,
+    imageKind,
   } = input
 
   const ready =
@@ -75,6 +78,8 @@ export const deriveScanParams = (input: ScanParamsInput): ScanParamsResult => {
     shift,
     hasSlots ? slots.join(',') : '',
     requiresLevels ? levels.join(',') : '',
+    // 整体/局部读的是两个不同目录，换了就等于换了扫描范围
+    imageKind ?? '',
     types.join(','),
     selectedMachines.join(','),
   ].join('|')
@@ -90,6 +95,7 @@ export const deriveScanParams = (input: ScanParamsInput): ScanParamsResult => {
       slots: hasSlots ? slots : [],
       types,
       ...(requiresLevels ? { levels } : {}),
+      ...(imageKind ? { aoiImageKind: imageKind } : {}),
     },
   }
 }

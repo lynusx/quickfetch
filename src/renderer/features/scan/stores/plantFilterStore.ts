@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { devtools, persist } from 'zustand/middleware'
 
-import type { Plant, ScanCategory } from '@shared/ipc'
+import type { AoiImageKind, AoiSide, Plant, ScanCategory } from '@shared/ipc'
+import { aoiSideOfKey, DEFAULT_AOI_IMAGE_KIND } from '@shared/ipc'
 
 /**
  * 「厂区 / 机台」类扫描页的筛选条件。
@@ -30,6 +31,13 @@ export interface PlantFilterSlice {
   types: string[]
   /** 缺陷等级，只有利珀用得到（路径里的 A/B/C 层） */
   levels: string[]
+  /** 图片类型，只有森标 AOI 用得到：决定第二层读 SaveImages 还是 SaveSmallImages */
+  imageKind: AoiImageKind
+  /**
+   * 检测面，只有森标 AOI 用得到：按机台名里的「正检/背检」过滤列表。
+   * 只影响哪些机台可选，不参与路径；切换时连带裁掉另一侧的已选机台。
+   */
+  side: AoiSide
 }
 
 export interface PlantFilterActions {
@@ -43,6 +51,8 @@ export interface PlantFilterActions {
   setSlots: (slots: string[]) => void
   setTypes: (types: string[]) => void
   setLevels: (levels: string[]) => void
+  setImageKind: (kind: AoiImageKind) => void
+  setSide: (side: AoiSide) => void
 }
 
 /** 从复合键「厂区/机台」里取厂区，用于互斥判定；无斜杠时视为无厂区 */
@@ -50,6 +60,20 @@ const plantOfKey = (key: string): string => {
   const idx = key.indexOf('/')
   return idx === -1 ? '' : key.slice(0, idx)
 }
+
+/**
+ * 切检测面时保留哪些已选机台。
+ *
+ * 不裁剪的话，看不见的另一侧机台还留在选中里，点「开始扫描」会把它们
+ * 一并扫进去 —— 这与「切厂区清空选中」是同一个道理。
+ */
+export const pruneMachinesToSide = (
+  machines: string[],
+  side: AoiSide,
+): string[] =>
+  side === 'all'
+    ? machines
+    : machines.filter((key) => aoiSideOfKey(key) === side)
 
 export interface PlantFilterOptions {
   /**
@@ -88,6 +112,8 @@ export const createPlantFilterStore = (
           // 类型不预设：现场命名差异大，猜错的成本比手输一次高
           types: [],
           levels: [],
+          imageKind: DEFAULT_AOI_IMAGE_KIND,
+          side: 'all',
 
           // 切厂区 = 互斥切换：清掉上一区的选中，从零开始。
           // 点当前厂区不算切换，否则会莫名把已勾选的机台全部清掉。
@@ -123,9 +149,22 @@ export const createPlantFilterStore = (
           setSlots: (slots) => set({ slots }),
           setTypes: (types) => set({ types }),
           setLevels: (levels) => set({ levels }),
+          setImageKind: (imageKind) => set({ imageKind }),
+
+          // 切检测面等于换了一批机台：把另一侧的已选机台一并裁掉，
+          // 否则它们还留在选中里，点「开始扫描」会把看不见的机台也扫进去。
+          setSide: (side) =>
+            set((state) => ({
+              side,
+              selectedMachines: pruneMachinesToSide(
+                state.selectedMachines,
+                side,
+              ),
+            })),
         }),
         {
-          // 只记勾选过的类型，日期/班次/时段/等级每次进页面都重新带出
+          // 只记勾选过的类型，日期/班次/时段/等级/图片类型每次进页面都重新带出：
+          // 图片类型决定读哪个目录，持久化会让明天打开时静默换成另一份图
           name: `filter-types:${category}`,
           partialize: (state) => ({ types: state.types }),
         },

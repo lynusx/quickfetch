@@ -36,6 +36,7 @@ const paramsSummary = (value: unknown): Record<string, unknown> => {
     slots: sample(params.slots),
     types: sample(params.types),
     levels: sample(params.levels),
+    aoiImageKind: params.aoiImageKind,
   }
 }
 

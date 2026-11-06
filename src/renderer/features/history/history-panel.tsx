@@ -33,7 +33,12 @@ const formatTime = (timestamp: number): string => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-/** 参数摘要：机台数量 + 日期/班次 + 时段/类型数量（无时段类别只显示类型） */
+/**
+ * 参数摘要：机台数量 + 日期/班次 + 时段/类型数量（无时段类别只显示类型）。
+ *
+ * 森标 AOI 的局部图要单独标出来：同一天同一类型的整体/局部两次扫描，
+ * 摘要长得一模一样，只能靠它区分。
+ */
 const summarize = (item: ScanHistoryItem): string => {
   const { machines, date, shift, slots, types } = item.params
   const day =
@@ -44,7 +49,9 @@ const summarize = (item: ScanHistoryItem): string => {
     ? `${slots.length} 时段 × ${types.length} 类型`
     : `${types.length} 类型`
 
-  return `${machines.length} 台机台 · ${day} ${shift} · ${scope}`
+  const kind = item.params.aoiImageKind === 'partial' ? ' · 局部' : ''
+
+  return `${machines.length} 台机台 · ${day} ${shift} · ${scope}${kind}`
 }
 
 interface HistoryPanelProps {

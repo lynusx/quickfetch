@@ -29,7 +29,10 @@ import {
   probeSharePath,
   readShareCandidate,
 } from '../src/main/services/scanner/shareProbe'
-import { createLxtResolver } from '../src/main/services/scanner/resolver'
+import {
+  createAoiResolver,
+  createLxtResolver,
+} from '../src/main/services/scanner/resolver'
 import {
   createLogger,
   formatLogLine,
@@ -46,7 +49,11 @@ import {
   toTask,
 } from '../src/main/services/scanner/history'
 import { deriveScanParams } from '../src/renderer/features/scan/scanParams'
-import { deriveCopyReadModel } from '../src/renderer/features/copy/copyReadModel'
+import { pruneMachinesToSide } from '../src/renderer/features/scan/stores/plantFilterStore'
+import {
+  deriveCopyReadModel,
+  previewSizeLabel,
+} from '../src/renderer/features/copy/copyReadModel'
 import { createTaskTable } from '../src/main/utils/taskTable'
 import type { CopyTask } from '../src/shared/ipc'
 import type { ScanTask } from '../src/shared/ipc'
@@ -56,9 +63,20 @@ import {
   CopyTaskRunner,
   SpeedMeter,
   filterByMachines,
+  planPreview,
 } from '../src/main/services/copy/copy'
+import {
+  cachedSizeOf,
+  measureImageSizes,
+} from '../src/main/services/copy/measure'
 import { useElCopyStore } from '../src/renderer/features/copy/copyStore'
-import { elPlantOf } from '../src/shared/ipc'
+import {
+  AOI_IMAGE_DIRS,
+  DEFAULT_AOI_IMAGE_KIND,
+  aoiSideOfMachines,
+  aoiSideOfName,
+  elPlantOf,
+} from '../src/shared/ipc'
 import type { ScanCategory, ScanTaskParams } from '../src/shared/ipc'
 
 const results: { name: string; ok: boolean; detail?: string }[] = []
@@ -342,7 +360,7 @@ const copyTests = async () => {
     assert.equal(
       failed.progress.failed,
       2,
-      `实际失败 ${failed.progress.failed}`,
+      `实际失败 ${failed.progress.failed}（${failed.status} / ${failed.error ?? '无错误'}）`,
     )
     assert.equal(failed.progress.copied, 7)
 
@@ -557,6 +575,120 @@ const copyTests = async () => {
     assert.equal(elPlantOf('B-LXJC-01'), 'west')
     assert.equal(elPlantOf('C01-A'), null)
     assert.equal(elPlantOf(''), null)
+  })
+
+  await test('复制预览: 体积只统计勾选的图片', async () => {
+    const preview = await planPreview(
+      [
+        ...images.slice(0, 2),
+        {
+          // 说明文件不是图片，不该算进「将复制 N 张」与体积
+          path: 'A02-A/EL/20261103/白班/8/NG_脏污_B/note.txt',
+          absolutePath: join(src, 'note.txt'),
+          name: 'note.txt',
+          machine: 'A02-A',
+        },
+      ],
+      { machines: ['A02-A'], layout: 'flat', conflict: 'rename' },
+    )
+
+    assert.equal(preview.total, 2)
+    // m0/m1 各写入了 data-0 / data-1，共 12 字节
+    assert.equal(preview.totalBytes, 12)
+    assert.equal(preview.sizeUnknown, 0)
+  })
+
+  await test('复制预览: stat 失败计入 sizeUnknown，已知体积照常累加', async () => {
+    const preview = await planPreview(
+      [
+        ...images.slice(0, 2),
+        {
+          path: 'A02-A/EL/20261103/白班/8/NG_脏污_B/missing.jpg',
+          absolutePath: join(src, 'does-not-exist.jpg'),
+          name: 'missing.jpg',
+          machine: 'A02-A',
+        },
+      ],
+      { machines: ['A02-A'], layout: 'flat', conflict: 'rename' },
+    )
+
+    assert.equal(preview.total, 3)
+    assert.equal(preview.totalBytes, 12)
+    assert.equal(preview.sizeUnknown, 1)
+  })
+
+  await test('复制预览: 超过 5000 张跳过 stat，全部按未知', async () => {
+    const many = Array.from({ length: 5001 }, (_, i) => ({
+      path: `A02-A/EL/20261103/白班/8/NG_脏污_B/${i}.jpg`,
+      absolutePath: join(src, `${i}.jpg`),
+      name: `${i}.jpg`,
+      machine: 'A02-A',
+    }))
+
+    const preview = await planPreview(many, {
+      machines: ['A02-A'],
+      layout: 'flat',
+      conflict: 'rename',
+    })
+
+    assert.equal(preview.total, 5001)
+    assert.equal(preview.totalBytes, 0)
+    assert.equal(preview.sizeUnknown, 5001)
+  })
+
+  await test('体积缓存: 预检查与复制量测复用同一份 size', async () => {
+    const file = join(src, 'cache-me.jpg')
+    await writeFile(file, 'abcd')
+    const image = {
+      path: 'A02-A/EL/20261103/白班/8/NG_脏污_B/cache-me.jpg',
+      absolutePath: file,
+      name: 'cache-me.jpg',
+      machine: 'A02-A',
+    }
+
+    const first = await measureImageSizes([image])
+    assert.equal(first.totalBytes, 4)
+
+    // 同名文件被改写后，缓存仍给第一次的结论：产出图只读，不会天天变
+    await writeFile(file, 'abcdefgh')
+    const second = await measureImageSizes([image])
+    assert.equal(second.totalBytes, 4)
+    assert.equal(await cachedSizeOf(file), 4)
+  })
+
+  await test('复制面板: 体积文案', async () => {
+    assert.equal(previewSizeLabel(null, true), '计算中…')
+    assert.equal(previewSizeLabel(null, false), null)
+    assert.equal(
+      previewSizeLabel(
+        {
+          machines: ['A'],
+          total: 2,
+          perMachine: [],
+          folders: [],
+          conflicts: 0,
+          totalBytes: 0,
+          sizeUnknown: 2,
+        },
+        false,
+      ),
+      '大小未知',
+    )
+    assert.equal(
+      previewSizeLabel(
+        {
+          machines: ['A'],
+          total: 2,
+          perMachine: [],
+          folders: [],
+          conflicts: 0,
+          totalBytes: 2048,
+          sizeUnknown: 0,
+        },
+        false,
+      ),
+      '2 KB',
+    )
   })
 }
 
@@ -1665,6 +1797,37 @@ const scanParamsTests = async () => {
     assert.deepEqual(plWithLevel.params.levels, ['A'])
   })
 
+  await test('页面参数: AOI 图片类型进参数与指纹', async () => {
+    const whole = deriveScanParams({
+      ...base,
+      hasSlots: false,
+      requiresLevels: false,
+      imageKind: 'whole',
+    })
+    const partial = deriveScanParams({
+      ...base,
+      hasSlots: false,
+      requiresLevels: false,
+      imageKind: 'partial',
+    })
+
+    assert.equal(whole.params.aoiImageKind, 'whole')
+    assert.equal(partial.params.aoiImageKind, 'partial')
+    assert.notEqual(
+      whole.filterSignature,
+      partial.filterSignature,
+      '整体/局部读的是两个目录，换一种就等于换了扫描范围',
+    )
+
+    // 非 AOI 类别不传 imageKind 时不能把字段带进参数
+    const el = deriveScanParams({
+      ...base,
+      hasSlots: true,
+      requiresLevels: false,
+    })
+    assert.equal('aoiImageKind' in el.params, false)
+  })
+
   await test('页面参数: 类型清单为空时提示去编辑', async () => {
     const derived = deriveScanParams({
       ...base,
@@ -1676,6 +1839,138 @@ const scanParamsTests = async () => {
 
     assert.equal(derived.ready, false)
     assert.ok(derived.missing.includes('类型（点「编辑」添加）'))
+  })
+}
+
+const aoiTests = async () => {
+  const fakeHost = '\\\\10.108.9.132'
+  const hosts = () => new Map([['东区/1A正检', fakeHost]])
+
+  await test('AOI: 默认读 SaveImages，局部读 SaveSmallImages', async () => {
+    const whole = createAoiResolver({ hosts: hosts() })
+    assert.equal(whole.shape.baseName, AOI_IMAGE_DIRS.whole)
+    assert.equal(whole.shape.baseName, 'SaveImages')
+
+    const wholeResolved = await whole.resolve('东区/1A正检')
+    assert.equal(wholeResolved.ok, true)
+    if (!wholeResolved.ok) return
+    assert.equal(wholeResolved.base, join(fakeHost, 'SaveImages'))
+    assert.deepEqual(
+      whole.segments(
+        '东区/1A正检',
+        join(wholeResolved.base, '20261103', '20.5', '色斑B-'),
+      ),
+      ['东区', '1A正检', '20261103', '20.5', '色斑B-'],
+      '展示路径里不应出现共享名',
+    )
+
+    const partial = createAoiResolver({ hosts: hosts(), imageKind: 'partial' })
+    assert.equal(partial.shape.baseName, 'SaveSmallImages')
+    const partialResolved = await partial.resolve('东区/1A正检')
+    assert.equal(partialResolved.ok, true)
+    if (!partialResolved.ok) return
+    assert.equal(partialResolved.base, join(fakeHost, 'SaveSmallImages'))
+  })
+
+  await test('AOI: 缺省 imageKind 按整张扫描图处理（老历史记录）', async () => {
+    const resolver = createAoiResolver({ hosts: hosts() })
+    assert.equal(
+      resolver.shape.baseName,
+      AOI_IMAGE_DIRS[DEFAULT_AOI_IMAGE_KIND],
+    )
+  })
+
+  await test('AOI: 机台不在入口里时仍在共享名处断链', async () => {
+    const resolver = createAoiResolver({ hosts: new Map() })
+
+    assert.ok(resolver.validate(), '没有机台时 validate 必须报错')
+    const resolved = await resolver.resolve('东区/1A正检')
+    assert.equal(resolved.ok, false)
+    if (resolved.ok) return
+    assert.equal(resolved.brokenAt, '共享名')
+  })
+
+  await test('AOI: 整体/局部各自只读到对应目录的图', async () => {
+    const { ScanTaskRunner } = await import('../src/main/services/scanner/task')
+    const root = await mkdtemp(join(tmpdir(), 'qf-aoi-kind-'))
+
+    // 真机上第二层是两个同级目录；这里用临时目录冒充主机
+    const wholeDir = join(root, 'SaveImages', '20261103', '20.5', '色斑B-')
+    const partialDir = join(
+      root,
+      'SaveSmallImages',
+      '20261103',
+      '20.5',
+      '色斑B-',
+    )
+    await mkdirP(wholeDir, { recursive: true })
+    await mkdirP(partialDir, { recursive: true })
+    await writeFile(join(wholeDir, 'A02_1.bmp'), 'x')
+    await writeFile(join(partialDir, 'A02_1.jpg'), 'x')
+
+    const scan = async (imageKind: 'whole' | 'partial') => {
+      const runner = new ScanTaskRunner(
+        {
+          category: 'aoi',
+          machines: ['东区/1A正检'],
+          date: '20261103',
+          shift: '夜班',
+          slots: [],
+          types: ['色斑B-'],
+        },
+        {
+          category: 'aoi',
+          resolver: createAoiResolver({
+            hosts: new Map([['东区/1A正检', root]]),
+            imageKind,
+          }),
+          load: { readConcurrency: 2, machineBatchSize: 2 },
+        },
+        () => undefined,
+      )
+
+      runner.start()
+      await runner.waitSettled()
+
+      return runner
+    }
+
+    const whole = await scan('whole')
+    const wholeImages = whole.getImages()
+    assert.equal(wholeImages.length, 1)
+    assert.ok(wholeImages[0].name.endsWith('.bmp'), wholeImages[0].name)
+
+    const partial = await scan('partial')
+    const partialImages = partial.getImages()
+    assert.equal(partialImages.length, 1)
+    assert.ok(partialImages[0].name.endsWith('.jpg'), partialImages[0].name)
+  })
+
+  await test('检测面: 机台名与机台键的判定', async () => {
+    assert.equal(aoiSideOfName('1A正检'), 'front')
+    assert.equal(aoiSideOfName('10B背检'), 'back')
+    assert.equal(aoiSideOfName('1A'), null)
+
+    assert.equal(aoiSideOfMachines([]), 'all')
+    assert.equal(aoiSideOfMachines(['东区/1A正检', '东区/2A正检']), 'front')
+    assert.equal(aoiSideOfMachines(['东区/1A背检']), 'back')
+    assert.equal(
+      aoiSideOfMachines(['东区/1A正检', '东区/1A背检']),
+      'all',
+      '混选时必须回到全部，否则恢复后有机台被列表藏起来',
+    )
+    assert.equal(aoiSideOfMachines(['东区/1A']), 'all')
+  })
+
+  await test('检测面: 切换时裁掉另一侧已选机台', async () => {
+    const selected = ['东区/1A正检', '东区/1A背检', '东区/2A正检']
+
+    assert.deepEqual(pruneMachinesToSide(selected, 'front'), [
+      '东区/1A正检',
+      '东区/2A正检',
+    ])
+    assert.deepEqual(pruneMachinesToSide(selected, 'back'), ['东区/1A背检'])
+    assert.deepEqual(pruneMachinesToSide(selected, 'all'), selected)
   })
 }
 
@@ -1988,6 +2283,8 @@ const main = async () => {
   await copyReadModelTests()
   console.log('\n[15] 任务表淘汰')
   await taskTableTests()
+  console.log('\n[16] 森标 AOI 图片类型与检测面')
+  await aoiTests()
 
   const failed = results.filter((r) => !r.ok)
   console.log(`\n共 ${results.length} 项，失败 ${failed.length} 项`)

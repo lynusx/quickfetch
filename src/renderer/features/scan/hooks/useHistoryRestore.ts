@@ -8,7 +8,11 @@ import { usePlFilterStore } from '../stores/plFilterStore'
 import type { PlantFilterStore } from '../stores/plantFilterStore'
 import { copyStoreOf } from '@/features/copy'
 import { scanStoreOf } from '../stores/scanStore'
-import { elPlantOf } from '@shared/ipc'
+import {
+  aoiSideOfMachines,
+  DEFAULT_AOI_IMAGE_KIND,
+  elPlantOf,
+} from '@shared/ipc'
 import type { ScanCategory, ScanHistoryItem } from '@shared/ipc'
 import { toErrorMessage } from '@/utils/error'
 
@@ -62,6 +66,14 @@ const fillFilters = (category: ScanCategory, item: ScanHistoryItem): void => {
   const plant = picked[0]?.split('/')[0] ?? ''
 
   if (plant) filters.setPlant(plant)
+
+  // 森标 AOI 多两个条件：图片类型决定重扫时读哪个目录，检测面从机台键推断。
+  // 顺序不能反：setPlant 清空选中，setSide 会裁掉另一侧，最后再回填机台。
+  // 推断成「全部」时不会裁掉任何机台，恢复结果与历史一致。
+  if (category === 'aoi') {
+    filters.setImageKind(item.params.aoiImageKind ?? DEFAULT_AOI_IMAGE_KIND)
+    filters.setSide(aoiSideOfMachines(picked))
+  }
 
   filters.setSelectedMachines(picked)
   filters.setDate(date)

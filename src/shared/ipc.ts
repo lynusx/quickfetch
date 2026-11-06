@@ -51,8 +51,9 @@ export interface MachineInfo {
  * - lxt：每台机器一个 IP，入口是一堆 .lnk 快捷方式，第二层是 el / SaveImages
  * - pl：同样每台机器一个 IP、同样从 .lnk 取地址，但第二层是「机台标识」目录
  *   （名字不固定，按线别名探测），再往下多出机台名与 Fail/等级两层
- * - aoi：同样每台机器一个 IP、同样从 .lnk 取地址，第二层固定 SaveImages，
- *   再往下是日期 → 班次目录（8.5/20.5）→ 类型，没有时段与等级层
+ * - aoi：同样每台机器一个 IP、同样从 .lnk 取地址，第二层按图片类型二选一
+ *   （SaveImages 整张扫描图 / SaveSmallImages 局部裁图），再往下是日期 →
+ *   班次目录（8.5/20.5）→ 类型，没有时段与等级层
  */
 export type ScanCategory = 'el' | 'lxt' | 'pl' | 'aoi'
 
@@ -81,8 +82,70 @@ export type LxtShare = (typeof LXT_SHARES)[number]
  */
 export type ShareState<T extends string = string> = T | '' | null
 
-/** 森标 AOI 第二层固定共享名，不需要逐台探测 */
-export const AOI_SHARE = 'SaveImages'
+/**
+ * 森标 AOI 的图片类型：第二层目录由它决定，不需要逐台探测。
+ *
+ * - whole：SaveImages，整张扫描图，`.bmp`，单张几十 MB
+ * - partial：SaveSmallImages，异常区域的局部裁图，`.jpg`，单张几 KB
+ *
+ * 两个目录是同级、子结构完全一致；选哪个就得扫哪一份，所以它属于扫描参数，
+ * 要跟着结果一起落盘与回填，不能只在界面里记着。
+ */
+export type AoiImageKind = 'whole' | 'partial'
+
+export const AOI_IMAGE_DIRS: Record<AoiImageKind, string> = {
+  whole: 'SaveImages',
+  partial: 'SaveSmallImages',
+}
+
+export const AOI_IMAGE_KIND_LABEL: Record<AoiImageKind, string> = {
+  whole: '整体',
+  partial: '局部',
+}
+
+/** 老历史记录没有这个字段，一律按整张扫描图处理 */
+export const DEFAULT_AOI_IMAGE_KIND: AoiImageKind = 'whole'
+
+/**
+ * 森标 AOI 机台的检测面：机台名以「正检」「背检」结尾（如 1A正检）。
+ *
+ * 只是列表筛选，不进路径，也不进扫描参数；判定只写在这里一处。
+ */
+export type AoiSide = 'all' | 'front' | 'back'
+
+export const AOI_SIDE_LABEL: Record<AoiSide, string> = {
+  all: '全部',
+  front: '正面',
+  back: '背面',
+}
+
+export const aoiSideOfName = (name: string): AoiSide | null => {
+  if (name.includes('正检')) return 'front'
+  if (name.includes('背检')) return 'back'
+
+  return null
+}
+
+/** 复合键「厂区/机台」→ 检测面；键里没有斜杠时按整串判 */
+export const aoiSideOfKey = (key: string): AoiSide | null => {
+  const index = key.indexOf('/')
+
+  return aoiSideOfName(index === -1 ? key : key.slice(index + 1))
+}
+
+/**
+ * 一组机台键的检测面：全正面 → front，全背面 → back，
+ * 混选、空集或名字里认不出 → all。
+ */
+export const aoiSideOfMachines = (keys: string[]): AoiSide => {
+  const sides = new Set(keys.map(aoiSideOfKey))
+
+  if (sides.size !== 1) return 'all'
+
+  const [only] = sides
+
+  return only === 'front' || only === 'back' ? only : 'all'
+}
 
 /** 森标 AOI 班次目录映射；参数与历史里仍保存「白班/夜班」 */
 export const AOI_SHIFT_DIRS: Record<'白班' | '夜班', string> = {
@@ -246,7 +309,7 @@ export interface AoiMachine {
   /** .lnk 解析出的目标，形如 \\10.108.230.116 */
   host: string
   /**
-   * 森标 AOI 的第二层固定为 SaveImages，没有探测缓存。
+   * 森标 AOI 的第二层由图片类型决定（见 AoiImageKind），没有探测缓存。
    * 保留该字段只是为了复用入口识别/合并逻辑，恒为 null。
    */
   share: null
@@ -284,6 +347,11 @@ export interface ScanTaskParams {
    * 其余类别的路径没有这一层，留空即可。
    */
   levels?: string[]
+  /**
+   * 图片类型，仅森标 AOI 使用：决定第二层读 SaveImages 还是 SaveSmallImages。
+   * 省略时按整张扫描图处理（老历史记录没有这个字段）。
+   */
+  aoiImageKind?: AoiImageKind
 }
 
 export interface ScannedImage {
@@ -646,6 +714,10 @@ export interface CopyPlanPreview {
    * 让用户在选目录前就知道「这次会不会动到已有文件」。
    */
   conflicts: number
+  /** 选中文件的总字节数；stat 失败的项不计入 */
+  totalBytes: number
+  /** 拿不到 size 的选中文件数；与 totalBytes 一起决定能否显示体积 */
+  sizeUnknown: number
 }
 
 /**

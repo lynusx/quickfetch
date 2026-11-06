@@ -22,6 +22,12 @@ const AoiMachinePicker = ({ machines, onChanged }: AoiMachinePickerProps) => {
   const setupAoi = useSettingsStore((state) => state.setupAoi)
   const refreshAoi = useSettingsStore((state) => state.refreshAoi)
 
+  // 图片类型决定第二层目录，检测面只筛列表；两者都只属于森标 AOI
+  const imageKind = useAoiFilterStore((state) => state.imageKind)
+  const side = useAoiFilterStore((state) => state.side)
+  const setImageKind = useAoiFilterStore((state) => state.setImageKind)
+  const setSide = useAoiFilterStore((state) => state.setSide)
+
   return (
     <PlantMachinePicker
       machines={machines}
@@ -32,9 +38,11 @@ const AoiMachinePicker = ({ machines, onChanged }: AoiMachinePickerProps) => {
       filter={useAoiFilterStore}
       onSetup={setupAoi}
       onRefresh={refreshAoi}
-      // 森标 AOI 的第二层固定为 SaveImages，没有共享名可探测，
-      // 也就没有「重新探测共享」与「未探测」徽标可言
+      // 森标 AOI 的第二层按图片类型二选一（SaveImages / SaveSmallImages），
+      // 没有共享名可探测，也就没有「重新探测共享」与「未探测」徽标可言
       showShareBadge={false}
+      imageKind={{ value: imageKind, onChange: setImageKind }}
+      side={{ value: side, onChange: setSide }}
       labels={{
         rootPlaceholder: '\\\\10.108.x.x\\share\\森标-在线AOI',
         rootHint:

@@ -1,8 +1,30 @@
-import type { CopyTask } from '@shared/ipc'
+import type { CopyPlanPreview, CopyTask } from '@shared/ipc'
+import { formatFileSize } from '@/utils/common'
 
 export interface CopyMachineStat {
   machine: string
   images: number
+}
+
+/**
+ * 「要复制的机台」标题行里的体积文案。
+ *
+ * - 重算中显示「计算中…」，避免拿上一次勾选的旧体积配这一次的张数
+ * - 全部 stat 失败（或超过 5000 张跳过量测）显示「大小未知」，不要显示 0 Bytes
+ * - 部分失败时显示已知部分之和
+ * - 没有预检查结果（一台都没选）时不显示
+ */
+export const previewSizeLabel = (
+  preview: CopyPlanPreview | null,
+  previewing: boolean,
+): string | null => {
+  if (previewing) return '计算中…'
+  if (!preview) return null
+  if (preview.total > 0 && preview.sizeUnknown >= preview.total) {
+    return '大小未知'
+  }
+
+  return formatFileSize(preview.totalBytes)
 }
 
 export interface CopyReadModelInput {

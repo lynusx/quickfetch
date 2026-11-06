@@ -266,7 +266,7 @@ export const normalizePl = (raw: unknown): PlSettings => {
 /**
  * 归一化森标 AOI 配置。
  *
- * 与力禧特/利珀一样按「厂区/机台」重算 key；第二层固定 SaveImages，
+ * 与力禧特/利珀一样按「厂区/机台」重算 key；第二层按图片类型二选一，
  * 没有需要持久化的探测缓存，share 一律写成 null。
  */
 export const normalizeAoi = (raw: unknown): AoiSettings => {
