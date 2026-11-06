@@ -35,14 +35,15 @@ const AoiScanPage = () => {
 
   const configured = Boolean(aoi.entryRoot)
   const active = aoi.machines.filter((item) => !item.stale)
-  const { ready, missing, filterSignature, getParams } = usePlantScanPage({
-    store: useAoiFilterStore,
-    configured,
-    hasSlots: META.hasSlots,
-    requiresLevels: META.requiresLevels,
-    typeCatalog: aoiTypes,
-    hasImageKind: META.hasImageKind,
-  })
+  const { ready, missing, filterSignature, getParams, getSignature } =
+    usePlantScanPage({
+      store: useAoiFilterStore,
+      configured,
+      hasSlots: META.hasSlots,
+      requiresLevels: META.requiresLevels,
+      typeCatalog: aoiTypes,
+      hasImageKind: META.hasImageKind,
+    })
 
   return (
     <PlantScanPage
@@ -60,6 +61,7 @@ const AoiScanPage = () => {
       missing={missing}
       getParams={getParams}
       filterSignature={filterSignature}
+      getSignature={getSignature}
       picker={<AoiMachinePicker machines={aoi.machines} />}
       filterPanel={<AoiFilterPanel />}
     />

@@ -7,6 +7,13 @@ import { useLxtFilterStore } from '../stores/lxtFilterStore'
 import { usePlFilterStore } from '../stores/plFilterStore'
 import type { PlantFilterStore } from '../stores/plantFilterStore'
 import { copyStoreOf } from '@/features/copy'
+import {
+  selectAoi,
+  selectLxt,
+  selectPl,
+  useSettingsStore,
+  useUserPreferencesStore,
+} from '@/features/settings'
 import { scanStoreOf } from '../stores/scanStore'
 import {
   aoiSideOfMachines,
@@ -14,6 +21,7 @@ import {
   elPlantOf,
 } from '@shared/ipc'
 import type { ScanCategory, ScanHistoryItem } from '@shared/ipc'
+import { SCAN_CATEGORY_META } from '@shared/scanCategories'
 import { toErrorMessage } from '@/utils/error'
 
 /**
@@ -86,6 +94,53 @@ const fillFilters = (category: ScanCategory, item: ScanHistoryItem): void => {
   if (category === 'pl' && levels?.length) filters.setLevels(levels)
 }
 
+/** 当前类别仍在入口里的机台；EL 是机台名，其余是「厂区/机台」复合键 */
+const activeMachines = (category: ScanCategory): string[] => {
+  const state = useSettingsStore.getState()
+
+  if (category === 'el') {
+    return (state.settings?.machines ?? []).map((item) => item.name)
+  }
+
+  const entry =
+    category === 'lxt'
+      ? selectLxt(state)
+      : category === 'pl'
+        ? selectPl(state)
+        : selectAoi(state)
+
+  return entry.machines.filter((item) => !item.stale).map((item) => item.key)
+}
+
+/**
+ * 把回填后的筛选条件收敛到「当前仍存在的类型与机台」。
+ *
+ * 以前这一步靠渲染后的 effect（筛选面板与机台选择器各自 prune），
+ * 再等一个 setTimeout 让 effect 先跑。现在在恢复流程里同步做完，
+ * 落任务时签名已经稳定，不需要时钟对齐。
+ */
+const normalizeFilters = (category: ScanCategory): void => {
+  const meta = SCAN_CATEGORY_META[category]
+  const catalog = useUserPreferencesStore.getState()[meta.typeCatalogKey]
+  const store =
+    category === 'el' ? useElFilterStore : plantFilterStores[category]
+  const filters = store.getState()
+
+  const alive = filters.types.filter((type) => catalog.includes(type))
+  if (alive.length !== filters.types.length) filters.setTypes(alive)
+
+  filters.pruneSelected(activeMachines(category))
+}
+
+export interface HistoryRestoreOptions {
+  /**
+   * 筛选已归一化、任务快照即将落盘时调用。
+   *
+   * session 在这里把指纹基线推进到新范围，避免恢复被当成「用户改了范围」。
+   */
+  onRestored: () => void
+}
+
 /**
  * 载入一条历史记录：还原参数、清掉上一轮的复制状态、替换当前任务快照。
  *
@@ -93,8 +148,12 @@ const fillFilters = (category: ScanCategory, item: ScanHistoryItem): void => {
  * 重启后当前任务快照是空的，历史就是唯一的入口，所以这个动作
  * 必须在每个扫描页都可用。
  */
-export const useHistoryRestore = (category: ScanCategory) => {
+export const useHistoryRestore = (
+  category: ScanCategory,
+  options: HistoryRestoreOptions,
+) => {
   const { showToast } = useToast()
+  const { onRestored } = options
 
   return useCallback(
     async (item: ScanHistoryItem) => {
@@ -111,14 +170,16 @@ export const useHistoryRestore = (category: ScanCategory) => {
         }
 
         fillFilters(category, item)
+        normalizeFilters(category)
+
+        // 指纹基线推进到恢复后的范围；这一步必须仍在同步块里，
+        // 否则 React 可能先跑一次 effect，把恢复当成用户改范围
+        onRestored()
 
         // 上一轮的复制进度属于另一次结果，留着会让「复制」按钮状态错乱
         copyStoreOf(category).getState().reset()
 
-        // 等筛选面板把历史参数归一化（剪掉不存在的类型/机台）后再落任务。
-        // 这样参数回填不会被 useResetOnParamChange 当成"用户改了范围"，
-        // 也不再需要原来的 500ms 墙钟窗口。
-        await new Promise((resolve) => setTimeout(resolve, 0))
+        // 筛选已同步归一化，直接落任务；不再等 setTimeout
         scanStoreOf(category).getState().setTask(loaded)
 
         showToast(
@@ -134,6 +195,6 @@ export const useHistoryRestore = (category: ScanCategory) => {
         )
       }
     },
-    [category, showToast],
+    [category, showToast, onRestored],
   )
 }

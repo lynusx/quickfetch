@@ -51,6 +51,7 @@ import {
   toTask,
 } from '../src/main/services/scanner/history'
 import { deriveScanParams } from '../src/renderer/features/scan/scanParams'
+import { decideSignatureChange } from '../src/renderer/features/scan/sessionTransitions'
 import { pruneMachinesToSide } from '../src/renderer/features/scan/stores/plantFilterStore'
 import { useUserPreferencesStore } from '../src/renderer/features/settings/userPreferencesStore'
 import {
@@ -2041,6 +2042,21 @@ const scanParamsTests = async () => {
       requiresLevels: false,
     })
     assert.equal('aoiImageKind' in el.params, false)
+  })
+
+  await test('会话时序: 指纹变化只在用户改范围时清结果', async () => {
+    // 首次只记基线
+    assert.equal(decideSignatureChange(null, 'a', 'completed'), 'adopt')
+    assert.equal(decideSignatureChange('a', 'a', 'completed'), 'ignore')
+
+    // 用户改范围：已结束的才清，运行中不清
+    assert.equal(decideSignatureChange('a', 'b', 'completed'), 'reset')
+    assert.equal(decideSignatureChange('a', 'b', 'interrupted'), 'reset')
+    assert.equal(decideSignatureChange('a', 'b', 'running'), 'adopt')
+    assert.equal(decideSignatureChange('a', 'b', null), 'adopt')
+
+    // 恢复历史把基线推进到恢复后的指纹后，同一个指纹不再算变化
+    assert.equal(decideSignatureChange('b', 'b', 'completed'), 'ignore')
   })
 
   await test('页面参数: 类型清单为空时提示去编辑', async () => {

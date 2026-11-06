@@ -1,3 +1,5 @@
+import { useCallback } from 'react'
+
 import type { PlantFilterStore } from '../stores/plantFilterStore'
 import { deriveScanParams } from '../scanParams'
 
@@ -53,8 +55,34 @@ export const usePlantScanPage = ({
     imageKind: hasImageKind ? imageKind : undefined,
   })
 
+  /**
+   * 按 store 的**当前**状态重算指纹。
+   *
+   * 历史恢复会在同一个同步块里改完筛选；渲染时捕获的 derived 还是旧值，
+   * 所以恢复流程需要在改完之后再问一次「现在的指纹是什么」。
+   */
+  const getSignature = useCallback(() => {
+    const state = store.getState()
+
+    return deriveScanParams({
+      configured,
+      plant: state.plant,
+      selectedMachines: state.selectedMachines,
+      date: state.date,
+      shift: state.shift,
+      slots: state.slots,
+      types: state.types,
+      levels: state.levels,
+      hasSlots,
+      requiresLevels,
+      typeCatalog,
+      imageKind: hasImageKind ? state.imageKind : undefined,
+    }).filterSignature
+  }, [store, configured, hasSlots, requiresLevels, typeCatalog, hasImageKind])
+
   return {
     ...derived,
     getParams: () => derived.params,
+    getSignature,
   }
 }

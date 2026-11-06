@@ -20,13 +20,14 @@ const ElScanPage = () => {
   const ngTypes = useUserPreferencesStore((state) => state[META.typeCatalogKey])
   const configured = Boolean(settings?.rootPath)
 
-  const { ready, missing, filterSignature, getParams } = usePlantScanPage({
-    store: useElFilterStore,
-    configured,
-    hasSlots: META.hasSlots,
-    requiresLevels: META.requiresLevels,
-    typeCatalog: ngTypes,
-  })
+  const { ready, missing, filterSignature, getParams, getSignature } =
+    usePlantScanPage({
+      store: useElFilterStore,
+      configured,
+      hasSlots: META.hasSlots,
+      requiresLevels: META.requiresLevels,
+      typeCatalog: ngTypes,
+    })
 
   return (
     <PlantScanPage
@@ -43,6 +44,7 @@ const ElScanPage = () => {
       missing={missing}
       getParams={getParams}
       filterSignature={filterSignature}
+      getSignature={getSignature}
       picker={<ElSetupPanel />}
       filterPanel={<ElFilterPanel />}
     />

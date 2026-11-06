@@ -34,13 +34,14 @@ const LxtScanPage = () => {
 
   const configured = Boolean(lxt.entryRoot)
   const active = lxt.machines.filter((item) => !item.stale)
-  const { ready, missing, filterSignature, getParams } = usePlantScanPage({
-    store: useLxtFilterStore,
-    configured,
-    hasSlots: META.hasSlots,
-    requiresLevels: META.requiresLevels,
-    typeCatalog: lxtTypes,
-  })
+  const { ready, missing, filterSignature, getParams, getSignature } =
+    usePlantScanPage({
+      store: useLxtFilterStore,
+      configured,
+      hasSlots: META.hasSlots,
+      requiresLevels: META.requiresLevels,
+      typeCatalog: lxtTypes,
+    })
 
   return (
     <PlantScanPage
@@ -58,6 +59,7 @@ const LxtScanPage = () => {
       missing={missing}
       getParams={getParams}
       filterSignature={filterSignature}
+      getSignature={getSignature}
       picker={<LxtMachinePicker machines={lxt.machines} />}
       filterPanel={<LxtFilterPanel />}
     />

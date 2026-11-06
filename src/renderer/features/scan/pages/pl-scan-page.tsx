@@ -32,13 +32,14 @@ const PlScanPage = () => {
 
   const configured = Boolean(pl.entryRoot)
   const active = pl.machines.filter((item) => !item.stale)
-  const { ready, missing, filterSignature, getParams } = usePlantScanPage({
-    store: usePlFilterStore,
-    configured,
-    hasSlots: META.hasSlots,
-    requiresLevels: META.requiresLevels,
-    typeCatalog: plTypes,
-  })
+  const { ready, missing, filterSignature, getParams, getSignature } =
+    usePlantScanPage({
+      store: usePlFilterStore,
+      configured,
+      hasSlots: META.hasSlots,
+      requiresLevels: META.requiresLevels,
+      typeCatalog: plTypes,
+    })
 
   return (
     <PlantScanPage
@@ -56,6 +57,7 @@ const PlScanPage = () => {
       missing={missing}
       getParams={getParams}
       filterSignature={filterSignature}
+      getSignature={getSignature}
       picker={<PlMachinePicker machines={pl.machines} />}
       filterPanel={<PlFilterPanel />}
     />

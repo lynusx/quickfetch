@@ -36,6 +36,8 @@ interface PlantScanPageProps {
    * 避免"切了日期，右边还挂着上一次的结论"。
    */
   filterSignature: string
+  /** 按 store 当前状态重算指纹；历史恢复后用它推进基线 */
+  getSignature: () => string
   picker: ReactNode
   filterPanel: ReactNode
 }
@@ -52,6 +54,7 @@ const PlantScanPage = ({
   missing,
   getParams,
   filterSignature,
+  getSignature,
   picker,
   filterPanel,
 }: PlantScanPageProps) => {
@@ -70,7 +73,13 @@ const PlantScanPage = ({
     cancel,
     restoreHistory,
     clearResult,
-  } = useScanSession({ category, showToast, getParams, filterSignature })
+  } = useScanSession({
+    category,
+    showToast,
+    getParams,
+    filterSignature,
+    getSignature,
+  })
 
   const canStart = ready && !busy && !creating && !other
 
