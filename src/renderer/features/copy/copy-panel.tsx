@@ -29,7 +29,7 @@ import { ROUTES } from '@/routes/paths'
 import { useImageCopy } from './useImageCopy'
 import { copyStoreOf } from './copyStore'
 import CopyProgress from './copy-progress'
-import { deriveCopyReadModel, previewSizeLabel } from './copyReadModel'
+import { previewSizeLabel } from './copyReadModel'
 import { selectPreferences, useSettingsStore } from '@/features/settings'
 import type { CopyConflictPolicy, ScanCategory } from '@shared/ipc'
 import { COPY_CONFLICT_LABEL, COPY_LAYOUT_LABEL } from '@shared/ipc'
@@ -58,6 +58,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
     preview,
     previewing,
     targetDir,
+    readModel,
     busy,
     error,
     canCopy,
@@ -94,7 +95,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
     activeDir,
     done,
     percent,
-  } = deriveCopyReadModel({ task, machines, machineStats, targetDir })
+  } = readModel
 
   const sizeLabel = previewSizeLabel(preview, previewing)
 

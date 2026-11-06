@@ -1,6 +1,11 @@
 import { BrowserWindow } from 'electron'
 
-import type { ScanTask, ScanTaskParams } from '../../../shared/ipc'
+import type {
+  ScanTask,
+  ScanTaskParams,
+  ScanTaskStatus,
+} from '../../../shared/ipc'
+import { isFinalScanStatus } from '../../../shared/ipc'
 
 import { DEFAULT_HISTORY_LIMIT } from '../../../shared/historyLimit'
 import { readSettings } from '../settings'
@@ -36,11 +41,8 @@ const currentHistoryLimit = async (): Promise<number> =>
   (await readSettings().catch(() => null))?.historyLimit ??
   DEFAULT_HISTORY_LIMIT
 
-const isFinished = (status: string): boolean =>
-  status === 'completed' ||
-  status === 'canceled' ||
-  status === 'failed' ||
-  status === 'interrupted'
+const isFinished = (status: ScanTaskStatus): boolean =>
+  isFinalScanStatus(status)
 
 /**
  * 任务结束时把结果写入历史。

@@ -19,6 +19,7 @@ import type {
   ScanTaskStatus,
   ScannedImage,
 } from '../../../shared/ipc'
+import { isSettledScanStatus } from '../../../shared/ipc'
 
 import {
   normalizeHistoryLimit,
@@ -67,7 +68,7 @@ const isRecord = (value: unknown): value is HistoryRecord => {
 
 /** 任务已经跑完的三种终态，其余状态都算「中途」 */
 const isSettled = (status: ScanTaskStatus): boolean =>
-  status === 'completed' || status === 'canceled' || status === 'failed'
+  isSettledScanStatus(status)
 
 const isHistoryItem = (value: unknown): value is ScanHistoryItem => {
   if (typeof value !== 'object' || value === null) return false

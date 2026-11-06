@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 import type { CopyTask, ScanCategory } from '@shared/ipc'
+import { isFinalCopyStatus } from '@shared/ipc'
 import { copyStoreOf } from './copyStore'
+import { deriveCopyReadModel } from './copyReadModel'
 import { scanStoreOf } from '@/features/scan'
 import { selectPreferences, useSettingsStore } from '@/features/settings'
 import { formatFileSize } from '@/utils/common'
@@ -15,9 +17,6 @@ interface UseImageCopyProps {
     type: 'success' | 'error' | 'info',
   ) => void
 }
-
-const isFinal = (status: CopyTask['status'] | undefined): boolean =>
-  status === 'completed' || status === 'canceled' || status === 'failed'
 
 /**
  * 复制流程的编排。
@@ -71,7 +70,7 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
       patchTask(next)
 
       // 只在「刚结束」这一帧提示一次，后续重复推送不再打扰
-      if (!isFinal(next.status)) return
+      if (!isFinalCopyStatus(next.status)) return
       if (next.status === 'canceled') return
 
       const key = `${next.id}:${next.status}:${next.progress.finishedAt ?? 0}`
@@ -145,10 +144,19 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
     )
   }, [task, machineStats, syncMachines])
 
-  const pickedStats = machineStats.filter((item) =>
-    machines.includes(item.machine),
+  // 显示值、动作值（能否开始、打开哪个目录）都只从 read model 取
+  const readModel = useMemo(
+    () =>
+      deriveCopyReadModel({
+        task: copying,
+        scanTask: task,
+        machines,
+        machineStats,
+        targetDir,
+        busy,
+      }),
+    [copying, task, machines, machineStats, targetDir, busy],
   )
-  const pickedCount = pickedStats.reduce((sum, item) => sum + item.images, 0)
 
   /**
    * 预检查的请求序号。
@@ -239,12 +247,12 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
       showToast('没有可复制的图片', '请先完成一次扫描', 'info')
       return
     }
-    if (!pickedCount) {
+    if (!readModel.pickedCount) {
       showToast('没有勾选机台', '请至少勾选 1 台机台', 'info')
       return
     }
 
-    const dir = targetDir || copying?.progress.targetDir
+    const dir = readModel.revealDir
 
     if (!dir) {
       showToast('还没选目标目录', '请先点「选择目录」指定保存位置', 'info')
@@ -270,9 +278,8 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
     }
   }, [
     task,
-    pickedCount,
-    targetDir,
-    copying,
+    readModel.pickedCount,
+    readModel.revealDir,
     machines,
     layout,
     conflict,
@@ -330,38 +337,15 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
   )
 
   const handleReveal = useCallback(async () => {
-    // 优先打开界面上显示的那个目录：复制完成后换了新目录，
-    // 「打开」应该指向新选的路径，而不是上一次任务写过的旧路径。
-    const dir = targetDir || copying?.progress.targetDir
+    // 打开的一定是界面上显示的那个目录：revealDir 与 activeDir 同源
+    const dir = readModel.revealDir
 
     if (!dir) return
 
     const failure = await window.electronAPI.revealCopyTarget(dir)
 
     if (failure) showToast('打开目录失败', failure, 'error')
-  }, [copying, targetDir, showToast])
-
-  /**
-   * 当前生效的目标目录：优先取这次选的目录，没有才回落到上一次任务的落盘目录。
-   * 复制完成后 targetDir 仍保留，所以「重新复制」不必再选一次；
-   * 换了新目录时也以新目录为准，而不是继续显示旧任务写过的路径。
-   */
-  const activeTargetDir = targetDir || copying?.progress.targetDir
-
-  /**
-   * 扫描没结束、没有图片、没勾机台、没选目标目录时都不能复制。
-   *
-   * 目标目录是硬前置：以前这里漏了它，按钮在未选目录时照样可点，
-   * 点下去才弹选择框 —— 用户会以为是「点开始复制就会自己问」，
-   * 实际上先把目录选好再去点，意图更清楚。
-   */
-  const canCopy =
-    Boolean(task) &&
-    (task?.status === 'completed' || task?.status === 'canceled') &&
-    (task?.totalImages ?? 0) > 0 &&
-    pickedCount > 0 &&
-    Boolean(activeTargetDir) &&
-    !busy
+  }, [readModel.revealDir, showToast])
 
   return {
     task: copying,
@@ -372,7 +356,9 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
     targetName,
     busy,
     error,
-    canCopy,
+    // 显示与动作共用一份派生：面板不再自己算一遍
+    readModel,
+    canCopy: readModel.canCopy,
     handleStart,
     handlePause,
     handleResume,

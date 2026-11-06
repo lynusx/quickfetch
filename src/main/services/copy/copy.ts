@@ -10,6 +10,7 @@ import type {
   ScannedImage,
 } from '../../../shared/ipc'
 
+import { isFinalCopyStatus } from '../../../shared/ipc'
 import { createAdaptiveGate } from '../../utils/adaptive'
 import type { AdaptiveGate } from '../../utils/adaptive'
 import { toFsPath } from '../../utils/pathx'
@@ -469,11 +470,7 @@ export class CopyTaskRunner {
   }
 
   isFinal(): boolean {
-    return (
-      this.status === 'completed' ||
-      this.status === 'canceled' ||
-      this.status === 'failed'
-    )
+    return isFinalCopyStatus(this.status)
   }
 
   waitSettled(): Promise<void> {

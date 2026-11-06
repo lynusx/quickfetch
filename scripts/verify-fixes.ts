@@ -2199,14 +2199,19 @@ const copyReadModelTests = async () => {
       manifestPath: null,
     }) as unknown as CopyTask
 
+  const scanTask = (status: string, totalImages = 20) =>
+    ({ status, totalImages }) as unknown as ScanTask
+
   const input = {
     task: copyTask('running'),
+    scanTask: scanTask('completed'),
     machines: ['A'],
     machineStats: [
       { machine: 'A', images: 10 },
       { machine: 'B', images: 5 },
     ],
     targetDir: '/new',
+    busy: false,
   }
 
   await test('复制 read model: done / percent / 有效目录只算一次', async () => {
@@ -2227,6 +2232,43 @@ const copyReadModelTests = async () => {
     assert.equal(completed.finished, true)
     assert.equal(completed.running, false)
     assert.equal(completed.activeDir, '/new', '结束后优先显示新选目录')
+    assert.equal(completed.revealDir, completed.activeDir, '显示哪个就打开哪个')
+  })
+
+  await test('复制 read model: canCopy 只看扫描、勾选、目录与忙碌', async () => {
+    assert.equal(deriveCopyReadModel(input).canCopy, true)
+
+    assert.equal(
+      deriveCopyReadModel({ ...input, busy: true }).canCopy,
+      false,
+      '请求在路上时不能重复点',
+    )
+    assert.equal(
+      deriveCopyReadModel({ ...input, scanTask: scanTask('failed') }).canCopy,
+      false,
+      '扫描失败没有可复制的图',
+    )
+    assert.equal(
+      deriveCopyReadModel({ ...input, scanTask: scanTask('running') }).canCopy,
+      false,
+      '扫描还没结束',
+    )
+    assert.equal(
+      deriveCopyReadModel({ ...input, scanTask: scanTask('completed', 0) })
+        .canCopy,
+      false,
+      '一张图都没有',
+    )
+    assert.equal(
+      deriveCopyReadModel({ ...input, machines: [] }).canCopy,
+      false,
+      '没勾机台',
+    )
+    assert.equal(
+      deriveCopyReadModel({ ...input, task: null, targetDir: '' }).canCopy,
+      false,
+      '没选目标目录',
+    )
   })
 }
 

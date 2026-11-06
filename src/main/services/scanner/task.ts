@@ -10,7 +10,7 @@ import type {
   ScannedImage,
 } from '../../../shared/ipc'
 
-import { PL_LEVELS } from '../../../shared/ipc'
+import { isSettledScanStatus, PL_LEVELS } from '../../../shared/ipc'
 import { PREVIEW_LIMIT } from '../../../shared/historyLimit'
 import { timeoutForConcurrency, createAdaptiveGate } from '../../utils/adaptive'
 import type { AdaptiveGate } from '../../utils/adaptive'
@@ -388,13 +388,7 @@ export class ScanTaskRunner {
   }
 
   cancel(): ScanTask {
-    if (
-      this.status === 'completed' ||
-      this.status === 'canceled' ||
-      this.status === 'failed'
-    ) {
-      return this.snapshot()
-    }
+    if (isSettledScanStatus(this.status)) return this.snapshot()
 
     // 已取消的任务不再执行任何目录读取，checkpoint 会抛出 AbortError
     this.abortController.abort()

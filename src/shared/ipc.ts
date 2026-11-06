@@ -439,6 +439,42 @@ export type ScanTaskStatus =
    */
   | 'interrupted'
 
+/**
+ * 「正常跑完」的三种终态。
+ *
+ * 与下面的 isFinalScanStatus 分开：interrupted 是「中途被关掉」，
+ * 历史落盘资格、能不能续扫都按它区分，不能混为一谈。
+ */
+const SETTLED_SCAN_STATUSES: ReadonlySet<string> = new Set([
+  'completed',
+  'canceled',
+  'failed',
+])
+
+/** 不再变化的状态：正常终态 + 被关掉时的抢救快照 */
+const FINAL_SCAN_STATUSES: ReadonlySet<string> = new Set([
+  ...SETTLED_SCAN_STATUSES,
+  'interrupted',
+])
+
+const FINAL_COPY_STATUSES: ReadonlySet<string> = new Set([
+  'completed',
+  'canceled',
+  'failed',
+])
+
+/** 任务正常结束（completed / canceled / failed），不含 interrupted */
+export const isSettledScanStatus = (status: ScanTaskStatus): boolean =>
+  SETTLED_SCAN_STATUSES.has(status)
+
+/** 任务不会再变化：正常终态 + interrupted */
+export const isFinalScanStatus = (status: ScanTaskStatus): boolean =>
+  FINAL_SCAN_STATUSES.has(status)
+
+/** 复制只有三种终态，复制任务不会被「抢救落盘」 */
+export const isFinalCopyStatus = (status: CopyStatus): boolean =>
+  FINAL_COPY_STATUSES.has(status)
+
 export type ScanPhase = 'probe' | 'collect' | 'done'
 
 export interface ScanTaskProgress {

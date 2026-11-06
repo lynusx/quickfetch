@@ -1,15 +1,8 @@
 import { useEffect, useRef } from 'react'
 
-import type { ScanCategory, ScanTaskStatus } from '@shared/ipc'
+import type { ScanCategory } from '@shared/ipc'
+import { isFinalScanStatus } from '@shared/ipc'
 import { scanStoreOf } from '../stores/scanStore'
-
-/** 已结束的任务状态；只有这些状态下才允许被筛选变更清掉 */
-const FINAL_STATUS: ScanTaskStatus[] = [
-  'completed',
-  'canceled',
-  'failed',
-  'interrupted',
-]
 
 /**
  * 扫描范围变了就把上一次的结果收起来。
@@ -43,7 +36,7 @@ export const useResetOnParamChange = (
 
     const current = store.getState().task
 
-    if (current && FINAL_STATUS.includes(current.status)) {
+    if (current && isFinalScanStatus(current.status)) {
       store.getState().setTask(null)
       // 错误提示同样属于上一轮，留着会让人以为这次也失败了
       store.getState().setError(null)
