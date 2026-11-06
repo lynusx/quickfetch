@@ -11,11 +11,7 @@ import { NETWORK_HINT } from '@shared/networkHint'
 import { SCAN_CATEGORY_META } from '@shared/scanCategories'
 import { usePlantScanPage } from '../hooks/usePlantScanPage'
 import { usePlFilterStore } from '../stores/plFilterStore'
-import {
-  selectPl,
-  useSettingsStore,
-  useUserPreferencesStore,
-} from '@/features/settings'
+import { selectPl, useSettingsStore } from '@/features/settings'
 
 /**
  * 利珀图片扫描。
@@ -28,7 +24,6 @@ const META = SCAN_CATEGORY_META.pl
 const PlScanPage = () => {
   const pl = useSettingsStore(selectPl)
   const load = useSettingsStore((state) => state.load)
-  const plTypes = useUserPreferencesStore((state) => state[META.typeCatalogKey])
 
   useEffect(() => {
     void load()
@@ -42,7 +37,7 @@ const PlScanPage = () => {
       configured,
       hasSlots: META.hasSlots,
       requiresLevels: META.requiresLevels,
-      typeCatalog: plTypes,
+      typeCatalog: pl.typeCatalog,
     })
 
   return (

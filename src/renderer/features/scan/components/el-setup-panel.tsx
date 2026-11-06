@@ -9,7 +9,7 @@ import { Button, Flex, IconButton, Text, TextField } from '@radix-ui/themes'
 import { ChoiceList, ChoiceRadio } from '@/components/choice-list'
 import { Field, Step } from '@/components/field'
 import { useElFilterStore } from '../stores/elFilterStore'
-import { useSettingsStore } from '@/features/settings'
+import { selectEl, useSettingsStore } from '@/features/settings'
 import type { Plant } from '@shared/ipc'
 import { plantLabel } from '@shared/ipc'
 
@@ -18,7 +18,8 @@ const compare = (a: string, b: string): number =>
   a.localeCompare(b, 'zh-CN', { numeric: true })
 
 const ElSetupPanel = () => {
-  const { settings, saving, load, saveRoot, refresh } = useSettingsStore()
+  const { saving, load, saveRoot, refresh } = useSettingsStore()
+  const el = useSettingsStore(selectEl)
   const {
     plant,
     keyword,
@@ -28,19 +29,19 @@ const ElSetupPanel = () => {
     setSelectedMachines,
   } = useElFilterStore()
 
-  const [draft, setDraft] = useState(settings?.rootPath ?? '')
-  const [prevRootPath, setPrevRootPath] = useState(settings?.rootPath)
+  const [draft, setDraft] = useState(el.entryRoot ?? '')
+  const [prevRootPath, setPrevRootPath] = useState(el.entryRoot)
 
-  if (settings?.rootPath !== prevRootPath) {
-    setPrevRootPath(settings?.rootPath)
-    setDraft(settings?.rootPath ?? '')
+  if (el.entryRoot !== prevRootPath) {
+    setPrevRootPath(el.entryRoot)
+    setDraft(el.entryRoot ?? '')
   }
 
   useEffect(() => {
     void load()
   }, [load])
 
-  const machines = useMemo(() => settings?.machines ?? [], [settings?.machines])
+  const machines = useMemo(() => el.machines ?? [], [el.machines])
 
   const plants = useMemo(() => {
     const names = [...new Set(machines.map((item) => item.plant))]
@@ -68,7 +69,7 @@ const ElSetupPanel = () => {
       : list
   }, [machines, plant, keyword])
 
-  const configured = Boolean(settings?.rootPath)
+  const configured = Boolean(el.entryRoot)
 
   const pickRoot = async () => {
     const picked = await window.electronAPI.pickDirectory({
@@ -82,7 +83,7 @@ const ElSetupPanel = () => {
   }
 
   const handleSave = async () => {
-    if (!draft.trim() || draft.trim() === settings?.rootPath) return
+    if (!draft.trim() || draft.trim() === el.entryRoot) return
     await saveRoot(draft.trim())
   }
 
@@ -232,7 +233,7 @@ const ElSetupPanel = () => {
           <Text size="1" color="gray">
             {configured
               ? 'DC 根目录下没有可用机台，请点刷新重新识别'
-              : settings?.rootPath === null && !draft
+              : el.entryRoot === null && !draft
                 ? '配置根目录后，这里会出现厂区与机台列表'
                 : '正在识别机台…'}
           </Text>

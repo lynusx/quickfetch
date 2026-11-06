@@ -6,7 +6,7 @@ import PlantFilterPanel, {
 } from './plant-filter-panel'
 import { usePlantFilterDefaults } from './plant-filter-defaults'
 import { usePlFilterStore } from '../stores/plFilterStore'
-import { useUserPreferencesStore } from '@/features/settings'
+import { selectPl, useSettingsStore } from '@/features/settings'
 import { PL_LEVELS } from '@shared/ipc'
 
 /**
@@ -16,9 +16,10 @@ import { PL_LEVELS } from '@shared/ipc'
  * 时段 → Fail → 等级(A/B/C) → 类型，所以等级必须先选出来。
  */
 const PlFilterPanel = () => {
-  const plTypes = useUserPreferencesStore((state) => state.plTypes)
-  const addPlType = useUserPreferencesStore((state) => state.addPlType)
-  const removePlType = useUserPreferencesStore((state) => state.removePlType)
+  const pl = useSettingsStore(selectPl)
+  const addType = useSettingsStore((state) => state.addType)
+  const removeType = useSettingsStore((state) => state.removeType)
+  const catalogReady = useSettingsStore((state) => state.settings !== null)
   const levels = usePlFilterStore((state) => state.levels)
 
   usePlantFilterDefaults(usePlFilterStore, { slots: true, paddedSlots: true })
@@ -36,9 +37,10 @@ const PlFilterPanel = () => {
       <FilterTypes
         filter={usePlFilterStore}
         index={5}
-        types={plTypes}
-        onAddType={addPlType}
-        onRemoveType={removePlType}
+        types={pl.typeCatalog}
+        catalogReady={catalogReady}
+        onAddType={(type) => void addType('pl', type)}
+        onRemoveType={(type) => void removeType('pl', type)}
         placeholder="脏污"
         example="脏污、面划伤"
       />

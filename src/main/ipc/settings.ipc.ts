@@ -5,10 +5,11 @@ import type {
   AoiSetupResult,
   AppPreferences,
   AppSettings,
+  CategoryConfig,
   DirectoryInfo,
   LxtSetupResult,
-  LxtSkippedLink,
   PlSetupResult,
+  ScanCategory,
 } from '../../shared/ipc'
 import {
   discoverAoi,
@@ -31,6 +32,7 @@ import {
   rememberPlShare,
   savePreferences,
   saveRootPath,
+  saveTypeCatalog,
   updateAoi,
   updateLxt,
   updatePl,
@@ -43,16 +45,9 @@ export const getParentWindow = (
 ): BrowserWindow | undefined =>
   BrowserWindow.fromWebContents(sender) ?? undefined
 
-interface EntrySettings<TMachine> {
-  entryRoot: string | null
-  machines: TMachine[]
-  skipped: LxtSkippedLink[]
-  updatedAt: string | null
-}
-
 interface EntrySetupAdapter<
   TMachine,
-  TSettings extends EntrySettings<TMachine>,
+  TSettings extends CategoryConfig<TMachine>,
 > {
   discover: (entryRoot: string) => Promise<Discovery>
   merge: (
@@ -68,7 +63,7 @@ interface EntrySetupAdapter<
  * LXT/PL/AOI 的差异只有 discover、merge 与 settings 段落；三者以前
  * 各写一遍同样的 added/removed/relocated 统计与原子更新顺序。
  */
-const setupEntry = async <TMachine, TSettings extends EntrySettings<TMachine>>(
+const setupEntry = async <TMachine, TSettings extends CategoryConfig<TMachine>>(
   entryRoot: string,
   adapter: EntrySetupAdapter<TMachine, TSettings>,
 ): Promise<LxtSetupResult> => {
@@ -157,6 +152,12 @@ export const registerSettingsIpc = (): void => {
     (_event, patch: Partial<AppPreferences>) => savePreferences(patch),
   )
 
+  handle(
+    'settings:set-type-catalog',
+    (_event, category: ScanCategory, types: string[]) =>
+      saveTypeCatalog(category, types),
+  )
+
   handle('lxt:setup-root', (_event, entryRoot: string) =>
     setupLxt(entryRoot.trim()),
   )
@@ -164,11 +165,11 @@ export const registerSettingsIpc = (): void => {
   handle('lxt:refresh', async () => {
     const current = await readSettings()
 
-    if (!current.lxt.entryRoot) {
+    if (!current.categories.lxt.entryRoot) {
       throw new Error('尚未配置力禧特EL入口目录，请先选择入口')
     }
 
-    return setupLxt(current.lxt.entryRoot)
+    return setupLxt(current.categories.lxt.entryRoot)
   })
 
   handle('pl:setup-root', (_event, entryRoot: string) =>
@@ -178,11 +179,11 @@ export const registerSettingsIpc = (): void => {
   handle('pl:refresh', async () => {
     const current = await readSettings()
 
-    if (!current.pl.entryRoot) {
+    if (!current.categories.pl.entryRoot) {
       throw new Error('尚未配置利珀PL入口目录，请先选择入口')
     }
 
-    return setupPl(current.pl.entryRoot)
+    return setupPl(current.categories.pl.entryRoot)
   })
 
   handle('aoi:setup-root', (_event, entryRoot: string) =>
@@ -192,11 +193,11 @@ export const registerSettingsIpc = (): void => {
   handle('aoi:refresh', async () => {
     const current = await readSettings()
 
-    if (!current.aoi.entryRoot) {
+    if (!current.categories.aoi.entryRoot) {
       throw new Error('尚未配置森标 AOI 入口目录，请先选择入口')
     }
 
-    return setupAoi(current.aoi.entryRoot)
+    return setupAoi(current.categories.aoi.entryRoot)
   })
 
   /**
@@ -223,7 +224,7 @@ export const registerSettingsIpc = (): void => {
       ].join('')
 
       if (category === 'lxt') {
-        const targets = settings.lxt.machines.filter(
+        const targets = settings.categories.lxt.machines.filter(
           (item) => !item.stale && (keys ? keys.includes(item.key) : true),
         )
 
@@ -240,7 +241,7 @@ export const registerSettingsIpc = (): void => {
         return readSettings()
       }
 
-      const targets = settings.pl.machines.filter(
+      const targets = settings.categories.pl.machines.filter(
         (item) => !item.stale && (keys ? keys.includes(item.key) : true),
       )
 

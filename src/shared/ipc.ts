@@ -171,30 +171,43 @@ export const PREFERENCE_ENV: Record<PreferenceKey, string> = {
  * 不存映射盘符：盘符在别的机器上可能指向别处甚至不存在。
  */
 export interface AppSettings {
-  version: 1
-  rootPath: string | null
-  /** 工序层目录名，当前固定为 EL */
-  entry: string
-  machines: MachineInfo[]
-  /** 上次识别机台的时间，ISO 字符串 */
-  updatedAt: string | null
+  version: 2
   /** 历史扫描记录的保留条数，默认 10 */
   historyLimit: number
   /** 设置页里的复制与性能偏好 */
   preferences: AppPreferences
-  /** 力禧特配置；未配置过时为默认空值 */
-  lxt: LxtSettings
-  /** 利珀配置；未配置过时为默认空值 */
-  pl: PlSettings
-  /** 森标 AOI 配置；未配置过时为默认空值 */
-  aoi: AoiSettings
+  /**
+   * 四类扫描共用的配置形状，类型作为键。
+   *
+   * 每类都有入口、识别出的机台、跳过的快捷方式、上次识别时间与可选不良清单；
+   * 机台本身按类别各有字段（EL 只有目录名，其余是 .lnk 解析出的主机与共享缓存）。
+   */
+  categories: {
+    el: CategoryConfig<MachineInfo>
+    lxt: CategoryConfig<LxtMachine>
+    pl: CategoryConfig<PlMachine>
+    aoi: CategoryConfig<AoiMachine>
+  }
   /**
    * 被环境变量接管的偏好项。
    *
    * 现场临时用 QUICKFETCH_* 压降时，设置页里改这几项不会有实际效果，
-   * 与其让用户猜「是不是没保存上」，不如直接标出来。
+   * 与其让用户猜「是不是没保存上」，不如直接标出来。运行期计算，不落盘。
    */
   envOverrides: PreferenceKey[]
+}
+
+/** 单类扫描的落盘配置；EL 与入口类共用这一个形状 */
+export interface CategoryConfig<M> {
+  /** 入口根目录：EL 是 DC 根，其余是 .lnk 入口目录 */
+  entryRoot: string | null
+  machines: M[]
+  /** 最近一次识别时被跳过的快捷方式，供界面展示；EL 恒为空 */
+  skipped: SkippedLink[]
+  /** 最近一次识别时间，ISO 字符串；只做时间戳，没有过期行为 */
+  updatedAt: string | null
+  /** 可选不良类型清单；只影响筛选面板，扫描参数仍随 IPC 传递 */
+  typeCatalog: string[]
 }
 
 /** 力禧特的一台机台：入口里的一个 .lnk 解析出来的结果 */
@@ -224,22 +237,14 @@ export interface LxtMachine {
 }
 
 /** 被跳过的 .lnk：解析失败，或者目标根本不是网络路径 */
-export interface LxtSkippedLink {
+export interface SkippedLink {
   /** 所在厂区文件夹 */
   plant: Plant
   file: string
   reason: string
 }
 
-export interface LxtSettings {
-  /** 力禧特入口根目录，其下每个含 .lnk 的子文件夹算一个厂区 */
-  entryRoot: string | null
-  machines: LxtMachine[]
-  /** 最近一次识别时被跳过的 .lnk 清单，供界面展示 */
-  skipped: LxtSkippedLink[]
-  /** 最近一次识别时间，ISO 字符串 */
-  updatedAt: string | null
-}
+export type LxtSettings = CategoryConfig<LxtMachine>
 
 /** 识别入口后回给界面的结果，顺带带上完整配置 */
 export interface EntrySetupResult {
@@ -281,15 +286,7 @@ export interface PlMachine {
   stale: boolean
 }
 
-export interface PlSettings {
-  /** 利珀入口根目录，其下每个含 .lnk 的子文件夹算一个厂区 */
-  entryRoot: string | null
-  machines: PlMachine[]
-  /** 最近一次识别时被跳过的 .lnk 清单，供界面展示 */
-  skipped: LxtSkippedLink[]
-  /** 最近一次识别时间，ISO 字符串 */
-  updatedAt: string | null
-}
+export type PlSettings = CategoryConfig<PlMachine>
 
 /** 森标 AOI 的一台机台：入口里的一个 .lnk 解析出来的结果 */
 export interface AoiMachine {
@@ -310,15 +307,7 @@ export interface AoiMachine {
   stale: boolean
 }
 
-export interface AoiSettings {
-  /** 森标 AOI 入口根目录，其下每个含 .lnk 的子文件夹算一个厂区 */
-  entryRoot: string | null
-  machines: AoiMachine[]
-  /** 最近一次识别时被跳过的 .lnk 清单，供界面展示 */
-  skipped: LxtSkippedLink[]
-  /** 最近一次识别时间，ISO 字符串 */
-  updatedAt: string | null
-}
+export type AoiSettings = CategoryConfig<AoiMachine>
 
 export interface ScanTaskParams {
   /** 选中的机台目录名，允许多选 */
@@ -788,6 +777,11 @@ export interface ElectronAPI {
   refreshMachines: () => Promise<AppSettings>
   /** 局部更新复制与性能偏好，返回落盘后的完整配置 */
   savePreferences: (patch: Partial<AppPreferences>) => Promise<AppSettings>
+  /** 覆盖某类扫描的可选不良清单，返回落盘后的完整配置 */
+  setTypeCatalog: (
+    category: ScanCategory,
+    types: string[],
+  ) => Promise<AppSettings>
 
   /** 当前日志目录、今日文件与开关状态；日志未初始化时返回空目录 */
   getLogInfo: () => Promise<LogInfo>

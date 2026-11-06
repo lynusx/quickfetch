@@ -18,6 +18,9 @@ const api: ElectronAPI = {
   savePreferences: (patch) =>
     ipcRenderer.invoke('settings:save-preferences', patch),
 
+  setTypeCatalog: (category, types) =>
+    ipcRenderer.invoke('settings:set-type-catalog', category, types),
+
   getLogInfo: () => ipcRenderer.invoke('logs:info'),
 
   openLogDir: () => ipcRenderer.invoke('logs:open'),

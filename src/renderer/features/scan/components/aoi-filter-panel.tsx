@@ -4,7 +4,7 @@ import PlantFilterPanel, {
 } from './plant-filter-panel'
 import { usePlantFilterDefaults } from './plant-filter-defaults'
 import { useAoiFilterStore } from '../stores/aoiFilterStore'
-import { useUserPreferencesStore } from '@/features/settings'
+import { selectAoi, useSettingsStore } from '@/features/settings'
 
 /**
  * 森标 AOI 扫描范围。
@@ -13,9 +13,10 @@ import { useUserPreferencesStore } from '@/features/settings'
  * 日期 → 8.5/20.5 → 类型，界面仍按语义显示白班/夜班。
  */
 const AoiFilterPanel = () => {
-  const aoiTypes = useUserPreferencesStore((state) => state.aoiTypes)
-  const addAoiType = useUserPreferencesStore((state) => state.addAoiType)
-  const removeAoiType = useUserPreferencesStore((state) => state.removeAoiType)
+  const aoi = useSettingsStore(selectAoi)
+  const addType = useSettingsStore((state) => state.addType)
+  const removeType = useSettingsStore((state) => state.removeType)
+  const catalogReady = useSettingsStore((state) => state.settings !== null)
 
   usePlantFilterDefaults(useAoiFilterStore)
 
@@ -25,9 +26,10 @@ const AoiFilterPanel = () => {
       <FilterTypes
         filter={useAoiFilterStore}
         index={4}
-        types={aoiTypes}
-        onAddType={addAoiType}
-        onRemoveType={removeAoiType}
+        types={aoi.typeCatalog}
+        catalogReady={catalogReady}
+        onAddType={(type) => void addType('aoi', type)}
+        onRemoveType={(type) => void removeType('aoi', type)}
         placeholder="色差"
         example="色差、色斑、大饼片"
       />

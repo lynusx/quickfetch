@@ -12,7 +12,6 @@ import {
   selectLxt,
   selectPl,
   useSettingsStore,
-  useUserPreferencesStore,
 } from '@/features/settings'
 import { scanStoreOf } from '../stores/scanStore'
 import {
@@ -21,7 +20,6 @@ import {
   elPlantOf,
 } from '@shared/ipc'
 import type { ScanCategory, ScanHistoryItem } from '@shared/ipc'
-import { SCAN_CATEGORY_META } from '@shared/scanCategories'
 import { toErrorMessage } from '@/utils/error'
 
 /**
@@ -99,7 +97,9 @@ const activeMachines = (category: ScanCategory): string[] => {
   const state = useSettingsStore.getState()
 
   if (category === 'el') {
-    return (state.settings?.machines ?? []).map((item) => item.name)
+    return (state.settings?.categories.el.machines ?? []).map(
+      (item) => item.name,
+    )
   }
 
   const entry =
@@ -120,8 +120,8 @@ const activeMachines = (category: ScanCategory): string[] => {
  * 落任务时签名已经稳定，不需要时钟对齐。
  */
 const normalizeFilters = (category: ScanCategory): void => {
-  const meta = SCAN_CATEGORY_META[category]
-  const catalog = useUserPreferencesStore.getState()[meta.typeCatalogKey]
+  const settings = useSettingsStore.getState().settings
+  const catalog = settings?.categories[category].typeCatalog ?? []
   const store =
     category === 'el' ? useElFilterStore : plantFilterStores[category]
   const filters = store.getState()

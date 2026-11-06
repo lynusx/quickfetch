@@ -22,13 +22,17 @@ import { ChoiceList, ChoiceRadio } from '@/components/choice-list'
 import { DatePicker } from '@/components/date-picker/date-picker'
 import { Field, Step } from '@/components/field'
 import { useElFilterStore } from '../stores/elFilterStore'
-import { useUserPreferencesStore } from '@/features/settings'
+import { selectEl, useSettingsStore } from '@/features/settings'
 import { getAllAvailableTimes, getShiftInfo } from '@/utils/common'
 
 const ElFilterPanel = () => {
   const { date, shift, slots, types, setDate, setShift, setSlots, setTypes } =
     useElFilterStore()
-  const { ngTypes, addNgType, removeNgType } = useUserPreferencesStore()
+  const el = useSettingsStore(selectEl)
+  const addType = useSettingsStore((state) => state.addType)
+  const removeType = useSettingsStore((state) => state.removeType)
+  const catalogReady = useSettingsStore((state) => state.settings !== null)
+  const ngTypes = el.typeCatalog
 
   const [newType, setNewType] = useState('')
 
@@ -53,10 +57,12 @@ const ElFilterPanel = () => {
   }, [])
 
   useEffect(() => {
-    if (!types.length) return
+    // 配置还没读回时清单是空的，此时裁剪会把刚恢复的勾选全部清掉
+    if (!catalogReady || !types.length) return
+
     const alive = types.filter((type) => ngTypes.includes(type))
     if (alive.length !== types.length) setTypes(alive)
-  }, [ngTypes, types, setTypes])
+  }, [catalogReady, ngTypes, types, setTypes])
 
   const handleShiftChange = (value: string) => {
     if (!value) return
@@ -68,13 +74,13 @@ const ElFilterPanel = () => {
   const handleAddType = () => {
     const value = newType.trim()
     if (!value || ngTypes.includes(value)) return
-    addNgType(value)
+    void addType('el', value)
     setTypes([...types, value])
     setNewType('')
   }
 
   const handleRemoveType = (type: string) => {
-    removeNgType(type)
+    void removeType('el', type)
     setTypes(types.filter((item) => item !== type))
   }
 

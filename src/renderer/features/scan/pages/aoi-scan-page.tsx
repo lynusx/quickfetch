@@ -11,11 +11,7 @@ import { NETWORK_HINT } from '@shared/networkHint'
 import { SCAN_CATEGORY_META } from '@shared/scanCategories'
 import { usePlantScanPage } from '../hooks/usePlantScanPage'
 import { useAoiFilterStore } from '../stores/aoiFilterStore'
-import {
-  selectAoi,
-  useSettingsStore,
-  useUserPreferencesStore,
-} from '@/features/settings'
+import { selectAoi, useSettingsStore } from '@/features/settings'
 
 /**
  * 森标 AOI 图片扫描。
@@ -29,9 +25,6 @@ const META = SCAN_CATEGORY_META.aoi
 const AoiScanPage = () => {
   const aoi = useSettingsStore(selectAoi)
   const load = useSettingsStore((state) => state.load)
-  const aoiTypes = useUserPreferencesStore(
-    (state) => state[META.typeCatalogKey],
-  )
 
   useEffect(() => {
     void load()
@@ -45,7 +38,7 @@ const AoiScanPage = () => {
       configured,
       hasSlots: META.hasSlots,
       requiresLevels: META.requiresLevels,
-      typeCatalog: aoiTypes,
+      typeCatalog: aoi.typeCatalog,
       hasImageKind: META.hasImageKind,
     })
 

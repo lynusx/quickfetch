@@ -23,6 +23,7 @@ import {
   taskImagePage,
 } from '../services/scanner'
 import {
+  ENTRY,
   readSettings,
   rememberLxtShare,
   rememberPlShare,
@@ -134,7 +135,7 @@ const createLxtTask = (
   settings: AppSettings,
   params: ScanTaskParams,
 ): ScanTask => {
-  const active = settings.lxt.machines.filter((item) => !item.stale)
+  const active = settings.categories.lxt.machines.filter((item) => !item.stale)
   const shares = new Map<string, ShareState<LxtShare>>(
     active.map((item) => [item.key, item.share]),
   )
@@ -160,7 +161,7 @@ const createPlTask = (
   settings: AppSettings,
   params: ScanTaskParams,
 ): ScanTask => {
-  const active = settings.pl.machines.filter((item) => !item.stale)
+  const active = settings.categories.pl.machines.filter((item) => !item.stale)
   const shares = new Map<string, ShareState>(
     active.map((item) => [item.key, item.share]),
   )
@@ -196,7 +197,7 @@ const createAoiTask = (
     // 把归一化后的图片类型写回参数：历史记录里永远带着「这次实际读了哪个目录」，
     // 恢复时不必再猜老记录缺字段该怎么补
     params: { ...params, aoiImageKind: imageKind },
-    active: settings.aoi.machines.filter((item) => !item.stale),
+    active: settings.categories.aoi.machines.filter((item) => !item.stale),
     // 森标 AOI 没有时段层，强制清空，避免调用方误传后多探一层目录
     slots: [],
     buildResolver: (hosts) => createAoiResolver({ hosts, imageKind }),
@@ -207,11 +208,13 @@ const createElTask = (
   settings: AppSettings,
   params: ScanTaskParams,
 ): ScanTask => {
-  if (!settings.rootPath) {
+  if (!settings.categories.el.entryRoot) {
     throw new Error('尚未配置 DC 根目录，请先填写或选择根目录路径')
   }
 
-  const known = new Set(settings.machines.map((item) => item.name))
+  const known = new Set(
+    settings.categories.el.machines.map((item) => item.name),
+  )
   const machines = params.machines.filter((name) => known.has(name))
 
   if (!machines.length) {
@@ -219,13 +222,13 @@ const createElTask = (
   }
 
   const plantByName = new Map(
-    settings.machines.map((item) => [item.name, item.plant]),
+    settings.categories.el.machines.map((item) => [item.name, item.plant]),
   )
   assertSinglePlant(
     machines.map((name) => plantByName.get(name) ?? elPlantOf(name)),
   )
 
-  const resolver = createElResolver(settings.rootPath, settings.entry)
+  const resolver = createElResolver(settings.categories.el.entryRoot, ENTRY)
 
   return createTask(
     { ...params, category: 'el', machines },

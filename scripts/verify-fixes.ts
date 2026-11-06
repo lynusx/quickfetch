@@ -45,7 +45,16 @@ import {
   retentionCutoffDay,
   serializeLogValue,
 } from '../src/main/services/log'
-import { normalizePreferences } from '../src/main/services/settings'
+import {
+  defaultSettings,
+  isAppSettings,
+  normalizeAoi,
+  normalizeEl,
+  normalizeLxt,
+  normalizePl,
+  normalizePreferences,
+  normalizeTypeCatalog,
+} from '../src/main/services/settings'
 import {
   createHistoryStore,
   toTask,
@@ -53,7 +62,6 @@ import {
 import { deriveScanParams } from '../src/renderer/features/scan/scanParams'
 import { decideSignatureChange } from '../src/renderer/features/scan/sessionTransitions'
 import { pruneMachinesToSide } from '../src/renderer/features/scan/stores/plantFilterStore'
-import { useUserPreferencesStore } from '../src/renderer/features/settings/userPreferencesStore'
 import {
   SCAN_CATEGORIES,
   SCAN_CATEGORY_META,
@@ -1994,21 +2002,21 @@ const scanParamsTests = async () => {
     }
   })
 
-  await test('类别 descriptor: 清单穷尽且类型清单字段真实存在', async () => {
+  await test('类别 descriptor: 清单穷尽且默认配置形状一致', async () => {
     assert.deepEqual(
       [...SCAN_CATEGORIES].sort(),
       ['aoi', 'el', 'lxt', 'pl'],
       '类别清单必须覆盖全部扫描类别',
     )
 
-    const preferences = useUserPreferencesStore.getState()
+    const settings = defaultSettings()
 
     for (const category of SCAN_CATEGORIES) {
       const meta = SCAN_CATEGORY_META[category]
       assert.ok(meta.label && meta.eyebrow && meta.networkHint, category)
       assert.ok(
-        Array.isArray(preferences[meta.typeCatalogKey]),
-        `${category} 的类型清单字段 ${meta.typeCatalogKey} 不存在`,
+        Array.isArray(settings.categories[category].typeCatalog),
+        `${category} 的类型清单不在配置里`,
       )
     }
   })
@@ -2202,6 +2210,88 @@ const aoiTests = async () => {
     ])
     assert.deepEqual(pruneMachinesToSide(selected, 'back'), ['东区/1A背检'])
     assert.deepEqual(pruneMachinesToSide(selected, 'all'), selected)
+  })
+}
+
+const settingsContractTests = async () => {
+  await test('配置契约: v2 默认形状与四类 categories', async () => {
+    const settings = defaultSettings()
+
+    assert.equal(settings.version, 2)
+    assert.equal(isAppSettings(settings), true)
+    assert.equal(isAppSettings({ ...settings, version: 1 }), false)
+
+    // 旧的顶层字段必须已经消失
+    assert.equal('rootPath' in settings, false)
+    assert.equal('entry' in settings, false)
+    assert.equal('machines' in settings, false)
+    assert.equal('updatedAt' in settings, false)
+
+    for (const key of ['el', 'lxt', 'pl', 'aoi'] as const) {
+      const category = settings.categories[key]
+      assert.deepEqual(category, {
+        entryRoot: null,
+        machines: [],
+        skipped: [],
+        updatedAt: null,
+        typeCatalog: [],
+      })
+    }
+  })
+
+  await test('配置契约: 四类 normalize 与 typeCatalog 保留', async () => {
+    const el = normalizeEl({
+      entryRoot: '/mnt/DC',
+      machines: [
+        { name: 'A01-A', plant: 'west' },
+        { name: 'B02-B' },
+        { name: 'not-a-plant' },
+      ],
+      typeCatalog: [' 色差 ', '色差', '', '脏污'],
+      updatedAt: '2026-11-06T00:00:00.000Z',
+    })
+
+    assert.equal(el.entryRoot, '/mnt/DC')
+    // 厂区按首字母重算，不信任文件里的 plant；认不出厂区的目录丢弃
+    assert.deepEqual(el.machines, [
+      { name: 'A01-A', plant: 'east' },
+      { name: 'B02-B', plant: 'west' },
+    ])
+    assert.deepEqual(el.typeCatalog, ['色差', '脏污'])
+    assert.equal(el.updatedAt, '2026-11-06T00:00:00.000Z')
+    assert.deepEqual(el.skipped, [])
+
+    const lxt = normalizeLxt({
+      entryRoot: '\\\\10.0.0.1\\share',
+      machines: [
+        { plant: '东区', name: '1A', host: '\\\\10.0.0.1', share: 'el' },
+        { plant: '东区', name: '1A', host: '\\\\10.0.0.2', share: null },
+      ],
+      skipped: [{ plant: '东区', file: 'x.lnk', reason: '坏了' }],
+      typeCatalog: ['色差'],
+    })
+
+    assert.equal(lxt.machines.length, 1, '同一「厂区/机台」只保留一台')
+    assert.equal(lxt.machines[0].key, '东区/1A')
+    assert.equal(lxt.machines[0].share, 'el')
+    assert.equal(lxt.skipped.length, 1)
+    assert.deepEqual(lxt.typeCatalog, ['色差'], '机台刷新不能吞掉类型清单')
+
+    const pl = normalizePl({ machines: [], typeCatalog: ['脏污'] })
+    assert.deepEqual(pl.typeCatalog, ['脏污'])
+    assert.equal(pl.entryRoot, null)
+
+    const aoi = normalizeAoi({
+      machines: [
+        { plant: '东区', name: '1A正检', host: '\\\\10.0.0.3', share: 'el' },
+      ],
+    })
+    assert.equal(aoi.machines[0].share, null, 'AOI 的 share 恒为 null')
+  })
+
+  await test('配置契约: 类型清单 trim / 去重 / 保序', async () => {
+    assert.deepEqual(normalizeTypeCatalog(undefined), [])
+    assert.deepEqual(normalizeTypeCatalog([' b ', 'a', 'b', '', 3]), ['b', 'a'])
   })
 }
 
@@ -2558,6 +2648,8 @@ const main = async () => {
   await taskTableTests()
   console.log('\n[16] 森标 AOI 图片类型与检测面')
   await aoiTests()
+  console.log('\n[17] 配置契约')
+  await settingsContractTests()
 
   const failed = results.filter((r) => !r.ok)
   console.log(`\n共 ${results.length} 项，失败 ${failed.length} 项`)

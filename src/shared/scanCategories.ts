@@ -20,9 +20,6 @@ export const SCAN_CATEGORIES = [
   'aoi',
 ] as const satisfies readonly ScanCategory[]
 
-/** userPreferencesStore 里每类扫描的类型清单字段 */
-export type ScanTypeCatalogKey = 'ngTypes' | 'lxtTypes' | 'plTypes' | 'aoiTypes'
-
 export interface ScanCategoryMeta {
   /** 导航与提示里的名字 */
   label: string
@@ -36,8 +33,6 @@ export interface ScanCategoryMeta {
   requiresLevels: boolean
   /** 有没有「整体 / 局部」图片类型（森标 AOI） */
   hasImageKind: boolean
-  /** 类型清单存在 userPreferencesStore 的哪个字段 */
-  typeCatalogKey: ScanTypeCatalogKey
 }
 
 export const SCAN_CATEGORY_META = {
@@ -48,7 +43,6 @@ export const SCAN_CATEGORY_META = {
     hasSlots: true,
     requiresLevels: false,
     hasImageKind: false,
-    typeCatalogKey: 'ngTypes',
   },
   lxt: {
     label: '力禧特EL',
@@ -57,7 +51,6 @@ export const SCAN_CATEGORY_META = {
     hasSlots: true,
     requiresLevels: false,
     hasImageKind: false,
-    typeCatalogKey: 'lxtTypes',
   },
   pl: {
     label: '利珀PL',
@@ -66,7 +59,6 @@ export const SCAN_CATEGORY_META = {
     hasSlots: true,
     requiresLevels: true,
     hasImageKind: false,
-    typeCatalogKey: 'plTypes',
   },
   aoi: {
     label: '森标 AOI',
@@ -75,7 +67,6 @@ export const SCAN_CATEGORY_META = {
     hasSlots: false,
     requiresLevels: false,
     hasImageKind: true,
-    typeCatalogKey: 'aoiTypes',
   },
 } as const satisfies Record<ScanCategory, ScanCategoryMeta>
 

@@ -8,13 +8,16 @@ import type {
   AoiSettings,
   AppPreferences,
   AppSettings,
+  CategoryConfig,
   LxtMachine,
   LxtSettings,
   LxtShare,
   MachineInfo,
   PlMachine,
   PlSettings,
+  ScanCategory,
   ShareState,
+  SkippedLink,
 } from '../../../shared/ipc'
 
 import {
@@ -35,23 +38,33 @@ import { logger } from '../log'
 import { describeAccessError } from '../scanner/diagnosis'
 import { toFsPath } from '../../utils/pathx'
 
-const SETTINGS_VERSION = 1 as const
-const ENTRY = 'EL'
+const SETTINGS_VERSION = 2 as const
+
+/** EL 的工序层目录名，协议固定值；不再作为配置字段落盘 */
+export const ENTRY = 'EL'
 
 const settingsFile = (): string =>
   join(app.getPath('userData'), 'settings.json')
 
-const defaultSettings = (): AppSettings => ({
-  version: SETTINGS_VERSION,
-  rootPath: null,
-  entry: ENTRY,
+const emptyCategory = <M>(): CategoryConfig<M> => ({
+  entryRoot: null,
   machines: [],
+  skipped: [],
   updatedAt: null,
+  typeCatalog: [],
+})
+
+/** 默认配置；导出来给回归测试校验契约形状 */
+export const defaultSettings = (): AppSettings => ({
+  version: SETTINGS_VERSION,
   historyLimit: DEFAULT_HISTORY_LIMIT,
   preferences: { ...DEFAULT_PREFERENCES },
-  lxt: { entryRoot: null, machines: [], skipped: [], updatedAt: null },
-  pl: { entryRoot: null, machines: [], skipped: [], updatedAt: null },
-  aoi: { entryRoot: null, machines: [], skipped: [], updatedAt: null },
+  categories: {
+    el: emptyCategory<MachineInfo>(),
+    lxt: emptyCategory<LxtMachine>(),
+    pl: emptyCategory<PlMachine>(),
+    aoi: emptyCategory<AoiMachine>(),
+  },
   envOverrides: [],
 })
 
@@ -143,6 +156,75 @@ const normalizeShare = (value: unknown): ShareState<LxtShare> => {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 
+/** 类型清单：trim、去空、去重、保留输入顺序 */
+export const normalizeTypeCatalog = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return []
+
+  const seen = new Set<string>()
+  const result: string[] = []
+
+  for (const item of value) {
+    if (typeof item !== 'string') continue
+
+    const trimmed = item.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+
+    seen.add(trimmed)
+    result.push(trimmed)
+  }
+
+  return result
+}
+
+const normalizeSkipped = (value: unknown): SkippedLink[] =>
+  (Array.isArray(value) ? value : [])
+    .filter(isRecord)
+    .map((item) => ({
+      plant: typeof item.plant === 'string' ? item.plant : '',
+      file: typeof item.file === 'string' ? item.file : '',
+      reason: typeof item.reason === 'string' ? item.reason : '',
+    }))
+    .filter((item) => item.file)
+
+/** 四类共用的字段归一化；machines 由各自的 normalizer 补上 */
+const normalizeCategoryBase = (raw: Record<string, unknown>) => ({
+  entryRoot:
+    typeof raw.entryRoot === 'string' && raw.entryRoot.trim()
+      ? raw.entryRoot
+      : null,
+  skipped: normalizeSkipped(raw.skipped),
+  updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : null,
+  typeCatalog: normalizeTypeCatalog(raw.typeCatalog),
+})
+
+/**
+ * 归一化 EL 配置。
+ *
+ * EL 的机台是 DC 根下的目录名，没有主机与共享缓存；厂区继续按首字母规则
+ * 重算，不信任文件里存的那份。
+ */
+export const normalizeEl = (raw: unknown): CategoryConfig<MachineInfo> => {
+  const source = isRecord(raw) ? raw : {}
+  const machines: MachineInfo[] = []
+  const seen = new Set<string>()
+
+  for (const item of Array.isArray(source.machines) ? source.machines : []) {
+    if (!isRecord(item)) continue
+
+    const name = typeof item.name === 'string' ? item.name.trim() : ''
+    const plant = name ? elPlantOf(name) : null
+
+    if (!name || !plant || seen.has(name)) continue
+
+    seen.add(name)
+    machines.push({ name, plant })
+  }
+
+  machines.sort((a, b) => compareMachine(a.name, b.name))
+
+  return { ...normalizeCategoryBase(source), machines }
+}
+
 /**
  * 归一化力禧特配置。
  *
@@ -150,14 +232,11 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * 万一厂区名被手改过，key 和 plant 对不上，历史记录就关联不回去了。
  */
 export const normalizeLxt = (raw: unknown): LxtSettings => {
-  if (!isRecord(raw)) {
-    return { entryRoot: null, machines: [], skipped: [], updatedAt: null }
-  }
-
+  const source = isRecord(raw) ? raw : {}
   const machines: LxtMachine[] = []
   const seen = new Set<string>()
 
-  for (const item of Array.isArray(raw.machines) ? raw.machines : []) {
+  for (const item of Array.isArray(source.machines) ? source.machines : []) {
     if (!isRecord(item)) continue
 
     const plant = typeof item.plant === 'string' ? item.plant : ''
@@ -180,24 +259,7 @@ export const normalizeLxt = (raw: unknown): LxtSettings => {
     })
   }
 
-  const skipped = (Array.isArray(raw.skipped) ? raw.skipped : [])
-    .filter(isRecord)
-    .map((item) => ({
-      plant: typeof item.plant === 'string' ? item.plant : '',
-      file: typeof item.file === 'string' ? item.file : '',
-      reason: typeof item.reason === 'string' ? item.reason : '',
-    }))
-    .filter((item) => item.file)
-
-  return {
-    entryRoot:
-      typeof raw.entryRoot === 'string' && raw.entryRoot.trim()
-        ? raw.entryRoot
-        : null,
-    machines,
-    skipped,
-    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : null,
-  }
+  return { ...normalizeCategoryBase(source), machines }
 }
 
 /**
@@ -207,14 +269,11 @@ export const normalizeLxt = (raw: unknown): LxtSettings => {
  * 没有固定候选，这里只做字符串校验，认不出就当没探过。
  */
 export const normalizePl = (raw: unknown): PlSettings => {
-  if (!isRecord(raw)) {
-    return { entryRoot: null, machines: [], skipped: [], updatedAt: null }
-  }
-
+  const source = isRecord(raw) ? raw : {}
   const machines: PlMachine[] = []
   const seen = new Set<string>()
 
-  for (const item of Array.isArray(raw.machines) ? raw.machines : []) {
+  for (const item of Array.isArray(source.machines) ? source.machines : []) {
     if (!isRecord(item)) continue
 
     const plant = typeof item.plant === 'string' ? item.plant : ''
@@ -243,24 +302,7 @@ export const normalizePl = (raw: unknown): PlSettings => {
     })
   }
 
-  const skipped = (Array.isArray(raw.skipped) ? raw.skipped : [])
-    .filter(isRecord)
-    .map((item) => ({
-      plant: typeof item.plant === 'string' ? item.plant : '',
-      file: typeof item.file === 'string' ? item.file : '',
-      reason: typeof item.reason === 'string' ? item.reason : '',
-    }))
-    .filter((item) => item.file)
-
-  return {
-    entryRoot:
-      typeof raw.entryRoot === 'string' && raw.entryRoot.trim()
-        ? raw.entryRoot
-        : null,
-    machines,
-    skipped,
-    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : null,
-  }
+  return { ...normalizeCategoryBase(source), machines }
 }
 
 /**
@@ -270,14 +312,11 @@ export const normalizePl = (raw: unknown): PlSettings => {
  * 没有需要持久化的探测缓存，share 一律写成 null。
  */
 export const normalizeAoi = (raw: unknown): AoiSettings => {
-  if (!isRecord(raw)) {
-    return { entryRoot: null, machines: [], skipped: [], updatedAt: null }
-  }
-
+  const source = isRecord(raw) ? raw : {}
   const machines: AoiMachine[] = []
   const seen = new Set<string>()
 
-  for (const item of Array.isArray(raw.machines) ? raw.machines : []) {
+  for (const item of Array.isArray(source.machines) ? source.machines : []) {
     if (!isRecord(item)) continue
 
     const plant = typeof item.plant === 'string' ? item.plant : ''
@@ -300,24 +339,7 @@ export const normalizeAoi = (raw: unknown): AoiSettings => {
     })
   }
 
-  const skipped = (Array.isArray(raw.skipped) ? raw.skipped : [])
-    .filter(isRecord)
-    .map((item) => ({
-      plant: typeof item.plant === 'string' ? item.plant : '',
-      file: typeof item.file === 'string' ? item.file : '',
-      reason: typeof item.reason === 'string' ? item.reason : '',
-    }))
-    .filter((item) => item.file)
-
-  return {
-    entryRoot:
-      typeof raw.entryRoot === 'string' && raw.entryRoot.trim()
-        ? raw.entryRoot
-        : null,
-    machines,
-    skipped,
-    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : null,
-  }
+  return { ...normalizeCategoryBase(source), machines }
 }
 
 /** 机台名按自然序排列，A02 排在 A01 之后而不是 A10 之后 */
@@ -368,7 +390,7 @@ export const discoverMachines = async (
   return machines
 }
 
-const isAppSettings = (value: unknown): value is AppSettings =>
+export const isAppSettings = (value: unknown): value is AppSettings =>
   typeof value === 'object' &&
   value !== null &&
   (value as AppSettings).version === SETTINGS_VERSION
@@ -436,21 +458,27 @@ export const readSettings = async (): Promise<AppSettings> => {
   }
 
   if (!isAppSettings(parsed)) {
+    // v1 及更早的配置不再兼容：留档后回落默认，现场重新配置
     await quarantineSettings('unsupported-version')
     return fallbackSettings()
   }
 
+  // 版本对不代表形状完整：categories 可能缺失，交给各 normalizer 兜底
+  const parsedCategories = (
+    parsed as unknown as { categories?: Record<string, unknown> }
+  ).categories
+
+  // 显式组装，不再展开 parsed，避免残留的顶层字段被下次写入带回
   return {
-    ...defaultSettings(),
-    ...parsed,
-    entry: ENTRY,
-    // 老版本配置文件没有该字段，回落到默认值而不是 undefined
+    version: SETTINGS_VERSION,
     historyLimit: normalizeHistoryLimit(parsed.historyLimit),
-    // 同理：1.10.x 及更早的配置没有 preferences
     preferences: normalizePreferences(parsed.preferences),
-    lxt: normalizeLxt(parsed.lxt),
-    pl: normalizePl(parsed.pl),
-    aoi: normalizeAoi(parsed.aoi),
+    categories: {
+      el: normalizeEl(parsedCategories?.el),
+      lxt: normalizeLxt(parsedCategories?.lxt),
+      pl: normalizePl(parsedCategories?.pl),
+      aoi: normalizeAoi(parsedCategories?.aoi),
+    },
     // 运行期字段，不落盘，每次读的时候按当前环境算
     envOverrides: envOverriddenKeys(),
   }
@@ -547,25 +575,38 @@ export const saveRootPath = async (rootPath: string): Promise<AppSettings> => {
 
   return updateSettings((current) => ({
     ...current,
-    rootPath: trimmed,
-    entry: ENTRY,
-    machines,
-    updatedAt: new Date().toISOString(),
+    categories: {
+      ...current.categories,
+      el: {
+        ...current.categories.el,
+        entryRoot: trimmed,
+        machines,
+        updatedAt: new Date().toISOString(),
+      },
+    },
   }))
 }
 
 /** 重新识别机台；未配置根目录时直接返回当前配置 */
 export const refreshMachines = (): Promise<AppSettings> =>
   updateSettings(async (current) => {
-    if (!current.rootPath) return current
+    const rootPath = current.categories.el.entryRoot
+
+    if (!rootPath) return current
 
     // 低频人工操作，锁住一次网络列目录可接受；避免识别期间被别的写覆盖
-    const machines = await discoverMachines(current.rootPath)
+    const machines = await discoverMachines(rootPath)
 
     return {
       ...current,
-      machines,
-      updatedAt: new Date().toISOString(),
+      categories: {
+        ...current.categories,
+        el: {
+          ...current.categories.el,
+          machines,
+          updatedAt: new Date().toISOString(),
+        },
+      },
     }
   })
 
@@ -574,7 +615,6 @@ export const saveHistoryLimit = (limit: number): Promise<AppSettings> =>
   updateSettings((current) => ({
     ...current,
     historyLimit: normalizeHistoryLimit(limit),
-    updatedAt: new Date().toISOString(),
   }))
 
 /** 局部更新偏好：只覆盖传进来的字段，其余保持原值 */
@@ -592,7 +632,6 @@ export const savePreferences = async (
         ...current.preferences,
         ...patch,
       }),
-      updatedAt: new Date().toISOString(),
     }
   })
 
@@ -618,22 +657,16 @@ export const savePreferences = async (
   return next
 }
 
-/** 只替换力禧特那段配置，其余字段原样保留 */
-export const saveLxt = (lxt: LxtSettings): Promise<AppSettings> =>
-  updateSettings((current) => ({
-    ...current,
-    lxt: normalizeLxt(lxt),
-    updatedAt: new Date().toISOString(),
-  }))
-
 /** 在锁内基于最新配置修改力禧特那一段 */
 export const updateLxt = (
   mutate: (lxt: LxtSettings) => LxtSettings,
 ): Promise<AppSettings> =>
   updateSettings((current) => ({
     ...current,
-    lxt: normalizeLxt(mutate(current.lxt)),
-    updatedAt: new Date().toISOString(),
+    categories: {
+      ...current.categories,
+      lxt: normalizeLxt(mutate(current.categories.lxt)),
+    },
   }))
 
 /**
@@ -650,22 +683,25 @@ export const rememberLxtShare = async (
 ): Promise<void> => {
   try {
     await updateSettings((current) => {
-      const index = current.lxt.machines.findIndex((item) => item.key === key)
+      const lxt = current.categories.lxt
+      const index = lxt.machines.findIndex((item) => item.key === key)
 
       if (index < 0) return current
 
-      const machine = current.lxt.machines[index]
+      const machine = lxt.machines[index]
 
       // 期间入口被重新识别、IP 变了，这次探测结果已经过期，不能写回去
       if (machine.host !== host || machine.share === share) return current
 
-      const machines = [...current.lxt.machines]
+      const machines = [...lxt.machines]
       machines[index] = { ...machine, share }
 
       return {
         ...current,
-        lxt: normalizeLxt({ ...current.lxt, machines }),
-        updatedAt: new Date().toISOString(),
+        categories: {
+          ...current.categories,
+          lxt: normalizeLxt({ ...lxt, machines }),
+        },
       }
     })
   } catch (error) {
@@ -674,22 +710,16 @@ export const rememberLxtShare = async (
   }
 }
 
-/** 只替换利珀那段配置，其余字段原样保留 */
-export const savePl = (pl: PlSettings): Promise<AppSettings> =>
-  updateSettings((current) => ({
-    ...current,
-    pl: normalizePl(pl),
-    updatedAt: new Date().toISOString(),
-  }))
-
 /** 在锁内基于最新配置修改利珀那一段 */
 export const updatePl = (
   mutate: (pl: PlSettings) => PlSettings,
 ): Promise<AppSettings> =>
   updateSettings((current) => ({
     ...current,
-    pl: normalizePl(mutate(current.pl)),
-    updatedAt: new Date().toISOString(),
+    categories: {
+      ...current.categories,
+      pl: normalizePl(mutate(current.categories.pl)),
+    },
   }))
 
 /** 在锁内基于最新配置修改森标 AOI 那一段 */
@@ -698,8 +728,10 @@ export const updateAoi = (
 ): Promise<AppSettings> =>
   updateSettings((current) => ({
     ...current,
-    aoi: normalizeAoi(mutate(current.aoi)),
-    updatedAt: new Date().toISOString(),
+    categories: {
+      ...current.categories,
+      aoi: normalizeAoi(mutate(current.categories.aoi)),
+    },
   }))
 
 /**
@@ -716,22 +748,25 @@ export const rememberPlShare = async (
 ): Promise<void> => {
   try {
     await updateSettings((current) => {
-      const index = current.pl.machines.findIndex((item) => item.key === key)
+      const pl = current.categories.pl
+      const index = pl.machines.findIndex((item) => item.key === key)
 
       if (index < 0) return current
 
-      const machine = current.pl.machines[index]
+      const machine = pl.machines[index]
 
       // 期间入口被重新识别、IP 变了，这次探测结果已经过期，不能写回去
       if (machine.host !== host || machine.share === share) return current
 
-      const machines = [...current.pl.machines]
+      const machines = [...pl.machines]
       machines[index] = { ...machine, share }
 
       return {
         ...current,
-        pl: normalizePl({ ...current.pl, machines }),
-        updatedAt: new Date().toISOString(),
+        categories: {
+          ...current.categories,
+          pl: normalizePl({ ...pl, machines }),
+        },
       }
     })
   } catch (error) {
@@ -739,3 +774,26 @@ export const rememberPlShare = async (
     logger.error('settings', 'pl-share.persist.failed', { key, host, error })
   }
 }
+
+/**
+ * 覆盖某类扫描的可选不良清单。
+ *
+ * 清单只影响筛选面板，扫描参数仍随 IPC 传递；仍然是「读全量 → 改 → 写全量」，
+ * 与其它 mutator 一样排在串行队列里。
+ */
+export const saveTypeCatalog = (
+  category: ScanCategory,
+  types: string[],
+): Promise<AppSettings> =>
+  updateSettings((current) => {
+    const typeCatalog = normalizeTypeCatalog(types)
+
+    // 四个类别的 machine 类型不同，计算键会把 categories 收窄成联合；
+    // 这里按整体结构写回，值本身已由各自的 normalizer 保证过
+    const categories = {
+      ...current.categories,
+      [category]: { ...current.categories[category], typeCatalog },
+    } as AppSettings['categories']
+
+    return { ...current, categories }
+  })

@@ -20,7 +20,7 @@ import { ChoiceList, ChoiceRadio } from '@/components/choice-list'
 import { Field, Step } from '@/components/field'
 import { useToast } from '@/hooks/useToast'
 import type { PlantFilterStore } from '../stores/plantFilterStore'
-import type { EntrySetupResult, LxtSkippedLink, Plant } from '@shared/ipc'
+import type { EntrySetupResult, SkippedLink, Plant } from '@shared/ipc'
 import { plantLabel } from '@shared/ipc'
 
 /** 机台名按自然序：7A 排在 10A 之前，跟现场习惯一致 */
@@ -71,7 +71,7 @@ interface PlantMachinePickerProps {
   /** 已识别的机台（含 stale），由页面从 settings 里传进来 */
   machines: PickableMachine[]
   entryRoot: string | null
-  skipped?: LxtSkippedLink[]
+  skipped?: SkippedLink[]
   saving?: boolean
   error?: string | null
   /** 该页的筛选状态，两类各有自己的实例 */

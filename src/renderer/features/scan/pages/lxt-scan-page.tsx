@@ -11,11 +11,7 @@ import { NETWORK_HINT } from '@shared/networkHint'
 import { SCAN_CATEGORY_META } from '@shared/scanCategories'
 import { usePlantScanPage } from '../hooks/usePlantScanPage'
 import { useLxtFilterStore } from '../stores/lxtFilterStore'
-import {
-  selectLxt,
-  useSettingsStore,
-  useUserPreferencesStore,
-} from '@/features/settings'
+import { selectLxt, useSettingsStore } from '@/features/settings'
 
 /**
  * 力禧特图片扫描。
@@ -28,9 +24,6 @@ const META = SCAN_CATEGORY_META.lxt
 const LxtScanPage = () => {
   const lxt = useSettingsStore(selectLxt)
   const load = useSettingsStore((state) => state.load)
-  const lxtTypes = useUserPreferencesStore(
-    (state) => state[META.typeCatalogKey],
-  )
 
   useEffect(() => {
     void load()
@@ -44,7 +37,7 @@ const LxtScanPage = () => {
       configured,
       hasSlots: META.hasSlots,
       requiresLevels: META.requiresLevels,
-      typeCatalog: lxtTypes,
+      typeCatalog: lxt.typeCatalog,
     })
 
   return (

@@ -241,6 +241,13 @@ interface FilterTypesProps {
   filter: PlantFilterStore
   index: number
   types: string[]
+  /**
+   * 清单是否已从配置读回。
+   *
+   * 配置是异步读的：首帧 catalog 还是空数组，若此时就跑下面的「剔除不存在
+   * 的类型」，会把 localStorage 里刚恢复的勾选全部清掉。读回之前先不裁。
+   */
+  catalogReady?: boolean
   onAddType: (type: string) => void
   onRemoveType: (type: string) => void
   placeholder: string
@@ -252,6 +259,7 @@ export const FilterTypes = ({
   filter,
   index,
   types,
+  catalogReady = true,
   onAddType,
   onRemoveType,
   placeholder,
@@ -263,11 +271,11 @@ export const FilterTypes = ({
 
   // 类型清单被编辑后，把已经不存在的类型从选中里剔掉
   useEffect(() => {
-    if (!selectedTypes.length) return
+    if (!catalogReady || !selectedTypes.length) return
 
     const alive = selectedTypes.filter((type) => types.includes(type))
     if (alive.length !== selectedTypes.length) setTypes(alive)
-  }, [types, selectedTypes, setTypes])
+  }, [catalogReady, types, selectedTypes, setTypes])
 
   const handleAddType = () => {
     const value = newType.trim()

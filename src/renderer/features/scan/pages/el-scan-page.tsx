@@ -1,7 +1,9 @@
+import { useEffect } from 'react'
+
 import { NETWORK_HINT } from '@shared/networkHint'
 import { SCAN_CATEGORY_META } from '@shared/scanCategories'
 
-import { useSettingsStore, useUserPreferencesStore } from '@/features/settings'
+import { selectEl, useSettingsStore } from '@/features/settings'
 import PlantScanPage from '../components/plant-scan-page'
 import { UnconfiguredNotice } from '../components/scan-notices'
 import ElFilterPanel from '../components/el-filter-panel'
@@ -17,9 +19,13 @@ import '../scan.css'
 const META = SCAN_CATEGORY_META.el
 
 const ElScanPage = () => {
-  const settings = useSettingsStore((state) => state.settings)
-  const ngTypes = useUserPreferencesStore((state) => state[META.typeCatalogKey])
-  const configured = Boolean(settings?.rootPath)
+  const el = useSettingsStore(selectEl)
+  const load = useSettingsStore((state) => state.load)
+  const configured = Boolean(el.entryRoot)
+
+  useEffect(() => {
+    void load()
+  }, [load])
 
   const { ready, missing, filterSignature, getParams, getSignature } =
     usePlantScanPage({
@@ -27,7 +33,7 @@ const ElScanPage = () => {
       configured,
       hasSlots: META.hasSlots,
       requiresLevels: META.requiresLevels,
-      typeCatalog: ngTypes,
+      typeCatalog: el.typeCatalog,
     })
 
   return (

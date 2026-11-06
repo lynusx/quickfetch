@@ -1,7 +1,7 @@
 import { readdir } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 
-import type { LxtSkippedLink, Plant } from '../../../shared/ipc'
+import type { SkippedLink, Plant } from '../../../shared/ipc'
 
 import { readLnk } from './lnk'
 import { describeAccessError } from '../scanner/diagnosis'
@@ -46,7 +46,7 @@ export interface DiscoveredLink {
 
 export interface Discovery {
   machines: DiscoveredLink[]
-  skipped: LxtSkippedLink[]
+  skipped: SkippedLink[]
 }
 
 /**
@@ -67,7 +67,7 @@ export const discoverShortcutEntry = async (
   }
 
   const machines: DiscoveredLink[] = []
-  const skipped: LxtSkippedLink[] = []
+  const skipped: SkippedLink[] = []
 
   // 厂区 = 含 .lnk 的直接子目录。只认这一层，避免把误放在根目录的
   // 说明文档、备份文件夹当成厂区。

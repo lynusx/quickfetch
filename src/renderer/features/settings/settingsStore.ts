@@ -7,11 +7,14 @@ import type {
   AoiSetupResult,
   AppPreferences,
   AppSettings,
+  CategoryConfig,
   LxtSettings,
   LxtSetupResult,
+  MachineInfo,
   PlSettings,
   PlSetupResult,
   PreferenceKey,
+  ScanCategory,
 } from '@shared/ipc'
 import { toErrorMessage } from '@/utils/error'
 
@@ -49,6 +52,10 @@ interface SettingsAction {
    * 自动探测只在 share 为 null 时跑一次，不会自己重来。
    */
   reprobeShares: (category: 'lxt' | 'pl') => Promise<boolean>
+  /** 往某类的可选不良清单里加一项；界面先改再落盘，写失败会回滚 */
+  addType: (category: ScanCategory, type: string) => Promise<void>
+  /** 从某类的清单里删一项 */
+  removeType: (category: ScanCategory, type: string) => Promise<void>
   clearError: () => void
 }
 
@@ -68,6 +75,7 @@ const EMPTY_LXT: LxtSettings = {
   machines: [],
   skipped: [],
   updatedAt: null,
+  typeCatalog: [],
 }
 
 const EMPTY_PL: PlSettings = {
@@ -75,6 +83,7 @@ const EMPTY_PL: PlSettings = {
   machines: [],
   skipped: [],
   updatedAt: null,
+  typeCatalog: [],
 }
 
 const EMPTY_AOI: AoiSettings = {
@@ -82,21 +91,35 @@ const EMPTY_AOI: AoiSettings = {
   machines: [],
   skipped: [],
   updatedAt: null,
+  typeCatalog: [],
 }
 
 /** 力禧特配置，未读回配置时给空值 */
 export const selectLxt = (state: {
   settings: AppSettings | null
-}): LxtSettings => state.settings?.lxt ?? EMPTY_LXT
+}): LxtSettings => state.settings?.categories.lxt ?? EMPTY_LXT
 
 /** 利珀配置，未读回配置时给空值 */
 export const selectPl = (state: { settings: AppSettings | null }): PlSettings =>
-  state.settings?.pl ?? EMPTY_PL
+  state.settings?.categories.pl ?? EMPTY_PL
 
 /** 森标 AOI 配置，未读回配置时给空值 */
 export const selectAoi = (state: {
   settings: AppSettings | null
-}): AoiSettings => state.settings?.aoi ?? EMPTY_AOI
+}): AoiSettings => state.settings?.categories.aoi ?? EMPTY_AOI
+
+/** EL 配置；没有入口类选择器，单独给一个稳定空值 */
+const EMPTY_EL: CategoryConfig<MachineInfo> = {
+  entryRoot: null,
+  machines: [],
+  skipped: [],
+  updatedAt: null,
+  typeCatalog: [],
+}
+
+export const selectEl = (state: {
+  settings: AppSettings | null
+}): CategoryConfig<MachineInfo> => state.settings?.categories.el ?? EMPTY_EL
 
 /** 被环境变量接管、设置页里改了也不生效的项 */
 export const selectEnvOverrides = (state: {
@@ -196,7 +219,6 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
             settings: {
               ...state.settings,
               preferences,
-              updatedAt: saved.updatedAt,
               envOverrides: saved.envOverrides,
             },
             error: null,
@@ -324,6 +346,85 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
       }
     },
 
+    addType: (category, type) =>
+      patchTypeCatalog(category, (types) =>
+        types.includes(type) ? types : [...types, type],
+      ),
+
+    removeType: (category, type) =>
+      patchTypeCatalog(category, (types) =>
+        types.filter((item) => item !== type),
+      ),
+
     clearError: () => set({ error: null }),
   })),
 )
+
+/**
+ * 乐观更新某类清单再落盘；失败只回滚这个类别，且仅当它仍是本次写入的值。
+ *
+ * 与 savePreferences 同一套语义：连续点几下时，较早的失败不能把后一次的结果盖掉。
+ */
+async function patchTypeCatalog(
+  category: ScanCategory,
+  mutate: (types: string[]) => string[],
+): Promise<void> {
+  const { settings } = useSettingsStore.getState()
+
+  if (!settings) return
+
+  const previous = settings.categories[category].typeCatalog
+  const next = mutate(previous)
+
+  if (
+    next.length === previous.length &&
+    next.every((type, index) => type === previous[index])
+  ) {
+    return
+  }
+
+  useSettingsStore.setState({
+    settings: withTypeCatalog(settings, category, next),
+    error: null,
+  })
+
+  try {
+    const saved = await window.electronAPI.setTypeCatalog(category, next)
+
+    useSettingsStore.setState({ settings: saved })
+  } catch (error) {
+    useSettingsStore.setState((state) => {
+      const message = toErrorMessage(error, '保存类型清单失败')
+
+      if (!state.settings) return { error: message }
+
+      const current = state.settings.categories[category].typeCatalog
+
+      // 期间又被改过：保留新值，不回滚
+      if (
+        current.length !== next.length ||
+        current.some((type, index) => type !== next[index])
+      ) {
+        return { error: message }
+      }
+
+      return {
+        settings: withTypeCatalog(state.settings, category, previous),
+        error: message,
+      }
+    })
+  }
+}
+
+/** 计算键会收窄 categories 的联合类型，这里按整体结构写回 */
+const withTypeCatalog = (
+  settings: AppSettings,
+  category: ScanCategory,
+  typeCatalog: string[],
+): AppSettings => ({
+  ...settings,
+  categories: {
+    ...settings.categories,
+    [category]: { ...settings.categories[category], typeCatalog },
+  } as AppSettings['categories'],
+})
