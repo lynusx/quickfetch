@@ -78,7 +78,7 @@ import {
   cachedSizeOf,
   measureImageSizes,
 } from '../src/main/services/copy/measure'
-import { useElCopyStore } from '../src/renderer/features/copy/copyStore'
+import { copyStoreOf } from '../src/renderer/features/copy/copyStore'
 import {
   AOI_IMAGE_DIRS,
   DEFAULT_AOI_IMAGE_KIND,
@@ -595,28 +595,28 @@ const copyTests = async () => {
   })
 
   await test('复制: 取消全选后不会被同步重新补全', async () => {
-    const store = useElCopyStore.getState()
+    const store = copyStoreOf('el').getState()
 
     store.reset()
     store.syncMachines('t1', ['A02-A', 'A02-B'])
-    assert.deepEqual(useElCopyStore.getState().machines, ['A02-A', 'A02-B'])
+    assert.deepEqual(copyStoreOf('el').getState().machines, ['A02-A', 'A02-B'])
 
     store.setMachines([])
     store.syncMachines('t1', ['A02-A', 'A02-B'])
     assert.deepEqual(
-      useElCopyStore.getState().machines,
+      copyStoreOf('el').getState().machines,
       [],
       '用户取消全选后，同一任务的同步不能把机台补回来',
     )
 
     store.syncMachines('t2', ['B01-A'])
     assert.deepEqual(
-      useElCopyStore.getState().machines,
+      copyStoreOf('el').getState().machines,
       ['B01-A'],
       '换了扫描任务要重新默认全选',
     )
 
-    useElCopyStore.getState().reset()
+    copyStoreOf('el').getState().reset()
   })
 
   await test('复制: 实时网速按最近 5 秒滑动窗口', async () => {

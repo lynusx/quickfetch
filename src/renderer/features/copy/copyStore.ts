@@ -152,11 +152,6 @@ const stores = Object.fromEntries(
   SCAN_CATEGORIES.map((category) => [category, createCopyStore(category)]),
 ) as Record<ScanCategory, CopyStore>
 
-export const useElCopyStore = stores.el
-export const useLxtCopyStore = stores.lxt
-export const usePlCopyStore = stores.pl
-export const useAoiCopyStore = stores.aoi
-
 /** 按类别取对应的复制 store；映射由类别清单生成，不会漏 */
 export const copyStoreOf = (category: ScanCategory): CopyStore =>
   stores[category]
