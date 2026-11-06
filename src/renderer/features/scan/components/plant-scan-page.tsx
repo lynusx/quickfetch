@@ -1,10 +1,6 @@
 import type { ReactNode } from 'react'
-import {
-  DownloadIcon,
-  ExclamationTriangleIcon,
-  MagnifyingGlassIcon,
-} from '@radix-ui/react-icons'
-import { Box, Callout, Flex, Grid, Strong } from '@radix-ui/themes'
+import { DownloadIcon, MagnifyingGlassIcon } from '@radix-ui/react-icons'
+import { Box, Flex, Grid } from '@radix-ui/themes'
 
 import { CopyPanel } from '@/features/copy'
 import { HistoryPanel } from '@/features/history'
@@ -23,11 +19,9 @@ interface PlantScanPageProps {
   title: string
   /** EL 与入口类页面的说明不同；不传时用入口类默认文案 */
   description?: string
-  unconfigured: { title: string; description: string }
   networkHint: string
-  configured: boolean
-  /** 入口类页面传机台数；EL 没有入口概念，不传就不显示那条提示 */
-  activeMachines?: number
+  /** 页面自己的提示条（未配置入口、入口没有机台）；不传就不占位 */
+  notices?: ReactNode
   ready: boolean
   missing?: string[]
   getParams: () => Omit<ScanTaskParams, 'category'>
@@ -46,10 +40,8 @@ const PlantScanPage = ({
   category,
   title,
   description = '按入口目录中的快捷方式识别机台，按日期、班次与类型收集图片，并批量复制到本地。',
-  unconfigured,
   networkHint,
-  configured,
-  activeMachines,
+  notices,
   ready,
   missing,
   getParams,
@@ -117,35 +109,7 @@ const PlantScanPage = ({
             other={other}
             otherLabel={otherLabel}
             networkHint={networkHint}
-            notices={
-              <>
-                {!configured ? (
-                  <Callout.Root color="amber" size="1">
-                    <Callout.Icon>
-                      <ExclamationTriangleIcon width={14} height={14} />
-                    </Callout.Icon>
-                    <Callout.Text>
-                      <Strong>{unconfigured.title}：</Strong>
-                      {unconfigured.description}
-                    </Callout.Text>
-                  </Callout.Root>
-                ) : null}
-
-                {activeMachines !== undefined &&
-                configured &&
-                !activeMachines ? (
-                  <Callout.Root color="amber" size="1">
-                    <Callout.Icon>
-                      <ExclamationTriangleIcon width={14} height={14} />
-                    </Callout.Icon>
-                    <Callout.Text>
-                      <Strong>入口里没有可用机台：</Strong>
-                      请确认快捷方式的目标是网络路径（\\主机），本地路径会被跳过
-                    </Callout.Text>
-                  </Callout.Root>
-                ) : null}
-              </>
-            }
+            notices={notices}
             onStart={() => void start()}
             onPause={() => void pause()}
             onResume={() => void resume()}

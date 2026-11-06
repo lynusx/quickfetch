@@ -3,6 +3,10 @@ import { useEffect } from 'react'
 import AoiFilterPanel from '../components/aoi-filter-panel'
 import AoiMachinePicker from '../components/aoi-machine-picker'
 import PlantScanPage from '../components/plant-scan-page'
+import {
+  NoMachinesNotice,
+  UnconfiguredNotice,
+} from '../components/scan-notices'
 import { NETWORK_HINT } from '@shared/networkHint'
 import { SCAN_CATEGORY_META } from '@shared/scanCategories'
 import { usePlantScanPage } from '../hooks/usePlantScanPage'
@@ -49,14 +53,17 @@ const AoiScanPage = () => {
     <PlantScanPage
       category="aoi"
       title="森标 AOI 图片批量拷贝"
-      unconfigured={{
-        title: '先配置森标 AOI 入口',
-        description:
-          '在左侧选择入口目录，应用会解析其中的快捷方式并识别各厂区机台',
-      }}
+      notices={
+        !configured ? (
+          <UnconfiguredNotice
+            title="先配置森标 AOI 入口"
+            description="在左侧选择入口目录，应用会解析其中的快捷方式并识别各厂区机台"
+          />
+        ) : active.length === 0 ? (
+          <NoMachinesNotice />
+        ) : undefined
+      }
       networkHint={`${NETWORK_HINT}；点「继续」即可接着扫，已扫到的结果不会丢`}
-      configured={configured}
-      activeMachines={active.length}
       ready={ready}
       missing={missing}
       getParams={getParams}
