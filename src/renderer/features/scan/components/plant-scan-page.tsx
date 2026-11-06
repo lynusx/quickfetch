@@ -15,14 +15,8 @@ import { ScanTaskPanel } from './scan-task-panel'
 import { useScanSession } from '../hooks/useScanSession'
 import { useToast } from '@/hooks/useToast'
 import type { ScanCategory, ScanTaskParams } from '@shared/ipc'
+import { SCAN_CATEGORY_META } from '@shared/scanCategories'
 import '../scan.css'
-
-const EYEBROW: Record<ScanCategory, string> = {
-  el: '找图 · EL',
-  lxt: '找图 · 力禧特EL',
-  pl: '找图 · 利珀PL',
-  aoi: '找图 · 森标 AOI',
-}
 
 interface PlantScanPageProps {
   category: ScanCategory
@@ -83,7 +77,7 @@ const PlantScanPage = ({
   return (
     <Box>
       <PageHeader
-        eyebrow={EYEBROW[category]}
+        eyebrow={SCAN_CATEGORY_META[category].eyebrow}
         title={title}
         description={description}
         badge={task ? <ScanStatusBadge status={task.status} /> : null}

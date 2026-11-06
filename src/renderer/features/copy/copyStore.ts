@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 
 import type { CopyPlanPreview, CopyTask, ScanCategory } from '@shared/ipc'
+import { SCAN_CATEGORIES } from '@shared/scanCategories'
 
 /** 两份机台名单是否完全一致（machineStats 已按自然序排好，直接比顺序即可） */
 const sameMachines = (a: string[], b: string[]): boolean =>
@@ -146,18 +147,16 @@ const createCopyStore = (category: ScanCategory) =>
     ),
   )
 
-export const useElCopyStore = createCopyStore('el')
-export const useLxtCopyStore = createCopyStore('lxt')
-export const usePlCopyStore = createCopyStore('pl')
-export const useAoiCopyStore = createCopyStore('aoi')
+/** 类别清单是唯一来源：加一类只需在 SCAN_CATEGORIES 里加一项 */
+const stores = Object.fromEntries(
+  SCAN_CATEGORIES.map((category) => [category, createCopyStore(category)]),
+) as Record<ScanCategory, CopyStore>
 
-const stores: Record<ScanCategory, CopyStore> = {
-  el: useElCopyStore,
-  lxt: useLxtCopyStore,
-  pl: usePlCopyStore,
-  aoi: useAoiCopyStore,
-}
+export const useElCopyStore = stores.el
+export const useLxtCopyStore = stores.lxt
+export const usePlCopyStore = stores.pl
+export const useAoiCopyStore = stores.aoi
 
-/** 按类别取对应的复制 store；映射穷尽，新增类别时类型检查会报错 */
+/** 按类别取对应的复制 store；映射由类别清单生成，不会漏 */
 export const copyStoreOf = (category: ScanCategory): CopyStore =>
   stores[category]

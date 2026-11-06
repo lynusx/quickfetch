@@ -2,6 +2,7 @@ import type {
   AppSettings,
   LxtShare,
   Plant,
+  ScanCategory,
   ScanTask,
   ScanTaskParams,
   ShareState,
@@ -202,52 +203,58 @@ const createAoiTask = (
   })
 }
 
+const createElTask = (
+  settings: AppSettings,
+  params: ScanTaskParams,
+): ScanTask => {
+  if (!settings.rootPath) {
+    throw new Error('尚未配置 DC 根目录，请先填写或选择根目录路径')
+  }
+
+  const known = new Set(settings.machines.map((item) => item.name))
+  const machines = params.machines.filter((name) => known.has(name))
+
+  if (!machines.length) {
+    throw new Error('所选机台已不存在，请点击「重新识别」刷新机台列表')
+  }
+
+  const plantByName = new Map(
+    settings.machines.map((item) => [item.name, item.plant]),
+  )
+  assertSinglePlant(
+    machines.map((name) => plantByName.get(name) ?? elPlantOf(name)),
+  )
+
+  const resolver = createElResolver(settings.rootPath, settings.entry)
+
+  return createTask(
+    { ...params, category: 'el', machines },
+    {
+      category: 'el',
+      resolver,
+      load: loadFrom(settings.preferences),
+    },
+  )
+}
+
+/** 类别 → 建任务函数；加一类只在这里补一项，类型检查保证不漏 */
+const taskBuilders = {
+  el: createElTask,
+  lxt: createLxtTask,
+  pl: createPlTask,
+  aoi: createAoiTask,
+} satisfies Record<
+  ScanCategory,
+  (settings: AppSettings, params: ScanTaskParams) => ScanTask
+>
+
 export const registerScanIpc = (): void => {
   handle('scan:create', async (_event, params: ScanTaskParams) => {
     validateParams(params)
     const settings = await readSettings()
     const category = params.category ?? 'el'
 
-    if (category === 'lxt') {
-      return createLxtTask(settings, params)
-    }
-
-    if (category === 'pl') {
-      return createPlTask(settings, params)
-    }
-
-    if (category === 'aoi') {
-      return createAoiTask(settings, params)
-    }
-
-    if (!settings.rootPath) {
-      throw new Error('尚未配置 DC 根目录，请先填写或选择根目录路径')
-    }
-
-    const known = new Set(settings.machines.map((item) => item.name))
-    const machines = params.machines.filter((name) => known.has(name))
-
-    if (!machines.length) {
-      throw new Error('所选机台已不存在，请点击「重新识别」刷新机台列表')
-    }
-
-    const plantByName = new Map(
-      settings.machines.map((item) => [item.name, item.plant]),
-    )
-    assertSinglePlant(
-      machines.map((name) => plantByName.get(name) ?? elPlantOf(name)),
-    )
-
-    const resolver = createElResolver(settings.rootPath, settings.entry)
-
-    return createTask(
-      { ...params, category: 'el', machines },
-      {
-        category: 'el',
-        resolver,
-        load: loadFrom(settings.preferences),
-      },
-    )
+    return taskBuilders[category](settings, params)
   })
 
   // 启动走 registry.startTask：它在任务结束后负责把结果写入历史

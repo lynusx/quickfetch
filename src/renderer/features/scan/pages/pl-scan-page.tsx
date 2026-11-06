@@ -4,6 +4,7 @@ import PlFilterPanel from '../components/pl-filter-panel'
 import PlMachinePicker from '../components/pl-machine-picker'
 import PlantScanPage from '../components/plant-scan-page'
 import { NETWORK_HINT } from '@shared/networkHint'
+import { SCAN_CATEGORY_META } from '@shared/scanCategories'
 import { usePlantScanPage } from '../hooks/usePlantScanPage'
 import { usePlFilterStore } from '../stores/plFilterStore'
 import {
@@ -18,10 +19,12 @@ import {
  * 与力禧特共用页面骨架与选择器，差别只有路径层级：利珀在日期下多一层
  * 机台名、类型外面还包着 Fail/等级，所以筛选面板多了「等级」。
  */
+const META = SCAN_CATEGORY_META.pl
+
 const PlScanPage = () => {
   const pl = useSettingsStore(selectPl)
   const load = useSettingsStore((state) => state.load)
-  const plTypes = useUserPreferencesStore((state) => state.plTypes)
+  const plTypes = useUserPreferencesStore((state) => state[META.typeCatalogKey])
 
   useEffect(() => {
     void load()
@@ -32,8 +35,8 @@ const PlScanPage = () => {
   const { ready, missing, filterSignature, getParams } = usePlantScanPage({
     store: usePlFilterStore,
     configured,
-    hasSlots: true,
-    requiresLevels: true,
+    hasSlots: META.hasSlots,
+    requiresLevels: META.requiresLevels,
     typeCatalog: plTypes,
   })
 

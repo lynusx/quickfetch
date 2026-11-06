@@ -52,6 +52,11 @@ import {
 } from '../src/main/services/scanner/history'
 import { deriveScanParams } from '../src/renderer/features/scan/scanParams'
 import { pruneMachinesToSide } from '../src/renderer/features/scan/stores/plantFilterStore'
+import { useUserPreferencesStore } from '../src/renderer/features/settings/userPreferencesStore'
+import {
+  SCAN_CATEGORIES,
+  SCAN_CATEGORY_META,
+} from '../src/shared/scanCategories'
 import {
   deriveCopyReadModel,
   previewSizeLabel,
@@ -1958,6 +1963,53 @@ const scanParamsTests = async () => {
     })
     assert.equal(plWithLevel.ready, true)
     assert.deepEqual(plWithLevel.params.levels, ['A'])
+  })
+
+  await test('页面参数: 类别 descriptor 驱动四类派生', async () => {
+    for (const category of SCAN_CATEGORIES) {
+      const meta = SCAN_CATEGORY_META[category]
+      const derived = deriveScanParams({
+        ...base,
+        slots: ['20'],
+        levels: meta.requiresLevels ? ['A'] : [],
+        hasSlots: meta.hasSlots,
+        requiresLevels: meta.requiresLevels,
+        imageKind: meta.hasImageKind ? 'whole' : undefined,
+        types: ['NG'],
+        typeCatalog: ['NG'],
+      })
+
+      assert.equal(derived.ready, true, `${category} 应可扫描`)
+      assert.deepEqual(
+        derived.params.slots,
+        meta.hasSlots ? ['20'] : [],
+        `${category} 的时段层应与 descriptor 一致`,
+      )
+      assert.equal(
+        'aoiImageKind' in derived.params,
+        meta.hasImageKind,
+        `${category} 的图片类型字段应与 descriptor 一致`,
+      )
+    }
+  })
+
+  await test('类别 descriptor: 清单穷尽且类型清单字段真实存在', async () => {
+    assert.deepEqual(
+      [...SCAN_CATEGORIES].sort(),
+      ['aoi', 'el', 'lxt', 'pl'],
+      '类别清单必须覆盖全部扫描类别',
+    )
+
+    const preferences = useUserPreferencesStore.getState()
+
+    for (const category of SCAN_CATEGORIES) {
+      const meta = SCAN_CATEGORY_META[category]
+      assert.ok(meta.label && meta.eyebrow && meta.networkHint, category)
+      assert.ok(
+        Array.isArray(preferences[meta.typeCatalogKey]),
+        `${category} 的类型清单字段 ${meta.typeCatalogKey} 不存在`,
+      )
+    }
   })
 
   await test('页面参数: AOI 图片类型进参数与指纹', async () => {

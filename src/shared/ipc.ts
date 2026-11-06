@@ -57,13 +57,6 @@ export interface MachineInfo {
  */
 export type ScanCategory = 'el' | 'lxt' | 'pl' | 'aoi'
 
-export const SCAN_CATEGORY_LABEL: Record<ScanCategory, string> = {
-  el: 'EL',
-  lxt: '力禧特EL',
-  pl: '利珀PL',
-  aoi: '森标 AOI',
-}
-
 /** 力禧特第二层的两个候选共享名；探测时两个都会验证，不再按顺序取第一个 */
 export const LXT_SHARES = ['el', 'SaveImages'] as const
 

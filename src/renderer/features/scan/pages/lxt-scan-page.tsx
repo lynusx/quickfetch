@@ -4,6 +4,7 @@ import LxtFilterPanel from '../components/lxt-filter-panel'
 import LxtMachinePicker from '../components/lxt-machine-picker'
 import PlantScanPage from '../components/plant-scan-page'
 import { NETWORK_HINT } from '@shared/networkHint'
+import { SCAN_CATEGORY_META } from '@shared/scanCategories'
 import { usePlantScanPage } from '../hooks/usePlantScanPage'
 import { useLxtFilterStore } from '../stores/lxtFilterStore'
 import {
@@ -18,10 +19,14 @@ import {
  * 与其他「厂区/机台」类扫描共用同一套页面骨架（PlantScanPage），
  * 这里只提供力禧特自己的机台来源与筛选面板。
  */
+const META = SCAN_CATEGORY_META.lxt
+
 const LxtScanPage = () => {
   const lxt = useSettingsStore(selectLxt)
   const load = useSettingsStore((state) => state.load)
-  const lxtTypes = useUserPreferencesStore((state) => state.lxtTypes)
+  const lxtTypes = useUserPreferencesStore(
+    (state) => state[META.typeCatalogKey],
+  )
 
   useEffect(() => {
     void load()
@@ -32,8 +37,8 @@ const LxtScanPage = () => {
   const { ready, missing, filterSignature, getParams } = usePlantScanPage({
     store: useLxtFilterStore,
     configured,
-    hasSlots: true,
-    requiresLevels: false,
+    hasSlots: META.hasSlots,
+    requiresLevels: META.requiresLevels,
     typeCatalog: lxtTypes,
   })
 

@@ -4,6 +4,7 @@ import AoiFilterPanel from '../components/aoi-filter-panel'
 import AoiMachinePicker from '../components/aoi-machine-picker'
 import PlantScanPage from '../components/plant-scan-page'
 import { NETWORK_HINT } from '@shared/networkHint'
+import { SCAN_CATEGORY_META } from '@shared/scanCategories'
 import { usePlantScanPage } from '../hooks/usePlantScanPage'
 import { useAoiFilterStore } from '../stores/aoiFilterStore'
 import {
@@ -19,10 +20,14 @@ import {
  * 这里只提供 AOI 自己的机台来源与筛选面板。路径没有时段层，
  * 因此 getParams 固定传 slots: []。
  */
+const META = SCAN_CATEGORY_META.aoi
+
 const AoiScanPage = () => {
   const aoi = useSettingsStore(selectAoi)
   const load = useSettingsStore((state) => state.load)
-  const aoiTypes = useUserPreferencesStore((state) => state.aoiTypes)
+  const aoiTypes = useUserPreferencesStore(
+    (state) => state[META.typeCatalogKey],
+  )
 
   useEffect(() => {
     void load()
@@ -33,10 +38,10 @@ const AoiScanPage = () => {
   const { ready, missing, filterSignature, getParams } = usePlantScanPage({
     store: useAoiFilterStore,
     configured,
-    hasSlots: false,
-    requiresLevels: false,
+    hasSlots: META.hasSlots,
+    requiresLevels: META.requiresLevels,
     typeCatalog: aoiTypes,
-    hasImageKind: true,
+    hasImageKind: META.hasImageKind,
   })
 
   return (

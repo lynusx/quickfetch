@@ -1,4 +1,5 @@
 import { NETWORK_HINT } from '@shared/networkHint'
+import { SCAN_CATEGORY_META } from '@shared/scanCategories'
 
 import { useSettingsStore, useUserPreferencesStore } from '@/features/settings'
 import PlantScanPage from '../components/plant-scan-page'
@@ -12,16 +13,18 @@ import '../scan.css'
  * EL 页与入口类页面共用同一个 page skeleton，只提供 DC 根目录 setup、
  * filter panel 与参数来源；scan/copy/history 的接线不再重复一份。
  */
+const META = SCAN_CATEGORY_META.el
+
 const ElScanPage = () => {
   const settings = useSettingsStore((state) => state.settings)
-  const ngTypes = useUserPreferencesStore((state) => state.ngTypes)
+  const ngTypes = useUserPreferencesStore((state) => state[META.typeCatalogKey])
   const configured = Boolean(settings?.rootPath)
 
   const { ready, missing, filterSignature, getParams } = usePlantScanPage({
     store: useElFilterStore,
     configured,
-    hasSlots: true,
-    requiresLevels: false,
+    hasSlots: META.hasSlots,
+    requiresLevels: META.requiresLevels,
     typeCatalog: ngTypes,
   })
 

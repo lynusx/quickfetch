@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 
 import type { ScanCategory, ScanTask } from '@shared/ipc'
+import { SCAN_CATEGORIES } from '@shared/scanCategories'
 
 interface ScanState {
   task: ScanTask | null
@@ -41,18 +42,16 @@ const createScanStore = (category: ScanCategory) =>
     ),
   )
 
-export const useElScanStore = createScanStore('el')
-export const useLxtScanStore = createScanStore('lxt')
-export const usePlScanStore = createScanStore('pl')
-export const useAoiScanStore = createScanStore('aoi')
+/** 类别清单是唯一来源：加一类只需在 SCAN_CATEGORIES 里加一项 */
+const stores = Object.fromEntries(
+  SCAN_CATEGORIES.map((category) => [category, createScanStore(category)]),
+) as Record<ScanCategory, ScanStore>
 
-const stores: Record<ScanCategory, ScanStore> = {
-  el: useElScanStore,
-  lxt: useLxtScanStore,
-  pl: usePlScanStore,
-  aoi: useAoiScanStore,
-}
+export const useElScanStore = stores.el
+export const useLxtScanStore = stores.lxt
+export const usePlScanStore = stores.pl
+export const useAoiScanStore = stores.aoi
 
-/** 按类别取对应的扫描 store；映射穷尽，新增类别时类型检查会报错 */
+/** 按类别取对应的扫描 store；映射由类别清单生成，不会漏 */
 export const scanStoreOf = (category: ScanCategory): ScanStore =>
   stores[category]
