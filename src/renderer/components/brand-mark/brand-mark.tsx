@@ -3,10 +3,11 @@ import { Flex } from '@radix-ui/themes'
 import './brand-mark.css'
 
 /**
- * 应用标识。
+ * 应用标识：QuickFetch 的 Q。
  *
- * 四角框 + 中心点表示「扫描取图」，不依赖任何外部图片资源，
- * 颜色全部走主题令牌，换主题色时自动跟随。
+ * 圆环 + 右下角的圆点尾巴，比字母本身更圆润；矢量内联，不依赖图片资源，
+ * 颜色走 currentColor，底色走 .brand-mark 的 accent 令牌，换主题时自动跟随。
+ * 与 build/icon.ico、favicon.svg 是同一个符号，改动时三处一起改。
  */
 export const BrandMark = () => (
   <Flex
@@ -15,21 +16,13 @@ export const BrandMark = () => (
     justify="center"
     aria-hidden="true"
   >
-    <svg
-      width="21"
-      height="21"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8" />
-      <path d="M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8" />
-      <path d="M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16" />
-      <path d="M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" />
-      <circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none" />
+    {/* viewBox 收到符号自身的包围盒，保证 Q 在方块里占 72%，和 exe 图标一致 */}
+    <svg width="27" height="27" viewBox="38 38 180 180" fill="currentColor">
+      <path
+        fillRule="evenodd"
+        d="M126 38A88 88 0 1 1 125.9 38ZM126 78A48 48 0 1 0 126.1 78Z"
+      />
+      <circle cx="186" cy="186" r="32" />
     </svg>
   </Flex>
 )

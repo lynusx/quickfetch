@@ -56,14 +56,9 @@ export const AppSidebar = () => (
   <Flex className="app-sidebar" direction="column">
     <Flex className="sidebar-brand" align="center">
       <BrandMark />
-      <Box>
-        <Text as="div" className="brand-name">
-          秒取
-        </Text>
-        <Text as="div" className="brand-sub">
-          产线检验工作台
-        </Text>
-      </Box>
+      <Text as="div" className="brand-name">
+        秒取
+      </Text>
     </Flex>
 
     <Box className="sidebar-nav" role="navigation" aria-label="主导航">

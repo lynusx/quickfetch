@@ -139,7 +139,8 @@ pnpm dist:win                 # 先 build，再打 Windows x64 zip（QuickFetch-
 
 `pnpm start` 使用上一次 `pnpm build` 的产物预览；改完源码要先重新构建。
 
-打包配置见 `electron-builder.yml`，应用图标为 `build/icon.png`（占位图，可替换为正式 256×256 图标）。
+打包配置见 `electron-builder.yml`，Windows 图标取 `build/icon.ico`（16–256 多尺寸）。
+标志的源文件、两个配色版本（靛蓝 / 墨黑）与使用规范都在 [`brand/`](brand/brand-guidelines.md)。
 
 ## 目录结构
 

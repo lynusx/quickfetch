@@ -33,7 +33,8 @@ win:
     - target: zip
       arch:
         - x64
-  icon: build/icon.png
+  # Windows 优先用多尺寸 ico（16–256），比让 electron-builder 现场从 png 生成更可控
+  icon: build/icon.ico
   artifactName: QuickFetch-${version}-win-x64.${ext}
 
 # 安装包配置保留：换回 nsis 目标即可恢复

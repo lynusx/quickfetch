@@ -9,6 +9,15 @@ import { persistUnfinished } from './services/scanner'
 // electron-vite 在开发模式下注入渲染层 dev server 地址
 const rendererDevUrl = process.env['ELECTRON_RENDERER_URL']
 
+/**
+ * 运行期窗口 / 任务栏图标。
+ *
+ * 打包时 Windows 用的是 electron-builder 嵌进 exe 的 build/icon.ico，
+ * 但开发态和 macOS Dock 不读 exe 资源，会退回 Electron 默认图标；
+ * 这里显式指一张同源的 PNG（随 public 目录进 out/renderer/img）。
+ */
+const appIconPath = join(__dirname, '../renderer/img/icon.png')
+
 const DEFAULT_WINDOW_WIDTH = 1280
 const DEFAULT_WINDOW_HEIGHT = 800
 const MIN_WINDOW_WIDTH = 1080
@@ -50,6 +59,7 @@ const createWindow = (): BrowserWindow => {
     autoHideMenuBar: true,
     backgroundColor: '#ffffff',
     title: '秒取',
+    icon: appIconPath,
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
@@ -145,6 +155,9 @@ if (!hasSingleInstanceLock) {
   app.whenReady().then(async () => {
     // Windows 任务栏分组与通知标识
     app.setAppUserModelId('com.lynusx.quickfetch')
+
+    // macOS 的 Dock 图标不跟着窗口走，开发态默认是 Electron 的图标，这里显式覆盖
+    if (process.platform === 'darwin') app.dock?.setIcon(appIconPath)
 
     // 先按已落盘的开关初始化日志，后续启动步骤与现场操作都能被记录
     const settings = await readSettings().catch(() => null)
