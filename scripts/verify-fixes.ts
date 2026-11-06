@@ -64,6 +64,7 @@ import type { MachineResolver } from '../src/main/services/scanner/resolver'
 import {
   CopyTaskRunner,
   SpeedMeter,
+  buildCopyPlan,
   filterByMachines,
   planPreview,
 } from '../src/main/services/copy/copy'
@@ -527,6 +528,58 @@ const copyTests = async () => {
     assert.equal(snap.progress.totalBytes, 8)
     const files = await readdir(dst)
     assert.ok(files.includes('aoi.bmp'), `实际 ${files}`)
+  })
+
+  await test('复制计划: 预览与执行共用同一份判定', async () => {
+    const dst = await mkdtemp(join(tmpdir(), 'qf-plan-'))
+    // 目标里已有一张 img.jpg，源里有 9 张同名
+    await writeFile(join(dst, 'img.jpg'), 'preexisting')
+
+    const params = {
+      machines: ['A02-A'],
+      layout: 'flat' as const,
+      conflict: 'skip' as const,
+    }
+    const plan = await buildCopyPlan({ images, params, targetDir: dst })
+
+    assert.equal(plan.picked.length, 9)
+    // 预览口径：同名坑位只算一次
+    assert.equal(plan.conflicts, 1)
+    assert.equal(plan.alreadyExists, 9)
+    assert.equal(plan.copyTotal, 0)
+    assert.equal(plan.items.length, 0)
+
+    const task = new CopyTaskRunner({
+      scanTaskId: 's-plan',
+      targetDir: dst,
+      params,
+      images,
+      emit: () => undefined,
+    })
+    task.start()
+    await task.waitSettled()
+
+    const snap = task.snapshot()
+    assert.equal(snap.progress.total, plan.picked.length)
+    assert.equal(snap.progress.alreadyExists, plan.alreadyExists)
+    assert.equal(snap.progress.copyTotal, plan.copyTotal)
+  })
+
+  await test('复制计划: 没选目录时只统计张数与分组', async () => {
+    const plan = await buildCopyPlan({
+      images,
+      params: {
+        machines: ['A02-A'],
+        layout: 'machine',
+        conflict: 'rename',
+      },
+    })
+
+    assert.equal(plan.picked.length, 9)
+    assert.equal(plan.conflicts, 0)
+    assert.equal(plan.items.length, 0)
+    assert.deepEqual(plan.folders, ['A02-A'])
+    assert.deepEqual(plan.perMachine, [{ machine: 'A02-A', images: 9 }])
   })
 
   await test('复制: 空机台列表表示一台都不选，不再等于全选', async () => {

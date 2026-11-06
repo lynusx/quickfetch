@@ -7,9 +7,9 @@ import type {
   CopyTaskParams,
 } from '../../shared/ipc'
 import {
-  filterByMachines,
   planPreview,
   getCopyRunner,
+  selectCopyImages,
   startCopy,
 } from '../services/copy'
 import { taskImages } from '../services/scanner'
@@ -73,7 +73,7 @@ export const registerCopyIpc = (): void => {
       }
 
       const target = resolve(normalize(targetDir))
-      const picked = filterByMachines(images, params.machines)
+      const picked = selectCopyImages(images, params.machines)
 
       if (!picked.length) {
         throw new Error('所选机台在当前任务里没有图片，请重新勾选')

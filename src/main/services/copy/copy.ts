@@ -1,16 +1,8 @@
-import {
-  copyFile,
-  mkdir,
-  readdir,
-  rename,
-  rm,
-  writeFile,
-} from 'node:fs/promises'
-import { basename, extname, join } from 'node:path'
+import { copyFile, mkdir, rename, rm, writeFile } from 'node:fs/promises'
+import { basename, join } from 'node:path'
 
 import type {
   CopyFailure,
-  CopyLayout,
   CopyPlanPreview,
   CopyProgress,
   CopyTask,
@@ -21,9 +13,21 @@ import type {
 import { createAdaptiveGate } from '../../utils/adaptive'
 import type { AdaptiveGate } from '../../utils/adaptive'
 import { toFsPath } from '../../utils/pathx'
-import { isImageFile } from '../../../shared/imageExtensions'
 import { logger } from '../log'
 import { cachedSizeOf, measureImageSizes } from './measure'
+import { buildCopyPlan, folderOf, selectCopyImages } from './plan'
+import type { PlanItem } from './plan'
+
+// 计划相关的纯函数仍从这里导出，IPC 与测试的 import 路径不变
+export {
+  buildCopyPlan,
+  filterByMachines,
+  folderOf,
+  machineOf,
+  selectCopyImages,
+  typeOf,
+} from './plan'
+export type { CopyPlan, PlanAction, PlanItem } from './plan'
 
 /**
  * 同时打开的文件句柄上限。现场机器 8G 内存，10 路并发复制 +
@@ -120,242 +124,29 @@ export class SpeedMeter {
   }
 }
 
-/**
- * 把文件名拆成「主名 + 末尾数字 + 扩展名」，用于数字自增。
- *
- * img.jpg      → { base: 'img',   index: null }
- * img1.jpg     → { base: 'img',   index: 1 }
- * shot_007.jpg → { base: 'shot_', index: 7 }  → 007 补零宽度保留
- */
-const splitIndex = (
-  name: string,
-): { base: string; index: number | null; width: number; ext: string } => {
-  const ext = extname(name)
-  const stem = basename(name, ext)
-  const match = stem.match(/^(.*?)(\d+)$/)
-
-  if (!match) return { base: stem, index: null, width: 0, ext }
-
-  const digits = match[2]
-
-  return {
-    base: match[1],
-    index: Number.parseInt(digits, 10),
-    width: digits.length,
-    ext,
-  }
-}
-
-/**
- * 生成不冲突的目标文件名：纯数字自增，直接拼在主名后面。
- *
- * img.jpg → img1.jpg → img2.jpg
- * img1.jpg 重名 → img2.jpg（拆开已有数字递增，不会得到 img11.jpg）
- *
- * Windows 文件名大小写不敏感，比较统一转小写，避免 a.jpg 与 A.jpg 互相覆盖。
- * 刻意不识别「img (2).jpg」这种带空格的副本名——重跑时它会当成另一个文件。
- */
-const indexedName = (name: string, taken: Set<string>): string => {
-  if (!taken.has(name.toLowerCase())) return name
-
-  const { base, index, width, ext } = splitIndex(name)
-  const start = (index ?? 0) + 1
-
-  for (let next = start; next < start + 100_000; next += 1) {
-    const digits = width > 1 ? String(next).padStart(width, '0') : String(next)
-    const candidate = `${base}${digits}${ext}`
-
-    if (!taken.has(candidate.toLowerCase())) return candidate
-  }
-
-  // 极端情况（同名上万份）：退回时间戳，绝不覆盖已有文件
-  return `${base}${Date.now()}${ext}`
-}
-
-const segmentsOf = (image: ScannedImage): string[] =>
-  image.path.split('/').filter(Boolean)
-
-/**
- * 从图片上取机台与类型。
- *
- * 机台优先用扫描时写进去的 machine 字段 —— 力禧特、利珀、森标 AOI 的 path 第 0 段是厂区，
- * 直接按段切会把整个厂区当成一台机器。老历史记录没有这个字段，退回第 0 段
- * （那时的记录全是 EL 的，第 0 段就是机台目录名）。
- *
- * 类型取倒数第 2 段，各类扫描都一样。
- */
-export const machineOf = (image: ScannedImage): string =>
-  image.machine ?? segmentsOf(image)[0] ?? ''
-
-export const typeOf = (image: ScannedImage): string => {
-  const segments = segmentsOf(image)
-  return segments.length >= 2 ? segments[segments.length - 2] : ''
-}
-
-/**
- * 按分组方式算出图片相对目标目录的子目录。
- * 完全平铺返回空数组，表示直接放进目标目录根下。
- */
-export const folderOf = (image: ScannedImage, layout: CopyLayout): string[] => {
-  switch (layout) {
-    case 'flat':
-      return []
-    case 'machine':
-      return [machineOf(image)]
-    case 'type':
-      return [typeOf(image)]
-    case 'machine-type':
-      return [machineOf(image), typeOf(image)]
-  }
-}
-
-/**
- * 过滤出勾选的机台。
- *
- * 空数组表示一台都没选，返回空结果 —— 不再兼作「全选」。
- * 渲染层默认全选并显式传机台名，主进程不再猜调用方的意图。
- */
-export const filterByMachines = (
-  images: ScannedImage[],
-  machines: string[],
-): ScannedImage[] => {
-  const allowed = new Set(machines)
-
-  if (!allowed.size) return []
-
-  return images.filter((image) => allowed.has(machineOf(image)))
-}
-
-const compareName = (a: string, b: string): number =>
-  a.localeCompare(b, 'zh-CN', { numeric: true })
-
 /** 预检查：让界面在选目录前就能告诉用户会复制多少、建几个文件夹 */
 export const planPreview = async (
   images: ScannedImage[],
   params: CopyTaskParams,
   targetDir?: string,
 ): Promise<CopyPlanPreview> => {
-  // 只统计图片：界面给的是「将复制 N 张图」，不该把手工放进类型目录的
-  // 说明文件、表格一起算进去。扫描侧已经按同一套扩展名过滤过，
-  // 这里再挡一次是为了兼容既有历史记录里的结果集。
-  const picked = filterByMachines(images, params.machines).filter((image) =>
-    isImageFile(image.name),
-  )
-  const perMachine = new Map<string, number>()
-  const folders = new Set<string>()
-
-  for (const image of picked) {
-    const machine = machineOf(image)
-    perMachine.set(machine, (perMachine.get(machine) ?? 0) + 1)
-
-    const segments = folderOf(image, params.layout)
-    if (segments.length) folders.add(segments.join('/'))
-  }
-
-  // 只有已经选好目录才可能算冲突数；没选目录时分组子目录还不存在
-  const conflicts = targetDir
-    ? await countConflicts(picked, params, targetDir)
-    : 0
+  // 计划与执行共用 buildCopyPlan：张数、机台、冲突数都来自同一遍判定
+  const plan = await buildCopyPlan({ images, params, targetDir })
 
   // 体积用于「要复制的机台」标题行，让用户在点开始前就知道这批图多大；
   // 命中缓存的项不再打网络 IO，第一次勾选的代价才是一次 stat。
-  const sizes = await measureImageSizes(picked)
+  // 刻意留在计划之外：执行时要量的只是 action === 'copy' 的项。
+  const sizes = await measureImageSizes(plan.picked)
 
   return {
-    machines: [...perMachine.keys()].sort(compareName),
-    total: picked.length,
-    perMachine: [...perMachine.entries()]
-      .map(([machine, images]) => ({ machine, images }))
-      .sort((a, b) => compareName(a.machine, b.machine)),
-    folders: [...folders].sort(compareName),
-    conflicts,
+    machines: plan.perMachine.map((item) => item.machine),
+    total: plan.picked.length,
+    perMachine: plan.perMachine,
+    folders: plan.folders,
+    conflicts: plan.conflicts,
     totalBytes: sizes.totalBytes,
     sizeUnknown: sizes.sizeUnknown,
   }
-}
-
-/**
- * 预演一遍重名冲突：统计目标目录里**已经真实存在**的同名坑位数。
- *
- * 刻意不把「同一批里两张图同名」算进来 —— 那是源目录里的重名，
- * 用户在扫描结果里就能看到，提示「目标已存在」会让人误以为盘上已有文件。
- * 同名的一批图只占目标里的一个坑位，所以只算一次；覆盖确认弹窗用的就是这个数。
- */
-const countConflicts = async (
-  images: ScannedImage[],
-  params: CopyTaskParams,
-  targetDir: string,
-): Promise<number> => {
-  const takenByDir = new Map<string, Set<string>>()
-  // 同一批同名图只占目标里的一个坑位，只能算一次：
-  // 覆盖确认弹窗要报的是「会顶掉几个文件」，不是「涉及几张源图」。
-  const seen = new Set<string>()
-  let conflicts = 0
-
-  for (const image of images) {
-    const folder = folderOf(image, params.layout)
-    const dir = folder.length ? join(targetDir, ...folder) : targetDir
-    const taken = await namesIn(dir, takenByDir)
-    const lower = image.name.toLowerCase()
-    const key = `${dir}\u0000${lower}`
-
-    if (taken.has(lower) && !seen.has(key)) {
-      conflicts += 1
-      seen.add(key)
-    }
-  }
-
-  return conflicts
-}
-
-/** 取某目录的已占用名单，同一目录只读一次 */
-const namesIn = async (
-  dir: string,
-  cache: Map<string, Set<string>>,
-): Promise<Set<string>> => {
-  const cached = cache.get(dir)
-
-  if (cached) return cached
-
-  const names = await existingNames(dir)
-  cache.set(dir, names)
-
-  return names
-}
-
-/** 读目标目录已有文件名；分组子目录还不存在时视为空 */
-const existingNames = async (dir: string): Promise<Set<string>> => {
-  try {
-    const entries = await readdir(toFsPath(dir))
-
-    return new Set(entries.map((name) => name.toLowerCase()))
-  } catch {
-    return new Set()
-  }
-}
-
-/**
- * 单个待复制项的执行意图。
- *
- * - copy：真的写盘
- * - skip-exists：目标目录里已有同名文件，按「跳过已存在」策略跳过这一张
- * - skip：本批内部同名且策略为跳过（源目录里就有重名，无处可放）
- *
- * 前两种都不碰磁盘，但要分开计数：用户看「跳过 50 张」时需要知道
- * 是"盘上本来就有"还是"源里重了"。
- */
-type PlanAction = 'copy' | 'skip' | 'skip-exists'
-
-interface PlanItem {
-  image: ScannedImage
-  /** 相对目标目录的文件夹，空数组表示根下 */
-  folder: string[]
-  from: string
-  to: string
-  renamed: boolean
-  action: PlanAction
-  /** 源文件大小；拿不到时为 undefined，进度按张数回退 */
-  size?: number
 }
 
 export interface CopyRunnerOptions {
@@ -859,104 +650,25 @@ export class CopyTaskRunner {
     this.markSettled()
   }
 
-  /** 本次任务应复制的完整图片集合；清单与执行计划都从这里取 */
+  /** 本次任务应复制的完整图片集合；清单从这里取 */
   private taskImages(): ScannedImage[] {
-    // 与 planPreview、扫描侧共用同一套扩展名判定：
-    // 旧历史里若混入说明文件/表格，预览与真正复制的张数不能对不上。
-    return filterByMachines(this.source, this.params.machines).filter((image) =>
-      isImageFile(image.name),
-    )
+    return selectCopyImages(this.source, this.params.machines)
   }
 
   /** 规划目标路径：按布局建子目录，按重名策略决定改名 / 跳过 / 覆盖 */
   private async buildPlan(): Promise<void> {
-    const picked = this.taskImages()
-    const conflict = this.params.conflict ?? 'rename'
-    this.roundTotal = picked.length
+    // 与复制面板的预检查共用同一次判定：预览说几张、冲突几个，
+    // 执行时就是同样的结果
+    const built = await buildCopyPlan({
+      images: this.source,
+      params: this.params,
+      targetDir: this.targetDir,
+    })
 
-    // 三个名单各管一件事：
-    // - original 是目标目录「开工前」的快照，用来判断这个名字是不是本来就存在
-    // - taken 是本批累积占用，用来排队编号
-    // - handled 记录本批里每个「目录 + 源文件名」出现过几次
-    //
-    // 合成一个名单会出事：A02-A 下 9 张图都叫 img.jpg，
-    // 第 1 张复制过去后名字就被占住了，后面 8 张会被判成「目标已存在」——
-    // skip 会把它们全部跳过（丢 8 张图），overwrite 会让它们互相覆盖（也丢 8 张）。
-    //
-    // 所以「目标开工前就有」与「本批刚写进去」必须分开看：
-    // 前者按用户选的重名策略处理，后者只能编号，绝不能覆盖自己刚写的图。
-    const original = new Map<string, Set<string>>()
-    const taken = new Map<string, Set<string>>()
-    const handled = new Map<string, Set<string>>()
-
-    for (const image of picked) {
-      const folder = folderOf(image, this.params.layout)
-      const dir = folder.length
-        ? join(this.targetDir, ...folder)
-        : this.targetDir
-
-      const existing = await namesIn(dir, original)
-
-      let used = taken.get(dir)
-
-      if (!used) {
-        // 从原始快照复制一份，后续改的都是副本
-        used = new Set(existing)
-        taken.set(dir, used)
-      }
-
-      let seen = handled.get(dir)
-
-      if (!seen) {
-        seen = new Set()
-        handled.set(dir, seen)
-      }
-
-      const lower = image.name.toLowerCase()
-      const existedBefore = existing.has(lower)
-      const repeated = seen.has(lower)
-
-      seen.add(lower)
-
-      let target = image.name
-      let action: PlanAction = 'copy'
-
-      // 三条判定互斥，顺序不能换：
-      // 1) 目标开工前就有这个文件名 → 按用户选的策略走。skip 只跳这一张。
-      //    以前这里是整组跳过，9 张 img.jpg 遇到 1 张已存在就丢 8 张。
-      // 2) 本批内部重名（目标原本没有）→ 编号让开，skip 也跳。
-      //    这一段保证 A02-A 下 9 张 img.jpg 不会互相覆盖，不能动。
-      // 3) 其余照常复制。
-      if (existedBefore && conflict === 'skip') {
-        action = 'skip-exists'
-      } else if (existedBefore && conflict === 'overwrite') {
-        // 第一张顶掉目标文件，后面同名的编号落盘，否则 4 张最后只剩 1 张
-        target = repeated ? indexedName(image.name, used) : image.name
-      } else if (used.has(lower)) {
-        if (conflict === 'skip') action = 'skip'
-        else target = indexedName(image.name, used)
-      }
-
-      if (action === 'copy') used.add(target.toLowerCase())
-
-      // 目标已存在而跳过的项不进 plan：它们不需要任何磁盘动作，
-      // 混进 plan 只会把批号、进度和并发通道都算乱。
-      if (action === 'skip-exists') {
-        this.alreadyExists += 1
-        continue
-      }
-
-      this.plan.push({
-        image,
-        folder,
-        from: image.absolutePath,
-        to: join(dir, target),
-        renamed: target !== image.name,
-        action,
-      })
-    }
-
-    this.copyTotal = this.plan.filter((item) => item.action === 'copy').length
+    this.plan = built.items
+    this.roundTotal = built.picked.length
+    this.copyTotal = built.copyTotal
+    this.alreadyExists = built.alreadyExists
 
     logger.info('copy', 'copy.plan', {
       copyId: this.id,
