@@ -34,6 +34,7 @@ import {
   createAoiResolver,
   createLxtResolver,
 } from '../src/main/services/scanner/resolver'
+import { createBreaker } from '../src/main/services/scanner/breaker'
 import {
   createLogger,
   formatLogLine,
@@ -1187,6 +1188,66 @@ const breakerTests = async () => {
     }
     return root
   }
+
+  await test('熔断: 阈值边界（窗口 / 比例 / 机台累计 / 复位）', async () => {
+    const fresh = () => {
+      const state = { pauses: 0, running: true }
+
+      return {
+        state,
+        breaker: createBreaker({
+          taskId: 't',
+          isRunning: () => state.running,
+          onPause: () => {
+            state.pauses += 1
+          },
+        }),
+      }
+    }
+
+    // 样本不足 8 个不下结论；第 8 个仍失败才暂停
+    const first = fresh()
+    for (let i = 0; i < 7; i += 1) first.breaker.sampleRead(true)
+    assert.equal(first.state.pauses, 0)
+    first.breaker.sampleRead(true)
+    assert.equal(first.state.pauses, 1)
+
+    // 暂停之后不再重复触发
+    first.state.running = false
+    first.breaker.sampleRead(true)
+    assert.equal(first.state.pauses, 1)
+
+    // 恰好 9/10 = 90% 触发；8/9 = 88.9% 不触发
+    const ratio = fresh()
+    for (let i = 0; i < 7; i += 1) ratio.breaker.sampleRead(true)
+    ratio.breaker.sampleRead(false)
+    ratio.breaker.sampleRead(true)
+    assert.equal(ratio.state.pauses, 0, '8/9 不该暂停')
+    ratio.breaker.sampleRead(true)
+    assert.equal(ratio.state.pauses, 1, '9/10 应暂停')
+
+    // 机台跨批累计：3 批全不通才暂停
+    const batch = fresh()
+    const oneBatch = (reachable: boolean) => {
+      batch.breaker.beginBatch()
+      batch.breaker.sampleMachine(reachable)
+      batch.breaker.endBatch()
+    }
+    oneBatch(false)
+    oneBatch(false)
+    assert.equal(batch.state.pauses, 0)
+    oneBatch(false)
+    assert.equal(batch.state.pauses, 1)
+
+    // 中间出现可达机台就清零
+    batch.breaker.reset()
+    oneBatch(false)
+    oneBatch(false)
+    oneBatch(true)
+    oneBatch(false)
+    oneBatch(false)
+    assert.equal(batch.state.pauses, 1, '可达机台应清零累计')
+  })
 
   await test('熔断: 夹着未认证/缺目录时不再被误判成断网暂停', async () => {
     const machines = Array.from({ length: 8 }, (_, i) => `东区/${i}A正检`)

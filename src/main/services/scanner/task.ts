@@ -20,6 +20,8 @@ import { describeLeafFailure, summarize } from './diagnosis'
 import { isImageFile } from '../../../shared/imageExtensions'
 import { createLimiter } from './limiter'
 import type { Limiter } from './limiter'
+import { createBreaker } from './breaker'
+import type { Breaker } from './breaker'
 import type { MachineResolver, PathShape } from './resolver'
 import { logger } from '../log'
 
@@ -35,36 +37,6 @@ export const DEFAULT_MACHINE_BATCH_SIZE = 2
 
 /** 进度推送最小间隔，避免高频 IPC 压满渲染进程 */
 const PROGRESS_INTERVAL_MS = 120
-
-/**
- * 最近一段时间里「不可达」占比超过该值，才判定整片断网并暂停。
- *
- * 以前是「连续 5 次」的绝对值。真机上的问题：森标 AOI 一次批量 2 台、
- * 每台 10 来个目录，里面只要连着碰上几台没认证的机器，5 次很快攒到，
- * 任务就"卡住"（其实是自动暂停了）。而车间断网是整片发生的，比例远比
- * 绝对值可靠 —— 90% 以上都读不通，才值得停下来让用户去接网络。
- */
-const NETWORK_FAILURE_RATIO = 0.9
-/** 参与判定的最近样本数；窗口太长会让接回网络后迟迟不解除统计 */
-const NETWORK_FAILURE_WINDOW = 12
-/**
- * 至少攒够这么多样本才下结论。
- *
- * 不能直接等窗口装满：整片断网时每台机台只贡献 1 个样本（解析就失败了），
- * 而判定跑在"第一批机台批处理结束"这个批次边界上 —— 一批 10 台就是 10 个
- * 样本，永远凑不满 12，断网反而不会被发现，任务继续逐台等超时。
- * 8 是折中：低于此数比例噪声太大，高于此数整片断网要等太久才停。
- */
-const NETWORK_FAILURE_MIN = 8
-/**
- * 连续多少台机台网络不可达，就直接判定断网。
- *
- * 车间的断网是整片发生的。AOI 一批 2 台，靠滑动窗口要跑 4 批才攒够样本，
- * 期间用户只看到进度条不动；按机台跨批累计是更早更准的信号。
- * 门槛设 3 是因为 2 台太小（两台恰好都关机很正常），不足以说明是断网；
- * 只有 network 不可达才计数，未认证/无权限/无共享不算。
- */
-const BATCH_UNREACHABLE_MIN = 3
 
 /** 探测阶段在进度条上占的权重，其余留给收图 */
 const PROBE_WEIGHT = 20
@@ -228,18 +200,8 @@ export class ScanTaskRunner {
    * 反过来几台没认证的机器扎堆时，又会把好好的任务暂停掉 —— 现场看到的
    * 「扫着扫着卡住」和「点继续立刻出结果」都是这两头造成的。
    */
-  private readonly reachabilityWindow: boolean[] = []
-  /**
-   * 当前批次里连得上 / 连不上的机台数，以及跨批累计的连续不可达台数。
-   *
-   * 滑动窗口按"读取次数"采样，而整片断网时机台在解析阶段就失败、
-   * 每台只贡献 1 个样本；AOI 一批才 2 台，等窗口攒够 8 个样本要跑 4 批，
-   * 期间每台都要等满超时。这里按机台跨批累计：一批全不通就累加，
-   * 出现任意一台可达就清零，达到阈值立即暂停，不再等滑动窗口。
-   */
-  private batchReachable = 0
-  private batchFailed = 0
-  private unreachableMachineStreak = 0
+  /** 断网熔断：滑动窗口 + 按机台跨批累计，策略在 breaker.ts */
+  private readonly breaker: Breaker
   private lastEmitAt = 0
 
   /** 当前生效的并发档位与单次读取超时，会随失败率自动调整 */
@@ -275,6 +237,13 @@ export class ScanTaskRunner {
     this.params = params
     this.context = context
     this.emit = emit
+
+    // 断网策略与扫描流程解耦：执行器只喂样本，阈值与两条规则留在 breaker
+    this.breaker = createBreaker({
+      taskId: this.id,
+      isRunning: () => this.status === 'running',
+      onPause: () => this.pause('network'),
+    })
 
     this.settled = new Promise<boolean>((resolve) => {
       this.markSettled = resolve
@@ -402,10 +371,7 @@ export class ScanTaskRunner {
     this.pauseReason = null
     // 清空样本窗口：用户点「继续」就是在说「网络已经好了」，
     // 带着旧样本继续统计，接回网络后的头几次读取仍然会被算成失败
-    this.reachabilityWindow.length = 0
-    this.batchReachable = 0
-    this.batchFailed = 0
-    this.unreachableMachineStreak = 0
+    this.breaker.reset()
     this.status = 'running'
 
     logger.info('scan', 'scan.resume', {
@@ -513,10 +479,8 @@ export class ScanTaskRunner {
         await this.checkpoint()
 
         this.progress.batchIndex = index + 1
-        // 每批开始前清空批内计数；跨批的连续不可达由
-        // unreachableMachineStreak 维护，达到阈值立即暂停
-        this.batchReachable = 0
-        this.batchFailed = 0
+        // 每批开始前清空批内计数；跨批的连续不可达由 breaker 维护
+        this.breaker.beginBatch()
         this.touch('', true)
 
         logger.debug('scan', 'scan.batch.start', {
@@ -533,14 +497,15 @@ export class ScanTaskRunner {
         // 本批全部有结论后再看一次整批的通断情况。
         // 不能在单台失败时判：一批 8 台并发解析，前 3 台先失败的瞬间
         // "失败数 === 已完成数"成立，会被误判成整片断网。
-        this.checkBatchUnreachable()
+        this.breaker.endBatch()
+        const reachability = this.breaker.stats()
 
         logger.debug('scan', 'scan.batch.end', {
           taskId: this.id,
           batchIndex: index + 1,
-          batchReachable: this.batchReachable,
-          batchFailed: this.batchFailed,
-          unreachableMachineStreak: this.unreachableMachineStreak,
+          batchReachable: reachability.batchReachable,
+          batchFailed: reachability.batchFailed,
+          unreachableMachineStreak: reachability.unreachableMachineStreak,
           dirsScanned: this.progress.dirsScanned,
           dirsHit: this.progress.dirsHit,
           dirsSkipped: this.progress.dirsSkipped,
@@ -730,7 +695,7 @@ export class ScanTaskRunner {
     this.probedMachines += 1
     this.finishedMachines += 1
     // 这台机台一路读到了班次目录，网络是通的
-    this.noteMachineReachability(true)
+    this.breaker.sampleMachine(true)
     if (this.slotless) {
       this.collectSlotlessTypes(branch, machine, shiftDir, shiftRead.dirs)
       return
@@ -1113,102 +1078,21 @@ export class ScanTaskRunner {
 
     if (result.status === 'ok') {
       this.progress.dirsScanned += 1
-      this.noteReachability(false)
+      this.breaker.sampleRead(false)
       this.recordSample(false)
     } else if (isNetworkError(result.status)) {
       this.progress.dirsUnreachable += 1
-      this.noteReachability(true)
+      this.breaker.sampleRead(true)
       this.recordSample(true)
     } else {
       // missing / denied 是路径或权限问题，不是网络不可达；
       // 不清零会让「网络×4 → 缺失目录 → 网络」被误判成连续断网
-      this.noteReachability(false)
+      this.breaker.sampleRead(false)
     }
 
     this.touch(path)
 
     return result
-  }
-
-  /**
-   * 按最近一段读取结果判断是否整片断网，是就暂停等用户接回网络。
-   *
-   * 目录读取和解析器探测共用同一个窗口：力禧特/利珀在解析阶段就可能
-   * 遇到整片断网，只统计 read() 的话任务会逐台等完超时才停。
-   *
-   * 注意只有「网络不可达」才算失败。未认证、无权限、目录不存在都只是
-   * 这一台的问题，混进来会把正常任务判成断网（真机 46 台里 31 台未认证，
-   * 按老逻辑早就该暂停了）。
-   */
-  private noteReachability(unreachable: boolean): void {
-    this.reachabilityWindow.push(unreachable)
-
-    if (this.reachabilityWindow.length > NETWORK_FAILURE_WINDOW) {
-      this.reachabilityWindow.shift()
-    }
-
-    // 样本太少时不下结论：整片断网时前几台就会连续失败，
-    // 一凑够几个就判定会被"5 台不通、3 台正常"这种局部故障骗到
-    // （窗口里只有 5 个失败样本，比例 100%，实际整体才 62%）。
-    if (this.reachabilityWindow.length < NETWORK_FAILURE_MIN) return
-
-    const failed = this.reachabilityWindow.filter(Boolean).length
-    const ratio = failed / this.reachabilityWindow.length
-
-    if (ratio < NETWORK_FAILURE_RATIO) return
-    if (this.status !== 'running') return
-
-    logger.warn('scan', 'scan.network.window', {
-      taskId: this.id,
-      failed,
-      window: this.reachabilityWindow.length,
-      ratio,
-    })
-
-    this.pause('network')
-  }
-
-  /**
-   * 按机台记账：这台机台最终是不是连不上。
-   *
-   * 与 noteReachability 分开是因为两者粒度不同 —— 前者按读取次数采样，
-   * 适合判"整片断网"；这里按机台计数，供 checkBatchUnreachable 在批间累计。
-   * 只有 network 不可达才计入失败；未认证/无权限/无共享不算断网。
-   */
-  private noteMachineReachability(reachable: boolean): void {
-    if (reachable) this.batchReachable += 1
-    else this.batchFailed += 1
-  }
-
-  /**
-   * 一批跑完后看一次：连续多台机台都网络不可达，就暂停等用户接网络。
-   *
-   * 不能要求"单批 >= 3 台"：默认批次只有 2 台，那个条件永远不会成立。
-   * 改为跨批累计——一批里只要有一台可达就清零，全都不通则把本批失败数
-   * 累加；达到 BATCH_UNREACHABLE_MIN（3 台）立即暂停。这样
-   * "一批 8 台里 5 台关机、3 台正常"仍不会误判。
-   */
-  private checkBatchUnreachable(): void {
-    if (this.batchReachable > 0) {
-      this.unreachableMachineStreak = 0
-    } else if (this.batchFailed > 0) {
-      this.unreachableMachineStreak += this.batchFailed
-    }
-
-    this.batchReachable = 0
-    this.batchFailed = 0
-
-    if (
-      this.unreachableMachineStreak >= BATCH_UNREACHABLE_MIN &&
-      this.status === 'running'
-    ) {
-      logger.warn('scan', 'scan.network.streak', {
-        taskId: this.id,
-        unreachableMachines: this.unreachableMachineStreak,
-        threshold: BATCH_UNREACHABLE_MIN,
-      })
-      this.pause('network')
-    }
   }
 
   /** 采样一次读取结果；降档的具体动作由 gate 的 onChange 回调完成 */
@@ -1240,7 +1124,7 @@ export class ScanTaskRunner {
 
     // 能走到这里说明路径已经解析出来了，至少共享根是通的。
     // 只有真正的网络失败才算这台机台"连不上"。
-    this.noteMachineReachability(!diagnosis.networkSample)
+    this.breaker.sampleMachine(!diagnosis.networkSample)
 
     branch.brokenAt = brokenAt
     branch.status = diagnosis.status
@@ -1300,10 +1184,10 @@ export class ScanTaskRunner {
     if (resolved.unreachable === 'network') {
       this.progress.dirsUnreachable += 1
     }
-    this.noteReachability(resolved.unreachable === 'network')
+    this.breaker.sampleRead(resolved.unreachable === 'network')
     // 只有网络不通才算「这台机台连不上」。未认证/无权限/无共享只是这台
     // 机台自身的问题，把它们算成失败会让新阈值在 39 台未认证时误判断网。
-    this.noteMachineReachability(resolved.unreachable !== 'network')
+    this.breaker.sampleMachine(resolved.unreachable !== 'network')
 
     this.probedMachines += 1
     this.finishedMachines += 1
