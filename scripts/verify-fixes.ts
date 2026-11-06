@@ -23,6 +23,7 @@ import {
   classifyReadStatus,
   describeAccessError,
   describeLeafFailure,
+  describePrefixFailure,
 } from '../src/main/services/scanner/diagnosis'
 import type { DirReadResult } from '../src/main/services/scanner/fsx'
 import {
@@ -1591,6 +1592,54 @@ const diagnosisTests = async () => {
       classifyFailureStatuses(['unreadable', 'unreachable']).reason,
       'network',
     )
+  })
+
+  await test('诊断: 前缀失败只在一处翻译（EL/LXT/PL 共用）', async () => {
+    // 成功读取：没有失败项，交给 resolver 自己拼「目录/共享名缺失」
+    assert.equal(
+      describePrefixFailure({
+        statuses: ['ok'],
+        layer: 'EL',
+        network: { subject: 'A01-A' },
+        auth: { subject: '\\\\host\\share' },
+        denied: { subject: 'A01-A/EL' },
+      }),
+      null,
+    )
+
+    const network = describePrefixFailure({
+      statuses: ['missing', 'unreachable'],
+      layer: '共享名',
+      network: { subject: '\\\\host', code: 'ETIMEDOUT' },
+      auth: { subject: '\\\\host', style: 'share-unreadable' },
+      denied: { subject: '\\\\host', between: ' 共享' },
+    })
+    assert.equal(network?.ok, false)
+    assert.equal(network?.unreachable, 'network')
+    assert.equal(network?.brokenAt, '共享名')
+    assert.match(network?.reason ?? '', /不可达（ETIMEDOUT）/)
+
+    // 共享根读不通用 share-unreadable 的说法，与 EL 的目录读取失败区分
+    const auth = describePrefixFailure({
+      statuses: ['unreadable'],
+      layer: '机台标识',
+      network: { subject: '\\\\host' },
+      auth: { subject: '\\\\host', style: 'share-unreadable' },
+      denied: { subject: '\\\\host' },
+    })
+    assert.equal(auth?.unreachable, 'auth')
+    assert.equal(auth?.brokenAt, '机台标识')
+    assert.match(auth?.reason ?? '', /共享读不通/)
+
+    const denied = describePrefixFailure({
+      statuses: ['denied'],
+      layer: '共享名',
+      network: { subject: '\\\\host' },
+      auth: { subject: '\\\\host', style: 'share-unreadable' },
+      denied: { subject: '\\\\host', between: ' 共享' },
+    })
+    assert.equal(denied?.unreachable, 'denied')
+    assert.match(denied?.reason ?? '', /共享的权限/)
   })
 
   await test('诊断: 逐目录失败文案与断网样本', async () => {

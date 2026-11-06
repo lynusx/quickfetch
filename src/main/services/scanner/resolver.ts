@@ -15,13 +15,7 @@ import {
 } from '../../../shared/ipc'
 import { splitMachine } from '../discovery/shortcuts'
 import { readDirSafe } from './fsx'
-import {
-  authFailureMessage,
-  classifyFailureStatuses,
-  classifyReadStatus,
-  deniedFailureMessage,
-  networkFailureMessage,
-} from './diagnosis'
+import { classifyFailureStatuses, describePrefixFailure } from './diagnosis'
 import { readShareCandidate } from './shareProbe'
 import type { DirReadResult } from './fsx'
 import { logger } from '../log'
@@ -130,37 +124,15 @@ export const createElResolver = (
 
     // 三种失败方向完全不同：没连网、没认证、目录真的不在。
     // 分类与文案统一走 diagnosis，避免与执行器的失败阶梯分叉。
-    const failure = classifyReadStatus(result.status)
+    const failure = describePrefixFailure({
+      statuses: [result.status],
+      layer: 'EL',
+      network: { subject: machine, quote: true },
+      auth: { subject: base, quote: true },
+      denied: { subject: `${machine}/${entry}`, quote: true },
+    })
 
-    if (failure.reason === 'network') {
-      return {
-        ok: false,
-        base: '',
-        reason: networkFailureMessage(machine, { quote: true }),
-        brokenAt: 'EL',
-        unreachable: 'network',
-      }
-    }
-
-    if (failure.reason === 'auth') {
-      return {
-        ok: false,
-        base: '',
-        reason: authFailureMessage(base, { quote: true }),
-        brokenAt: 'EL',
-        unreachable: 'auth',
-      }
-    }
-
-    if (failure.reason === 'denied') {
-      return {
-        ok: false,
-        base: '',
-        reason: deniedFailureMessage(`${machine}/${entry}`, { quote: true }),
-        brokenAt: 'EL',
-        unreachable: 'denied',
-      }
-    }
+    if (failure) return failure
 
     return {
       ok: false,
@@ -364,39 +336,15 @@ const lxtFailure = (
   candidates: LxtCandidate[],
   cached?: LxtShare | null,
 ): ResolveResult => {
-  const failure = classifyFailureStatuses(
-    candidates.map((item) => item.rootStatus),
-  )
+  const failure = describePrefixFailure({
+    statuses: candidates.map((item) => item.rootStatus),
+    layer: '共享名',
+    network: { subject: host },
+    auth: { subject: host, style: 'share-unreadable' },
+    denied: { subject: host, between: ' 共享' },
+  })
 
-  if (failure.reason === 'network') {
-    return {
-      ok: false,
-      base: '',
-      reason: networkFailureMessage(host),
-      brokenAt: '共享名',
-      unreachable: 'network',
-    }
-  }
-
-  if (failure.reason === 'auth') {
-    return {
-      ok: false,
-      base: '',
-      reason: authFailureMessage(host, { style: 'share-unreadable' }),
-      brokenAt: '共享名',
-      unreachable: 'auth',
-    }
-  }
-
-  if (failure.reason === 'denied') {
-    return {
-      ok: false,
-      base: '',
-      reason: deniedFailureMessage(host, { between: ' 共享' }),
-      brokenAt: '共享名',
-      unreachable: 'denied',
-    }
-  }
+  if (failure) return failure
 
   // 走到这里说明至少有一个共享根是通的，才有资格说「没有 A-01-B」
   const tried = candidates.map((item) => item.share).join(' / ')
@@ -716,39 +664,15 @@ const plFailure = (
   probe: PlProbeResult,
   cached: string | null,
 ): ResolveResult => {
-  const failure = classifyFailureStatuses(
-    probe.candidates.map((item) => item.rootStatus),
-  )
+  const failure = describePrefixFailure({
+    statuses: probe.candidates.map((item) => item.rootStatus),
+    layer: '机台标识',
+    network: { subject: host },
+    auth: { subject: host, style: 'share-unreadable' },
+    denied: { subject: host },
+  })
 
-  if (failure.reason === 'network') {
-    return {
-      ok: false,
-      base: '',
-      reason: networkFailureMessage(host),
-      brokenAt: '机台标识',
-      unreachable: 'network',
-    }
-  }
-
-  if (failure.reason === 'auth') {
-    return {
-      ok: false,
-      base: '',
-      reason: authFailureMessage(host, { style: 'share-unreadable' }),
-      brokenAt: '机台标识',
-      unreachable: 'auth',
-    }
-  }
-
-  if (failure.reason === 'denied') {
-    return {
-      ok: false,
-      base: '',
-      reason: deniedFailureMessage(host),
-      brokenAt: '机台标识',
-      unreachable: 'denied',
-    }
-  }
+  if (failure) return failure
 
   // 只有标识目录确实能进去、里面却没有 Matting 或日期时，才说「没找到」
   const tried = probe.tried.length ? `已试：${probe.tried.join('、')}；` : ''

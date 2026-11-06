@@ -120,6 +120,91 @@ export const summarize = (values: string[], max = 6): string =>
       ? `${values.slice(0, max).join('、')} 等 ${values.length} 项`
       : values.join('、')
 
+/** 前缀层读取失败时归属的层级，与 ResolveResult.brokenAt 一致 */
+export type PrefixFailureLayer = 'EL' | '共享名' | '机台标识'
+
+export interface PrefixFailureInput {
+  /** 候选前缀目录的读取状态；单路径类别（EL）传一个元素即可 */
+  statuses: DirReadStatus[]
+  /** 断链发生在哪一层，原样写进 ResolveResult */
+  layer: PrefixFailureLayer
+  network: { subject: string; quote?: boolean; code?: string }
+  auth: {
+    subject: string
+    quote?: boolean
+    style?: 'read-failed' | 'share-unreadable'
+  }
+  denied: {
+    subject: string
+    quote?: boolean
+    between?: string
+    action?: string
+  }
+}
+
+export interface PrefixFailureResult {
+  ok: false
+  base: ''
+  reason: string
+  brokenAt: PrefixFailureLayer
+  unreachable: ReadFailureReason
+}
+
+/**
+ * 前缀层读取失败时的统一结论。
+ *
+ * 三个 resolver 以前各写一遍「分类 → 文案 → brokenAt」，改一处漏两处。
+ * 这里只统一 network / auth / denied 三条分支；「共享名 / 目录缺失」的
+ * 措辞因类别而异，仍留在各自的 resolver 里。没有失败项时返回 null。
+ */
+export const describePrefixFailure = (
+  input: PrefixFailureInput,
+): PrefixFailureResult | null => {
+  const failure = classifyFailureStatuses(input.statuses)
+
+  if (failure.reason === 'network') {
+    return {
+      ok: false,
+      base: '',
+      reason: networkFailureMessage(input.network.subject, {
+        quote: input.network.quote,
+        code: input.network.code,
+      }),
+      brokenAt: input.layer,
+      unreachable: 'network',
+    }
+  }
+
+  if (failure.reason === 'auth') {
+    return {
+      ok: false,
+      base: '',
+      reason: authFailureMessage(input.auth.subject, {
+        quote: input.auth.quote,
+        style: input.auth.style,
+      }),
+      brokenAt: input.layer,
+      unreachable: 'auth',
+    }
+  }
+
+  if (failure.reason === 'denied') {
+    return {
+      ok: false,
+      base: '',
+      reason: deniedFailureMessage(input.denied.subject, {
+        quote: input.denied.quote,
+        between: input.denied.between,
+        action: input.denied.action,
+      }),
+      brokenAt: input.layer,
+      unreachable: 'denied',
+    }
+  }
+
+  return null
+}
+
 export interface LeafFailureInput {
   result: DirReadResult
   /** 展示给人看的路径或机台 */
