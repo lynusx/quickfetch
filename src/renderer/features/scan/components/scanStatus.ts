@@ -55,7 +55,7 @@ export const inaccessibleKindOf = (branch: {
 
 /** 不可达原因 → 状态列短文案 */
 const REASON_TEXT: Record<string, string> = {
-  network: '网络不可达',
+  network: '网络不通',
   auth: '未认证',
   denied: '无权限',
   share: '共享未找到',

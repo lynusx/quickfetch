@@ -227,7 +227,7 @@ export const ScanTaskPanel = ({
                 <Flex as="span" align="center" gap="2" wrap="wrap">
                   {inaccessible.network > 0 ? (
                     <Text as="span" size="1" color="red">
-                      不可达 {inaccessible.network} 台
+                      网络不通 {inaccessible.network} 台
                     </Text>
                   ) : null}
                   {inaccessible.auth > 0 ? (
@@ -345,7 +345,7 @@ export const ScanTaskPanel = ({
                     <ExclamationTriangleIcon width={14} height={14} />
                   </Callout.Icon>
                   <Callout.Text>
-                    <Strong>机台不可达，任务已暂停：</Strong> {networkHint}
+                    <Strong>网络不通，任务已暂停：</Strong> {networkHint}
                   </Callout.Text>
                 </Callout.Root>
               ) : null}
