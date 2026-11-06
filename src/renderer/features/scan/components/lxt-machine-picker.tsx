@@ -1,4 +1,5 @@
 import PlantMachinePicker from './plant-machine-picker'
+import { ReprobeSharesButton } from './reprobe-shares-button'
 import { useLxtFilterStore } from '../stores/lxtFilterStore'
 import { selectLxt, useSettingsStore } from '@/features/settings'
 import type { LxtMachine } from '@shared/ipc'
@@ -33,7 +34,12 @@ const LxtMachinePicker = ({ machines, onChanged }: LxtMachinePickerProps) => {
       filter={useLxtFilterStore}
       onSetup={setupLxt}
       onRefresh={refreshLxt}
-      onReprobe={() => reprobeShares('lxt')}
+      machineListActions={
+        <ReprobeSharesButton
+          saving={saving}
+          onReprobe={() => reprobeShares('lxt')}
+        />
+      }
       labels={{
         rootPlaceholder: '\\\\10.108.x.x\\share\\力禧特',
         rootHint:

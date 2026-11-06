@@ -1,4 +1,5 @@
 import PlantMachinePicker from './plant-machine-picker'
+import { ReprobeSharesButton } from './reprobe-shares-button'
 import { usePlFilterStore } from '../stores/plFilterStore'
 import { selectPl, useSettingsStore } from '@/features/settings'
 import type { PlMachine } from '@shared/ipc'
@@ -33,7 +34,12 @@ const PlMachinePicker = ({ machines, onChanged }: PlMachinePickerProps) => {
       filter={usePlFilterStore}
       onSetup={setupPl}
       onRefresh={refreshPl}
-      onReprobe={() => reprobeShares('pl')}
+      machineListActions={
+        <ReprobeSharesButton
+          saving={saving}
+          onReprobe={() => reprobeShares('pl')}
+        />
+      }
       labels={{
         rootPlaceholder: '\\\\10.108.x.x\\share\\利珀',
         rootHint:

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import {
   ExclamationTriangleIcon,
@@ -11,7 +12,6 @@ import {
   Callout,
   Flex,
   IconButton,
-  Spinner,
   Text,
   TextField,
 } from '@radix-ui/themes'
@@ -20,19 +20,8 @@ import { ChoiceList, ChoiceRadio } from '@/components/choice-list'
 import { Field, Step } from '@/components/field'
 import { useToast } from '@/hooks/useToast'
 import type { PlantFilterStore } from '../stores/plantFilterStore'
-import type {
-  AoiImageKind,
-  AoiSide,
-  EntrySetupResult,
-  LxtSkippedLink,
-  Plant,
-} from '@shared/ipc'
-import {
-  AOI_IMAGE_KIND_LABEL,
-  AOI_SIDE_LABEL,
-  aoiSideOfName,
-  plantLabel,
-} from '@shared/ipc'
+import type { EntrySetupResult, LxtSkippedLink, Plant } from '@shared/ipc'
+import { plantLabel } from '@shared/ipc'
 
 /** 机台名按自然序：7A 排在 10A 之前，跟现场习惯一致 */
 const compare = (a: string, b: string): number =>
@@ -66,6 +55,18 @@ const shareBadge = (
   return { label: share, tone: 'ready' }
 }
 
+/**
+ * 机台列表的额外过滤与空态文案。
+ *
+ * 用带 `test` 的函数而不是布尔开关：调用方决定「筛掉哪些机台」，
+ * 基座只负责在厂区过滤之后、关键词之前应用，不关心为什么筛。
+ */
+export interface MachineListFilter {
+  test: (machine: PickableMachine) => boolean
+  /** 过滤后列表为空时的文案；不传用「没有可用机台」 */
+  emptyText?: ReactNode
+}
+
 interface PlantMachinePickerProps {
   /** 已识别的机台（含 stale），由页面从 settings 里传进来 */
   machines: PickableMachine[]
@@ -77,14 +78,21 @@ interface PlantMachinePickerProps {
   filter: PlantFilterStore
   onSetup: (entryRoot: string) => Promise<EntrySetupResult | null>
   onRefresh: () => Promise<EntrySetupResult | null>
-  /** 强制重新探测各机台的共享目录；力禧特与利珀各走各的通道。不传则不显示该按钮 */
-  onReprobe?: () => Promise<boolean>
-  /** 是否显示共享探测徽标；森标 AOI 第二层按图片类型二选一，没有可探测的共享 */
+  /**
+   * 是否显示共享探测徽标；森标 AOI 第二层按图片类型二选一，没有可探测的共享。
+   *
+   * 保留为布尔而不是 render prop：AOI 的 `share` 恒为 null，与力禧特的
+   * 「未探测」无法从数据区分，单个显示开关比让调用方接管行渲染更轻。
+   */
   showShareBadge?: boolean
-  /** 图片类型（整体/局部），只有森标 AOI 传；不传则不渲染该字段 */
-  imageKind?: { value: AoiImageKind; onChange: (kind: AoiImageKind) => void }
-  /** 检测面筛选，只有森标 AOI 传；不传则不渲染该字段 */
-  side?: { value: AoiSide; onChange: (side: AoiSide) => void }
+  /** 厂区与机台之间的额外字段（森标 AOI 的检测面） */
+  beforeMachineList?: ReactNode
+  /** 机台列表之后的额外字段（森标 AOI 的图片类型） */
+  afterMachineList?: ReactNode
+  /** 机台 actions 行、刷新按钮之后（力禧特/利珀 的重新探测共享） */
+  machineListActions?: ReactNode
+  /** 机台列表的额外过滤（森标 AOI 的检测面） */
+  machineFilter?: MachineListFilter
   /** 只有文案不同，结构与交互两类完全一致 */
   labels: {
     rootPlaceholder: string
@@ -110,10 +118,11 @@ const PlantMachinePicker = ({
   filter,
   onSetup,
   onRefresh,
-  onReprobe,
   showShareBadge = true,
-  imageKind,
-  side,
+  beforeMachineList,
+  afterMachineList,
+  machineListActions,
+  machineFilter,
   labels,
   onChanged,
 }: PlantMachinePickerProps) => {
@@ -128,8 +137,6 @@ const PlantMachinePicker = ({
 
   const [draft, setDraft] = useState(entryRoot ?? '')
   const [prevEntryRoot, setPrevEntryRoot] = useState(entryRoot)
-  /** 探测共享进行中：46 台要跑几十秒，按钮必须置灰防连点 */
-  const [probing, setProbing] = useState(false)
 
   // 配置变更或保存成功后，同步输入框
   if (entryRoot !== prevEntryRoot) {
@@ -154,41 +161,22 @@ const PlantMachinePicker = ({
     if (!plants.includes(plant)) setPlant(plants[0])
   }, [plants, plant, setPlant])
 
-  /** 当前厂区的机台，检测面筛选在这之上做第二次过滤 */
+  /** 当前厂区的机台，调用方的额外过滤在这之上做第二次筛选 */
   const inPlant = useMemo(
     () => active.filter((item) => item.plant === plant),
     [active, plant],
   )
 
-  const sideValue = side?.value ?? 'all'
-
   const visible = useMemo(() => {
-    const sided =
-      sideValue === 'all'
-        ? inPlant
-        : inPlant.filter((item) => aoiSideOfName(item.name) === sideValue)
+    const filtered = machineFilter
+      ? inPlant.filter((item) => machineFilter.test(item))
+      : inPlant
     const key = keyword.trim().toUpperCase()
 
     return key
-      ? sided.filter((item) => item.name.toUpperCase().includes(key))
-      : sided
-  }, [inPlant, keyword, sideValue])
-
-  // 检测面选项带当前厂区的台数，和厂区选项的写法保持一致
-  const sideOptions = useMemo(() => {
-    if (!side) return []
-
-    const count = (value: AoiSide): number =>
-      value === 'all'
-        ? inPlant.length
-        : inPlant.filter((item) => aoiSideOfName(item.name) === value).length
-
-    return (['all', 'front', 'back'] as AoiSide[]).map((value) => ({
-      value,
-      label: AOI_SIDE_LABEL[value],
-      meta: count(value),
-    }))
-  }, [side, inPlant])
+      ? filtered.filter((item) => item.name.toUpperCase().includes(key))
+      : filtered
+  }, [inPlant, keyword, machineFilter])
 
   // 入口重新识别后，被标成 stale 的机台要从选中里剔掉，否则会一直挂在那里
   useEffect(() => {
@@ -314,19 +302,7 @@ const PlantMachinePicker = ({
               />
             </Field>
 
-            {side ? (
-              <Field
-                label="检测面"
-                hint="只筛机台列表、不改扫描路径；切到某一侧会清掉另一侧已选的机台。"
-              >
-                <ChoiceRadio
-                  columns={3}
-                  value={side.value}
-                  onValueChange={(value) => side.onChange(value as AoiSide)}
-                  options={sideOptions}
-                />
-              </Field>
-            ) : null}
+            {beforeMachineList}
 
             <Field
               label="机台"
@@ -368,34 +344,7 @@ const PlantMachinePicker = ({
                   >
                     <ReloadIcon width={13} height={13} />
                   </IconButton>
-                  {onReprobe ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      color="gray"
-                      size="1"
-                      disabled={saving || probing}
-                      title="重新探测各机台的共享目录，现场换了共享名或当初没连上网时用"
-                      onClick={async () => {
-                        setProbing(true)
-                        try {
-                          const ok = await onReprobe()
-                          if (ok) {
-                            showToast(
-                              '共享探测完成',
-                              '机台列表尾部的徽标已更新，可以开始扫描',
-                              'info',
-                            )
-                          }
-                        } finally {
-                          setProbing(false)
-                        }
-                      }}
-                    >
-                      {probing ? <Spinner size="1" /> : null}
-                      重新探测共享
-                    </Button>
-                  ) : null}
+                  {machineListActions}
                 </>
               }
             >
@@ -451,33 +400,12 @@ const PlantMachinePicker = ({
                 <Text size="1" color="gray">
                   {keyword.trim()
                     ? `没有匹配「${keyword}」的机台`
-                    : sideValue === 'all'
-                      ? '没有可用机台'
-                      : '当前检测面下没有机台'}
+                    : (machineFilter?.emptyText ?? '没有可用机台')}
                 </Text>
               )}
             </Field>
 
-            {imageKind ? (
-              <Field
-                label="图片类型"
-                hint="整体是整张扫描图（.bmp），局部是异常区域的裁图（.jpg）；两者是机台上的两个同级目录。"
-              >
-                <ChoiceRadio
-                  columns={2}
-                  value={imageKind.value}
-                  onValueChange={(value) =>
-                    imageKind.onChange(value as AoiImageKind)
-                  }
-                  options={(['whole', 'partial'] as AoiImageKind[]).map(
-                    (value) => ({
-                      value,
-                      label: AOI_IMAGE_KIND_LABEL[value],
-                    }),
-                  )}
-                />
-              </Field>
-            ) : null}
+            {afterMachineList}
           </Flex>
         ) : (
           <Text size="1" color="gray">
