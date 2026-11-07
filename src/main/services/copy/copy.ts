@@ -10,7 +10,7 @@ import type {
   ScannedImage,
 } from '../../../shared/ipc'
 
-import { isFinalCopyStatus } from '../../../shared/ipc'
+import { DEFAULT_PREFERENCES, isFinalCopyStatus } from '../../../shared/ipc'
 import { createAdaptiveGate } from '../../utils/adaptive'
 import type { AdaptiveGate } from '../../utils/adaptive'
 import { toFsPath } from '../../utils/pathx'
@@ -555,7 +555,7 @@ export class CopyTaskRunner {
       renamed: this.renamed,
       skipped: this.skipped,
       alreadyExists: this.alreadyExists,
-      conflict: this.params.conflict ?? 'rename',
+      conflict: this.params.conflict ?? DEFAULT_PREFERENCES.copyConflict,
       totalBytes: this.totalBytes,
       copiedBytes: this.copiedBytes,
       failedBytes: this.failedBytes,

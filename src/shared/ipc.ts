@@ -535,11 +535,11 @@ export type CopyStatus =
 
 /**
  * 目标目录已有同名文件时的策略。
- * rename 是默认：目标占着的名字自动编号让开，img.jpg → img1.jpg，
- * 同名的这一组一张不少全部落盘。
- *
- * skip 只跳过「目标里已经有同名的那一张」，同组其余照常复制 ——
+ * skip 是默认：只跳过「目标里已经有同名的那一张」，同组其余照常复制 ——
  * 早些时候是整组跳过，9 张 img.jpg 遇到 1 张已存在就丢 8 张。
+ *
+ * rename 让目标占着的名字自动编号让开，img.jpg → img1.jpg，
+ * 同名的这一组一张不少全部落盘。
  * overwrite 会顶掉目标文件。
  */
 export type CopyConflictPolicy = 'rename' | 'skip' | 'overwrite'
@@ -586,7 +586,7 @@ export interface AppPreferences {
  */
 export const DEFAULT_PREFERENCES: AppPreferences = {
   copyLayout: 'flat',
-  copyConflict: 'rename',
+  copyConflict: 'skip',
   scanConcurrency: 4,
   scanBatchSize: 2,
   copyConcurrency: 6,
@@ -630,7 +630,7 @@ export interface CopyTaskParams {
   /** 显式勾选的机台目录名；为空表示一台都不复制 */
   machines: string[]
   layout: CopyLayout
-  /** 重名策略，缺省为 rename */
+  /** 重名策略，缺省为 skip */
   conflict: CopyConflictPolicy
 }
 

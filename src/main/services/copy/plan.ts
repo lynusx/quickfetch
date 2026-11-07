@@ -6,6 +6,7 @@ import type {
   CopyTaskParams,
   ScannedImage,
 } from '../../../shared/ipc'
+import { DEFAULT_PREFERENCES } from '../../../shared/ipc'
 import { isImageFile } from '../../../shared/imageExtensions'
 import { toFsPath } from '../../utils/pathx'
 
@@ -263,7 +264,7 @@ export const buildCopyPlan = async ({
     }
   }
 
-  const conflict = params.conflict ?? 'rename'
+  const conflict = params.conflict ?? DEFAULT_PREFERENCES.copyConflict
   const original = new Map<string, Set<string>>()
   const taken = new Map<string, Set<string>>()
   const handled = new Map<string, Set<string>>()
