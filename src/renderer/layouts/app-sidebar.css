@@ -5,7 +5,7 @@
   flex-direction: column;
   flex: 0 0 var(--app-sidebar-width);
   width: var(--app-sidebar-width);
-  height: 100vh;
+  height: 100%;
   background: var(--app-surface);
   border-right: 1px solid var(--app-border);
 }
@@ -14,7 +14,10 @@
   display: flex;
   align-items: center;
   gap: 11px;
-  padding: 20px 18px 16px;
+  padding: 12px 18px 16px;
+  /* 品牌行没有交互元素，和顶带一起作为窗口拖拽区 */
+  -webkit-app-region: drag;
+  user-select: none;
 }
 
 .brand-name {

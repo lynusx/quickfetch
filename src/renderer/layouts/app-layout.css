@@ -2,16 +2,36 @@
 
 .app-shell {
   display: flex;
+  flex-direction: column;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
   background: var(--app-canvas);
 }
 
+/*
+ * 窗口顶部带：只承载系统窗口控件（macOS 红绿灯 / Windows 右上角按钮），
+ * 不显示标题，整条白色并兼作窗口拖拽区。
+ * 高度必须与主进程的 WINDOW_CHROME_HEIGHT 保持一致。
+ */
+.app-topbar {
+  flex: 0 0 40px;
+  background: var(--app-surface);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .app-main {
   flex: 1;
   min-width: 0;
-  height: 100vh;
+  height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   background: var(--app-canvas);
@@ -21,11 +41,11 @@
   width: 100%;
   max-width: var(--app-content-max);
   margin: 0 auto;
-  padding: 30px 34px 56px;
+  padding: 18px 34px 56px;
 }
 
 @media (max-width: 1240px) {
   .app-content {
-    padding: 24px 24px 48px;
+    padding: 16px 24px 48px;
   }
 }

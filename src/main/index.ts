@@ -1,4 +1,5 @@
 import { BrowserWindow, app, screen, shell } from 'electron'
+import type { BrowserWindowConstructorOptions } from 'electron'
 import { join } from 'node:path'
 
 import { registerIpcHandlers } from './ipc'
@@ -24,6 +25,34 @@ const MIN_WINDOW_WIDTH = 1080
 const MIN_WINDOW_HEIGHT = 600
 /** 窗口与工作区边缘的留白，避免贴边或压住任务栏 */
 const WINDOW_EDGE_MARGIN = 64
+
+/**
+ * 自定义标题栏高度，必须与渲染层 `.app-topbar` 的 40px 保持一致。
+ *
+ * 内容整体下移这一高度，窗口顶部只保留系统窗口控件：
+ * macOS 是红绿灯，Windows 是右上角的最小化/最大化/关闭。
+ */
+const WINDOW_CHROME_HEIGHT = 40
+
+/**
+ * 隐藏系统标题栏，只保留窗口控件。
+ *
+ * - macOS：hiddenInset 保留原生红绿灯，去掉系统标题
+ * - Windows：hidden + titleBarOverlay 只画右上角按钮，去掉图标与标题。
+ *   覆盖层颜色对应浅色主题的 --color-panel-solid（白）与 --gray-12；
+ *   主进程读不到 CSS 变量，这里用字面量。
+ */
+const windowChrome: BrowserWindowConstructorOptions =
+  process.platform === 'darwin'
+    ? { titleBarStyle: 'hiddenInset' }
+    : {
+        titleBarStyle: 'hidden',
+        titleBarOverlay: {
+          color: '#ffffff',
+          symbolColor: '#1c2024',
+          height: WINDOW_CHROME_HEIGHT,
+        },
+      }
 
 /**
  * 按主屏工作区计算初始尺寸。
@@ -60,6 +89,7 @@ const createWindow = (): BrowserWindow => {
     backgroundColor: '#ffffff',
     title: '秒取',
     icon: appIconPath,
+    ...windowChrome,
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
