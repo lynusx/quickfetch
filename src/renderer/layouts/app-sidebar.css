@@ -6,8 +6,6 @@
   flex: 0 0 var(--app-sidebar-width);
   width: var(--app-sidebar-width);
   height: 100%;
-  background: var(--app-surface);
-  border-right: 1px solid var(--app-border);
 }
 
 .sidebar-brand {

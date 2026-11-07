@@ -192,6 +192,7 @@ src/
 - 设计层：全局令牌、reset、共享工具类与 sonner 覆盖在 `src/renderer/index.css`；组件 CSS 与组件同目录（渲染层组件目录、组件文件与样式统一 kebab-case），业务 feature CSS 在各自 feature 目录（如 `features/scan/scan.css`）。不引入 reset / 其它组件库
 - 页面标题统一由 `components/page-header/page-header` 渲染，`AppLayout` 不再重复标题栏；扫描页的任务进度、统计与控制按钮统一放在 `features/scan/components/scan-task-panel`
 - 窗口使用自定义顶带：顶部 40px 白带只承载系统窗口控件（macOS 红绿灯 / Windows 右上角按钮），不显示标题，同时兼作拖拽区；页面标题仍由 `PageHeader` 渲染
+- 内容区是固定浮起的卡片（四周 12px 间隙、圆角、边框与轻阴影），侧边栏与内容之间不加竖线，靠 `--app-canvas` 底色与间隙分隔；页面在卡片内部滚动
 - 选择类控件统一使用 `components/choice-list`（多选）与 `ChoiceRadio`（单选），整个单元格可点击
 - 别名：`@/*` → `src/renderer/*`（`tsconfig*.json` 与 `electron.vite.config.ts` 同步配置）
 - 图标：`@radix-ui/react-icons`；提示：`sonner`；`cn()` 为内部纯逻辑实现

@@ -55,7 +55,7 @@ body {
 /* 全局应用令牌、基线与共享工具类 */
 
 .radix-themes {
-  --app-sidebar-width: 252px;
+  --app-sidebar-width: 242px;
   --app-content-max: 1480px;
   --app-canvas: var(--gray-2);
   --app-surface: var(--color-panel-solid);
@@ -177,7 +177,7 @@ body {
 
 @media (max-width: 1080px) {
   .radix-themes {
-    --app-sidebar-width: 224px;
+    --app-sidebar-width: 214px;
   }
 }
 

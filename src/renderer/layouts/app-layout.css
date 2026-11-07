@@ -26,26 +26,36 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  background: var(--app-canvas);
 }
 
+/*
+ * 内容卡片：固定浮在应用底色上，页面在卡片内部滚动。
+ * 四周 12px 间隙同时充当与侧边栏的分隔，不再需要竖线。
+ */
 .app-main {
   flex: 1;
   min-width: 0;
-  height: 100%;
+  min-height: 0;
+  height: auto;
+  margin: 12px;
   overflow-y: auto;
   overflow-x: hidden;
-  background: var(--app-canvas);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-panel);
+  box-shadow: var(--app-shadow-panel);
 }
 
 .app-content {
   width: 100%;
   max-width: var(--app-content-max);
   margin: 0 auto;
-  padding: 18px 34px 56px;
+  padding: 24px 34px 56px;
 }
 
 @media (max-width: 1240px) {
   .app-content {
-    padding: 16px 24px 48px;
+    padding: 20px 24px 48px;
   }
 }
