@@ -37,6 +37,7 @@ import {
   updateLxt,
   updatePl,
 } from '../services/settings'
+import { applyUpdatePreferences } from '../services/update'
 import { splitMachine } from '../services/discovery/shortcuts'
 import { handle } from './handle'
 
@@ -149,7 +150,15 @@ export const registerSettingsIpc = (): void => {
 
   handle(
     'settings:save-preferences',
-    (_event, patch: Partial<AppPreferences>) => savePreferences(patch),
+    async (_event, patch: Partial<AppPreferences>) => {
+      const next = await savePreferences(patch)
+
+      if ('updateAutoCheckEnabled' in patch) {
+        applyUpdatePreferences(next.preferences)
+      }
+
+      return next
+    },
   )
 
   handle(

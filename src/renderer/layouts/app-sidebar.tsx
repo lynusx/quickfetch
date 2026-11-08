@@ -10,6 +10,7 @@ import {
 import { Box, Flex, Text } from '@radix-ui/themes'
 
 import { BrandMark } from '@/components/brand-mark/brand-mark'
+import { UpdateBadge } from '@/features/update'
 import { useAppVersion } from '@/hooks/useAppVersion'
 import { ROUTES } from '@/routes/paths'
 import './app-sidebar.css'
@@ -105,9 +106,12 @@ export const AppSidebar = () => {
               本地运行
             </Text>
           </Flex>
-          <Text as="span" size="1" color="gray" className="tabular">
-            v{version ?? '…'}
-          </Text>
+          <Flex as="span" align="center" gap="2">
+            <UpdateBadge />
+            <Text as="span" size="1" color="gray" className="tabular">
+              v{version ?? '…'}
+            </Text>
+          </Flex>
         </Flex>
       </Box>
     </Flex>

@@ -577,6 +577,8 @@ export interface AppPreferences {
    * 开启后立即生效，不必重启，也不必等新任务。
    */
   debugLogEnabled: boolean
+  /** 启动后是否自动检查更新；关闭后只能手动检查，默认开启 */
+  updateAutoCheckEnabled: boolean
 }
 
 /**
@@ -592,6 +594,7 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   copyConcurrency: 6,
   copyBatchSize: 50,
   debugLogEnabled: false,
+  updateAutoCheckEnabled: true,
 }
 
 /**
@@ -604,6 +607,56 @@ export const PREFERENCE_RANGE = {
   copyConcurrency: { min: 1, max: 16, step: 1 },
   copyBatchSize: { min: 10, max: 100, step: 10 },
 } as const
+
+/**
+ * 安装方式。
+ *
+ * installed：NSIS 安装版，支持 electron-updater 自动下载与安装。
+ * portable：zip 解压版，现场禁止安装外部应用时使用，只能提示手动替换。
+ */
+export type InstallMode = 'installed' | 'portable'
+
+export type UpdatePhase =
+  | 'idle'
+  | 'checking'
+  | 'up-to-date'
+  | 'available'
+  | 'downloading'
+  | 'downloaded'
+  | 'installing'
+  | 'error'
+  | 'disabled'
+
+/** 免安装版手动替换时打开的下载页面；界面不自行拼接 GitHub 地址 */
+export const UPDATE_RELEASE_PAGE_URL =
+  'https://github.com/lynusx/quickfetch/releases/latest'
+
+/**
+ * 自动更新状态。主进程维护唯一实例，渲染层通过 update:state 订阅。
+ *
+ * 不落盘：每次启动重新检查；lastCheckedAt 只用于设置页展示。
+ */
+export interface UpdateState {
+  phase: UpdatePhase
+  installMode: InstallMode
+  currentVersion: string
+  availableVersion: string | null
+  releaseDate: string | null
+  /** 0–100 */
+  percent: number
+  transferred: number
+  total: number
+  bytesPerSecond: number
+  lastCheckedAt: number | null
+  /** 上一次检查是否由用户手动触发；自动检查失败不弹 toast */
+  lastCheckManual: boolean
+  message: string | null
+  error: string | null
+  /** 运行中的扫描/复制任务会阻止安装 */
+  blockedByTasks: boolean
+  blockedReason: string | null
+  canInstall: boolean
+}
 
 /** 调试日志级别；界面只负责展示，主进程按顺序写入同一文件 */
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
@@ -766,6 +819,18 @@ export interface ScanHistoryItem {
 
 export interface ElectronAPI {
   getVersion: () => Promise<string>
+  /** 当前自动更新状态；主进程启动即维护，变化通过 onUpdateState 推送 */
+  getUpdateState: () => Promise<UpdateState>
+  /** 手动检查 GitHub Releases；自动检查由主进程按设置调度 */
+  checkForUpdates: () => Promise<UpdateState>
+  /** 下载已发现的新版本；免安装版不会执行 */
+  downloadUpdate: () => Promise<UpdateState>
+  /** 退出并安装已下载的更新；有运行中任务时会被拒绝 */
+  installUpdate: () => Promise<UpdateState>
+  /** 在浏览器打开 Releases 页面，供免安装版手动下载 zip */
+  openUpdateReleasePage: () => Promise<string | null>
+  /** 订阅更新状态变化，返回取消订阅函数 */
+  onUpdateState: (listener: (state: UpdateState) => void) => () => void
   /** 打开系统目录选择框；用户取消时返回 null */
   pickDirectory: (options?: { title?: string }) => Promise<DirectoryInfo | null>
 

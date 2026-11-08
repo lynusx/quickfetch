@@ -150,3 +150,9 @@
   align-items: center;
   gap: 5px;
 }
+
+/* 有新版本时的提示入口：与版本号同一行，不抢主操作区 */
+.sidebar-update-link {
+  display: inline-flex;
+  text-decoration: none;
+}

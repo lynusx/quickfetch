@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { ExclamationTriangleIcon } from '@radix-ui/react-icons'
 import {
   Box,
@@ -16,6 +17,7 @@ import {
 import { PageHeader } from '@/components/page-header/page-header'
 import { Panel, PanelBody } from '@/components/panel'
 import { useToast } from '@/hooks/useToast'
+import { UpdateSettingsSection } from '@/features/update'
 import { toErrorMessage } from '@/utils/error'
 import {
   selectEnvOverrides,
@@ -180,11 +182,20 @@ const SettingsPage = () => {
   const { showToast } = useToast()
   const [logInfo, setLogInfo] = useState<LogInfo | null>(null)
   const [logInfoFailed, setLogInfoFailed] = useState(false)
+  const [searchParams] = useSearchParams()
+  const updateRequested = searchParams.get('section') === 'update'
 
   // 直接深链到 #/settings 时 store 可能还没读盘，先补一次
   useEffect(() => {
     void load()
   }, [load])
+
+  // 侧边栏的「有新版本」跳到 ?section=update，滚动到对应分区
+  useEffect(() => {
+    if (!updateRequested) return
+
+    document.getElementById('update')?.scrollIntoView({ block: 'start' })
+  }, [updateRequested])
 
   useEffect(() => {
     let cancelled = false
@@ -481,6 +492,9 @@ const SettingsPage = () => {
             </PanelBody>
           </Panel>
         </Box>
+
+        {/* 自动更新 */}
+        <UpdateSettingsSection />
 
         {/* 调试日志 */}
         <Box id="logging" className="settings-section">

@@ -74,6 +74,12 @@ import { createTaskTable } from '../src/main/utils/taskTable'
 import type { CopyTask } from '../src/shared/ipc'
 import type { ScanTask } from '../src/shared/ipc'
 import { summarizeIpcArgs } from '../src/main/ipc/log-summary'
+import { detectInstallModeFromDir } from '../src/main/services/update/installMode'
+import {
+  describeTaskBlock,
+  initialState,
+  reduceUpdateState,
+} from '../src/main/services/update/state'
 import type { MachineResolver } from '../src/main/services/scanner/resolver'
 import {
   CopyTaskRunner,
@@ -128,9 +134,10 @@ const fsxTests = async () => {
     assert.equal(r.status, 'missing')
   })
 
-  await test('fsx: 权限不足 → denied（root 下权限位失效，跳过）', async () => {
-    if (process.getuid?.() === 0) {
-      console.log('    · 当前是 root，chmod 不会生效，跳过')
+  await test('fsx: 权限不足 → denied（Windows/root 下权限位失效，跳过）', async () => {
+    // Windows 的 chmod 不改变 ACL，root 不受权限位限制；这组在对应平台跳过
+    if (process.platform === 'win32' || process.getuid?.() === 0) {
+      console.log('    · 当前平台不执行权限位测试，跳过')
       return
     }
 
@@ -2295,6 +2302,106 @@ const settingsContractTests = async () => {
   })
 }
 
+const updateTests = async () => {
+  await test('自动更新: 安装方式按卸载器判断', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'qf-update-mode-'))
+
+    assert.equal(detectInstallModeFromDir(dir, 'QuickFetch'), 'portable')
+
+    await writeFile(join(dir, 'Uninstall QuickFetch.exe'), '')
+
+    assert.equal(detectInstallModeFromDir(dir, 'QuickFetch'), 'installed')
+  })
+
+  await test('自动更新: 偏好默认开启且严格布尔', async () => {
+    assert.equal(normalizePreferences(undefined).updateAutoCheckEnabled, true)
+    assert.equal(
+      normalizePreferences({ updateAutoCheckEnabled: false })
+        .updateAutoCheckEnabled,
+      false,
+    )
+    assert.equal(
+      normalizePreferences({ updateAutoCheckEnabled: 'false' as never })
+        .updateAutoCheckEnabled,
+      true,
+    )
+  })
+
+  await test('自动更新: 状态机与任务阻塞', async () => {
+    let state = initialState('3.4.0', 'installed')
+
+    assert.equal(state.phase, 'idle')
+
+    state = reduceUpdateState(state, {
+      type: 'check-started',
+      manual: true,
+      at: 1,
+    })
+    assert.equal(state.phase, 'checking')
+    assert.equal(state.lastCheckManual, true)
+
+    state = reduceUpdateState(state, {
+      type: 'update-available',
+      version: '3.5.0',
+      releaseDate: null,
+      at: 2,
+    })
+    assert.equal(state.phase, 'available')
+    assert.equal(state.availableVersion, '3.5.0')
+
+    state = reduceUpdateState(state, { type: 'download-started' })
+    state = reduceUpdateState(state, {
+      type: 'download-progress',
+      percent: 42.4,
+      transferred: 10,
+      total: 100,
+      bytesPerSecond: 5,
+    })
+    assert.equal(state.percent, 42)
+
+    state = reduceUpdateState(state, { type: 'downloaded' })
+    assert.equal(state.phase, 'downloaded')
+    assert.equal(state.canInstall, true)
+
+    state = reduceUpdateState(state, {
+      type: 'tasks',
+      blocked: true,
+      reason: '有任务',
+    })
+    assert.equal(state.canInstall, false)
+
+    state = reduceUpdateState(state, {
+      type: 'tasks',
+      blocked: false,
+      reason: null,
+    })
+    assert.equal(state.canInstall, true)
+
+    let portable = initialState('3.4.0', 'portable')
+
+    portable = reduceUpdateState(portable, {
+      type: 'update-available',
+      version: '3.5.0',
+      releaseDate: null,
+      at: 1,
+    })
+    portable = reduceUpdateState(portable, { type: 'downloaded' })
+    assert.equal(portable.canInstall, false, '免安装版任何时候都不能自动安装')
+  })
+
+  await test('自动更新: 任务闸门文案', async () => {
+    assert.equal(describeTaskBlock(false, false).blocked, false)
+    assert.match(describeTaskBlock(true, false).reason ?? '', /扫描任务/)
+    assert.match(describeTaskBlock(false, true).reason ?? '', /复制任务/)
+    assert.match(describeTaskBlock(true, true).reason ?? '', /扫描和复制/)
+  })
+
+  await test('自动更新: IPC 摘要不记录参数', async () => {
+    assert.deepEqual(summarizeIpcArgs('update:check', []), {})
+    assert.deepEqual(summarizeIpcArgs('update:install', []), {})
+  })
+}
+
 const taskTableTests = async () => {
   await test('任务表: 只淘汰最早的已结束任务', async () => {
     type FakeTask = { id: string; createdAt: number; final: boolean }
@@ -2650,6 +2757,8 @@ const main = async () => {
   await aoiTests()
   console.log('\n[17] 配置契约')
   await settingsContractTests()
+  console.log('\n[18] 自动更新')
+  await updateTests()
 
   const failed = results.filter((r) => !r.ok)
   console.log(`\n共 ${results.length} 项，失败 ${failed.length} 项`)

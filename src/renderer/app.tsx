@@ -1,9 +1,12 @@
 import { Theme } from '@radix-ui/themes'
 
 import { Toaster } from '@/components/toaster/toaster'
+import { useUpdateBridge } from '@/features/update/useUpdateBridge'
 import { AppRoutes } from './routes/app-routes'
 
 function App() {
+  useUpdateBridge()
+
   return (
     <Theme
       appearance="light"

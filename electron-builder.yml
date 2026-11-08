@@ -14,8 +14,9 @@ electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/
 
 # 只打包构建产物，源码不进安装包。
-# 渲染层依赖（含 xlsx）已由 Vite 打进 out/renderer；主进程/preload 不 require
-# 任何 npm 包，production dependencies 为空，因此 asar 里不需要 node_modules。
+# 渲染层依赖（含 xlsx）已由 Vite 打进 out/renderer；主进程只把
+# electron-updater 留在 dependencies，electron-builder 会单独收集生产依赖并放进 asar。
+# 因此这里不要手写 node_modules，否则会把开发依赖也带进包。
 files:
   - out/**/*
   - package.json
@@ -27,17 +28,31 @@ asar: true
 electronLanguages:
   - zh-CN
 
-# 免安装压缩包：解压即用，文件名不带 setup，避免被误当成安装程序
+# 同时产出安装包与免安装 zip：
+# - NSIS 安装版支持 electron-updater 自动更新；
+# - zip 版给禁止安装外部应用的机台，只能手动替换。
 win:
   target:
+    - target: nsis
+      arch:
+        - x64
     - target: zip
       arch:
         - x64
   # Windows 优先用多尺寸 ico（16–256），比让 electron-builder 现场从 png 生成更可控
   icon: build/icon.ico
   artifactName: QuickFetch-${version}-win-x64.${ext}
+  # 未签名方案：不推导 publisherName；electron-updater 6.8.11 在缺少
+  # publisherName 时会跳过 Authenticode 校验，仍会校验 latest.yml 的 sha512。
+  verifyUpdateCodeSignature: false
 
-# 安装包配置保留：换回 nsis 目标即可恢复
+# 只用于生成 latest.yml 与 app-update.yml；实际上传由 release workflow 用 gh 完成，
+# dist:win 固定带 --publish never。
+publish:
+  - provider: generic
+    url: https://github.com/lynusx/quickfetch/releases/latest/download/
+
+# 安装包配置
 nsis:
   oneClick: false
   perMachine: false

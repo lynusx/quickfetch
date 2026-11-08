@@ -137,6 +137,11 @@ export const normalizePreferences = (
     ),
     // 只认真正的 boolean：旧配置缺字段、手改成 "true" 都回落关闭
     debugLogEnabled: merged.debugLogEnabled === true,
+    // 自动检查默认开启：只有真正的 boolean 才采信，其余回落默认
+    updateAutoCheckEnabled:
+      typeof merged.updateAutoCheckEnabled === 'boolean'
+        ? merged.updateAutoCheckEnabled
+        : DEFAULT_PREFERENCES.updateAutoCheckEnabled,
   }
 }
 
@@ -561,6 +566,18 @@ const updateSettings = (
 
     return next
   })
+
+/**
+ * 等待当前排队的设置写入全部落盘。
+ *
+ * 自动更新安装前要退出进程，不能让「刚改的设置」丢在队列里；
+ * 失败也放行，安装不能被一次写盘错误永久卡住。
+ */
+export const flushSettingsWrites = (): Promise<void> =>
+  settingsQueue.then(
+    () => undefined,
+    () => undefined,
+  )
 
 /** 设置根目录：校验通过后立即识别机台并落盘，失败时不写坏数据 */
 export const saveRootPath = async (rootPath: string): Promise<AppSettings> => {

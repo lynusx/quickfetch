@@ -38,6 +38,7 @@
 - 新增/修改 IPC 通道 → `src/shared/ipc.ts`、`src/main/ipc/<域>.ipc.ts`、`src/preload/index.ts` 三处同改。
 - 改业务配置 → 只走 `src/main/services/settings/settings.ts`，不要在渲染层用 `localStorage` 存业务配置。
 - 改扫描/断网逻辑 → 先读 `src/main/services/scanner/fsx.ts` 的 `NETWORK_CODES` 与断网熔断规则。
+- 改自动更新 → 先读 `.claude/AGENTS.md` 的「自动更新」与 `electron-builder.yml` 的 `publish` / `verifyUpdateCodeSignature` 配置。
 - 新增扫描类别 → 必须挂 `HistoryPanel`，并接 `useHistoryRestore`。
 - 改应用名/`productName` → `userData` 目录会变；当前项目未正式投入使用，不需要兼容旧目录，改名时同步更新 README/AGENTS 里的路径说明。
 - 提交/打包 → 版本号由提交钩子管理，不要手改 `package.json` 的 version；打包与截图只在明确要求时做。

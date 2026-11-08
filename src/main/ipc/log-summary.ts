@@ -81,6 +81,11 @@ const buildSummary = (
     case 'app:version':
     case 'logs:info':
     case 'logs:open':
+    case 'update:get-state':
+    case 'update:check':
+    case 'update:download':
+    case 'update:install':
+    case 'update:open-release-page':
       return {}
     case 'settings:save-root':
       return { rootPath: truncatePath(args[0]) }

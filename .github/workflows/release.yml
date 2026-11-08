@@ -66,8 +66,40 @@ jobs:
       - name: Format check
         run: pnpm format:check
 
+      - name: Verify logic
+        run: pnpm verify
+
       - name: Build and package
         run: pnpm dist:win
+
+      - name: Verify update artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="$(node -p "require('./package.json').version")"
+          installer="release/QuickFetch-${version}-win-x64.exe"
+          blockmap="${installer}.blockmap"
+          metadata="release/latest.yml"
+          portable="release/QuickFetch-${version}-win-x64.zip"
+          appUpdate="release/win-unpacked/resources/app-update.yml"
+
+          for file in "$installer" "$blockmap" "$metadata" "$portable" "$appUpdate"; do
+            if [ ! -f "$file" ]; then
+              echo "::error::缺少发版产物 $file"
+              exit 1
+            fi
+          done
+
+          if ! grep -q "version: ${version}" "$metadata"; then
+            echo "::error::latest.yml 中的 version 与 package.json 不一致"
+            exit 1
+          fi
+
+          if grep -q 'publisherName' "$appUpdate"; then
+            echo "::error::未签名方案不应在 app-update.yml 写入 publisherName"
+            exit 1
+          fi
 
       - name: Publish release
         shell: bash
@@ -78,15 +110,29 @@ jobs:
 
           tag="${GITHUB_REF_NAME}"
           version="$(node -p "require('./package.json').version")"
-          asset="release/QuickFetch-${version}-win-x64.zip"
-
-          if [ ! -f "$asset" ]; then
-            echo "::error::找不到打包产物 $asset"
-            exit 1
-          fi
+          installer="release/QuickFetch-${version}-win-x64.exe"
+          blockmap="${installer}.blockmap"
+          metadata="release/latest.yml"
+          portable="release/QuickFetch-${version}-win-x64.zip"
+          assets=("$installer" "$blockmap" "$metadata" "$portable")
 
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" "$asset" --clobber
+            gh release upload "$tag" "${assets[@]}" --clobber
           else
-            gh release create "$tag" "$asset" --title "$tag" --generate-notes
+            gh release create "$tag" "${assets[@]}" \
+              --title "$tag" \
+              --generate-notes
+          fi
+
+          # 幂等追加安装方式说明；重复运行不会重复写入
+          body="$(gh release view "$tag" --json body -q .body)"
+          if [[ "$body" != *"<!-- quickfetch-update-note -->"* ]]; then
+            gh release edit "$tag" --notes "${body}
+
+          <!-- quickfetch-update-note -->
+          ## 安装方式
+
+          - **安装版**（.exe）支持自动更新，推荐大多数现场使用。
+          - **免安装版**（.zip）给禁止安装外部应用的机台：解压即用，但需要手动下载新 zip 替换，不会自动升级。
+          - 设置与历史保存在 \`%APPDATA%\\QuickFetch\`，升级不会清空。"
           fi

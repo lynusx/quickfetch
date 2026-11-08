@@ -103,6 +103,17 @@ SKIP_VERSION=1 git commit -m "feat(pl): 利珀PL扫描入口"
 或在渲染层复制版本号。推送 `vX.Y.Z` tag 即触发 `.github/workflows/release.yml`：校验 tag
 与版本一致、提交在 `main` 上，跑检查、打包并创建 GitHub Release。具体命令见 README「构建与打包」。
 
+**自动更新**：安装版走 electron-updater，免安装 zip 只提示手动替换。唯一落点在
+`src/main/services/update/`，不要在 registry、页面或 IPC 层直接调 `autoUpdater`。
+`electron-updater` 必须留在 `dependencies`（externalizeDepsPlugin 只外置生产依赖，
+electron-builder 会单独收集进 asar），不要移到 devDependencies 或打进 bundle。
+安装方式靠安装目录里的 `Uninstall QuickFetch.exe` 判断；找不到时按免安装处理，宁可不装。
+安装/重启前必须过 `getTaskBlock()`：running/paused 扫描与 pending/running/paused 复制都会阻塞；
+安装前要等 `flushScanPersistence()` 与 `flushSettingsWrites()`，`before-quit` 通过
+`isInstallingUpdate()` 旁路现有 preventDefault，避免安装被拖住。
+发版资产固定为 exe、exe.blockmap、latest.yml、zip 四项；electron-updater 锁定 6.8.11，
+升级前重新验证未签名场景与 app-update.yml 的 `publisherName` 行为。
+
 **提交信息**：Conventional Commits，由 commitlint 校验，格式 `type(scope): 描述`。
 
 **不要把 Claude Code 加为贡献者**：提交信息里不要出现 `Co-Authored-By: Claude Code <noreply@anthropic.com>`

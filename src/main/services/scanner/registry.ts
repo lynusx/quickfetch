@@ -14,6 +14,7 @@ import { ScanTaskRunner } from './task'
 import type { TaskContext } from './task'
 import { logger } from '../log'
 import { createTaskTable } from '../../utils/taskTable'
+import { notifyActivityChange } from '../../utils/activity'
 
 /** 内存中保留的任务上限，超出时淘汰最早的已结束任务 */
 const MAX_TASKS = 20
@@ -30,6 +31,8 @@ const persisted = new Set<string>()
 
 /** 任务快照推送到所有窗口；多窗口打开时进度保持一致 */
 const broadcast = (task: ScanTask): void => {
+  notifyActivityChange()
+
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
       window.webContents.send('scan:task-update', task)
@@ -112,6 +115,44 @@ export const createTask = (
 const isActive = (status: string): boolean =>
   status === 'pending' || status === 'running' || status === 'paused'
 
+/**
+ * 运行中的扫描任务。自动更新安装前要等它们结束：
+ * running/paused 的任务内存里已经有读到的图片，退出必须走 interrupted 落盘。
+ */
+export const hasRunningScanTasks = (): boolean =>
+  tasks.values().some((runner) => {
+    const status = runner.getStatus()
+
+    return status === 'running' || status === 'paused'
+  })
+
+/** 已经启动、尚未写完历史的落盘任务；安装前要等它们收尾 */
+const persistenceTasks = new Set<Promise<void>>()
+
+const trackPersistence = (promise: Promise<void>): void => {
+  persistenceTasks.add(promise)
+  void promise.then(
+    () => persistenceTasks.delete(promise),
+    () => persistenceTasks.delete(promise),
+  )
+}
+
+/**
+ * 等待所有正在收尾的历史写入。
+ *
+ * 任务刚跑完时 persistWhenSettled 可能还在写盘，安装会直接退出进程；
+ * 不等待就会丢最后一条历史。超时后放行，不能为了写盘卡住安装。
+ */
+export const flushScanPersistence = async (timeoutMs = 3000): Promise<void> => {
+  if (persistenceTasks.size === 0) return
+
+  const timeout = new Promise<void>((resolve) => {
+    setTimeout(resolve, timeoutMs)
+  })
+
+  await Promise.race([Promise.allSettled([...persistenceTasks]), timeout])
+}
+
 export const startTask = (id: string): ScanTask | null => {
   const runner = tasks.get(id)
 
@@ -129,7 +170,7 @@ export const startTask = (id: string): ScanTask | null => {
   }
 
   const snapshot = runner.start()
-  void persistWhenSettled(runner)
+  trackPersistence(persistWhenSettled(runner))
 
   return snapshot
 }

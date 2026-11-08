@@ -5,6 +5,11 @@ import { join } from 'node:path'
 import { registerIpcHandlers } from './ipc'
 import { cleanupSettingsTempFiles, readSettings } from './services/settings'
 import { initLogger, logger } from './services/log'
+import {
+  disposeUpdateService,
+  initUpdateService,
+  isInstallingUpdate,
+} from './services/update'
 import { persistUnfinished } from './services/scanner'
 
 // electron-vite 在开发模式下注入渲染层 dev server 地址
@@ -207,6 +212,9 @@ if (!hasSingleInstanceLock) {
     // 上次进程被强杀时可能留下 settings.json.*.tmp，先清掉再开放读写
     await cleanupSettingsTempFiles()
 
+    // 自动更新：启动后按设置延迟检查一次；免安装版只检查不安装
+    initUpdateService(settings?.preferences ?? null)
+
     registerIpcHandlers()
     createWindow()
 
@@ -217,6 +225,10 @@ if (!hasSingleInstanceLock) {
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()
+  })
+
+  app.on('will-quit', () => {
+    disposeUpdateService()
   })
 
   /** 退出流程只跑一次，第二次 app.quit() 直接放行 */
@@ -234,6 +246,12 @@ if (!hasSingleInstanceLock) {
    * 特别大时最多等 3 秒，剩下的交给操作系统收尾。
    */
   app.on('before-quit', (event) => {
+    // quitAndInstall 已经自己完成了落盘等待；这里再拦一次会把安装拖慢
+    if (isInstallingUpdate()) {
+      logger.info('app', 'app.before-quit.update-install', {})
+      return
+    }
+
     if (savedOnQuit) return
 
     savedOnQuit = true

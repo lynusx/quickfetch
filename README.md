@@ -136,11 +136,18 @@ chmod +x node_modules/electron/dist/Electron.app/Contents/MacOS/Electron
 
 ```bash
 pnpm build                    # 产物输出到 out/（main、preload、renderer）
-pnpm dist:win                 # 校验 → build → Windows x64 zip（QuickFetch-<version>-win-x64.zip）到 release/
+pnpm dist:win                 # 校验 → build → NSIS 安装包 + 免安装 zip，输出到 release/
 ```
 
+`release/` 里会同时生成：
+
+- `QuickFetch-<version>-win-x64.exe`：NSIS 安装版，支持自动更新
+- `QuickFetch-<version>-win-x64.exe.blockmap`：差分更新用
+- `latest.yml`：electron-updater 的版本清单
+- `QuickFetch-<version>-win-x64.zip`：免安装版，给禁止安装外部应用的机台
+
 `dist:win` 会先跑 `scripts/check-release.cjs`：`version` 必须是 `x.y.z`、与 `HEAD` 的
-`package.json` 一致，且工作区没有未提交改动。这样 zip 文件名、asar 内 `package.json`、
+`package.json` 一致，且工作区没有未提交改动。这样产物名、asar 内 `package.json`、
 `app.getVersion()` 与侧边栏显示的版本都对应同一次提交。校验失败时先提交或 `git stash`；
 只有明确要求未提交出包时才用覆盖开关（它仍会检查版本格式）：
 
@@ -149,7 +156,7 @@ $env:SKIP_RELEASE_CHECK=1; pnpm dist:win
 ```
 
 正式发版由 tag 触发：推送 `v3.3.0` 这类 tag 后，`.github/workflows/release.yml` 会校验
-tag 与版本、跑类型/格式检查、打包并创建 GitHub Release，变更说明由 GitHub 自动生成。
+tag 与版本、跑检查与打包，创建 GitHub Release 并上传安装包、blockmap、latest.yml 和 zip。
 tag 必须等于 `package.json` 的 version，且指向 `main` 上的提交；workflow 文件本身也要先
 随 `main` 推到远端，tag 才能触发它。手动出包仍用上面的 `pnpm dist:win`。
 
@@ -157,6 +164,15 @@ tag 必须等于 `package.json` 的 version，且指向 `main` 上的提交；wo
 git tag v3.3.0
 git push origin v3.3.0
 ```
+
+### 自动更新
+
+- **安装版**：启动约 10 秒后检查 GitHub Releases（可在设置页关闭），发现新版本后由用户
+  确认下载，完成后询问是否重启安装；扫描或复制任务运行中会禁止重启。
+- **免安装版（zip）**：只能检查到新版本并提示打开 Releases 页面下载 zip，关闭应用后覆盖
+  原目录；不会自动安装，也不会把机器上的免安装版变成安装版。
+- 安装包未做代码签名，首次安装可能被 SmartScreen 拦截，选择「更多信息 → 仍要运行」即可。
+- 升级只替换程序文件，`%APPDATA%\QuickFetch` 里的设置、历史与日志不受影响。
 
 `pnpm start` 使用上一次 `pnpm build` 的产物预览；改完源码要先重新构建。
 
@@ -174,7 +190,8 @@ src/
 │   │   ├── scanner/      # 扫描任务引擎（任务表、各类 resolver、探测、收图、历史落盘）
 │   │   ├── copy/         # 复制任务引擎（平铺复制、命名冲突策略、任务表）
 │   │   ├── discovery/    # 机台与快捷方式识别（LXT / PL / lnk / shortcuts）
-│   │   └── settings/     # 配置管理与环境覆盖持久化（userData/settings.json）
+│   │   ├── settings/     # 配置管理与环境覆盖持久化（userData/settings.json）
+│   │   └── update/       # 自动更新（electron-updater 接线、状态机、安装前任务闸门）
 │   └── utils/            # 通用工具（自适应并发采样、UNC 路径规范化）
 ├── preload/index.ts      # contextBridge 暴露 window.electronAPI
 ├── shared/               # 主进程 ↔ preload ↔ 渲染层共用的类型契约（ipc.ts, historyLimit.ts）
@@ -190,6 +207,7 @@ src/
     │   ├── copy/         # 复制管理（copy-panel、useImageCopy、copyStore）
     │   ├── history/      # 历史记录（history-panel、historyStore）
     │   ├── excel/        # Excel 解析（上传、解析、筛选、表格与状态）
+    │   ├── update/       # 自动更新（设置分区、侧边栏标记、状态 store）
     │   └── settings/     # 应用设置（settings-page、settingsStore、userPreferencesStore）
     ├── components/       # 全局跨模块组件（每个组件一个目录：kebab-case 组件文件 + 同名 CSS）
     │   ├── choice-list/  # 基于 Radix Themes 的单选/多选组件
@@ -200,7 +218,7 @@ src/
     └── public/img/       # 静态资源
 ```
 
-构建产物：`out/main`、`out/preload`、`out/renderer`；安装包输出到 `release/`。
+构建产物：`out/main`、`out/preload`、`out/renderer`；安装包、zip 与更新清单输出到 `release/`。
 
 ## UI 约定
 

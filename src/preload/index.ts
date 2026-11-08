@@ -1,9 +1,35 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-import type { CopyTask, ElectronAPI, ScanTask } from '../shared/ipc'
+import type {
+  CopyTask,
+  ElectronAPI,
+  ScanTask,
+  UpdateState,
+} from '../shared/ipc'
 
 const api: ElectronAPI = {
   getVersion: () => ipcRenderer.invoke('app:version'),
+
+  getUpdateState: () => ipcRenderer.invoke('update:get-state'),
+
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+
+  downloadUpdate: () => ipcRenderer.invoke('update:download'),
+
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+
+  openUpdateReleasePage: () => ipcRenderer.invoke('update:open-release-page'),
+
+  onUpdateState: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: UpdateState) =>
+      listener(state)
+
+    ipcRenderer.on('update:state', handler)
+
+    return () => {
+      ipcRenderer.removeListener('update:state', handler)
+    }
+  },
 
   pickDirectory: (options) =>
     ipcRenderer.invoke('fs:pick-directory', options ?? {}),

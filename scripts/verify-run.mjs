@@ -41,9 +41,12 @@ writeFileSync(
 )
 
 const out = join(work, 'verify.mjs')
+// esbuild 的 bin 是带 shebang 的 JS 脚本；Windows 不能直接 spawn，
+// 统一用当前 Node 执行，Linux/Windows 行为一致。
 const build = spawnSync(
-  esbuildBin,
+  process.execPath,
   [
+    esbuildBin,
     'scripts/verify-fixes.ts',
     '--bundle',
     '--platform=node',
@@ -55,6 +58,10 @@ const build = spawnSync(
   ],
   { cwd: root, stdio: 'inherit' },
 )
+
+if (build.error) {
+  console.error('启动 esbuild 失败:', build.error)
+}
 
 if (build.status !== 0) {
   rmSync(work, { recursive: true, force: true })

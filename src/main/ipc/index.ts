@@ -4,6 +4,7 @@ import { registerScanIpc } from './scan.ipc'
 import { registerCopyIpc } from './copy.ipc'
 import { registerHistoryIpc } from './history.ipc'
 import { registerExcelIpc } from './excel.ipc'
+import { registerUpdateIpc } from './update.ipc'
 
 export const registerIpcHandlers = (): void => {
   registerSettingsIpc()
@@ -12,4 +13,5 @@ export const registerIpcHandlers = (): void => {
   registerCopyIpc()
   registerHistoryIpc()
   registerExcelIpc()
+  registerUpdateIpc()
 }
