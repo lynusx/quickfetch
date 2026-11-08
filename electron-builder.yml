@@ -1,0 +1,49 @@
+appId: com.lynusx.quickfetch
+# userData 目录名由 package.json 的 productName 决定；这里只影响 exe、快捷方式与标题
+productName: QuickFetch
+copyright: Copyright © 2026 lynusx
+
+directories:
+  output: release
+  buildResources: build
+
+# electron-builder 打包时会单独下载一次目标平台的 Electron 二进制，
+# 与 ensure-electron.cjs 的镜像保持一致，避免国内网络下直连 GitHub 超时。
+# 设置 ELECTRON_BUILDER_BINARIES_MIRROR 环境变量可覆盖。
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/
+
+# 只打包构建产物，源码不进安装包。
+# 渲染层依赖（含 xlsx）已由 Vite 打进 out/renderer；主进程/preload 不 require
+# 任何 npm 包，production dependencies 为空，因此 asar 里不需要 node_modules。
+files:
+  - out/**/*
+  - package.json
+
+asar: true
+
+# 只保留简体中文语言包：Electron 默认带 55 个 locales/*.pak（约 49MB），
+# 本应用只面向中文现场，其余语言一律剔除，缩小免安装包体积。
+electronLanguages:
+  - zh-CN
+
+# 免安装压缩包：解压即用，文件名不带 setup，避免被误当成安装程序
+win:
+  target:
+    - target: zip
+      arch:
+        - x64
+  # Windows 优先用多尺寸 ico（16–256），比让 electron-builder 现场从 png 生成更可控
+  icon: build/icon.ico
+  artifactName: QuickFetch-${version}-win-x64.${ext}
+
+# 安装包配置保留：换回 nsis 目标即可恢复
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 秒取
+  deleteAppDataOnUninstall: false

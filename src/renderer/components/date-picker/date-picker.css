@@ -1,0 +1,129 @@
+@import 'react-day-picker/style.css';
+
+.rdp-root {
+  --rdp-accent-color: var(--accent-9);
+  --rdp-accent-background-color: var(--accent-3);
+  --rdp-day-height: 32px;
+  --rdp-day-width: 32px;
+  --rdp-day_button-border-radius: var(--radius-2);
+  --rdp-day_button-border: none;
+  --rdp-day_button-height: 32px;
+  --rdp-day_button-width: 32px;
+  --rdp-selected-border: none;
+  --rdp-today-color: var(--accent-11);
+  font-family: var(--default-font-family);
+  color: var(--gray-12);
+  margin: 0;
+  user-select: none;
+}
+
+.rdp-caption_label {
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-bold);
+  color: var(--gray-12);
+}
+
+.rdp-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.rdp-button_next,
+.rdp-button_previous {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-2);
+  color: var(--gray-11);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.rdp-button_next:hover,
+.rdp-button_previous:hover {
+  background-color: var(--gray-4);
+  color: var(--gray-12);
+}
+
+.rdp-weekday {
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+  color: var(--gray-9);
+  width: 32px;
+  height: 28px;
+  text-align: center;
+}
+
+.rdp-day_button {
+  font-size: var(--font-size-1);
+  color: var(--gray-12);
+  cursor: pointer;
+  border-radius: var(--radius-2);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rdp-day_button:hover {
+  background-color: var(--gray-4);
+}
+
+.rdp-selected .rdp-day_button {
+  background-color: var(--accent-9) !important;
+  color: var(--accent-contrast) !important;
+  font-weight: var(--font-weight-bold);
+}
+
+.rdp-today:not(.rdp-selected) .rdp-day_button {
+  font-weight: var(--font-weight-bold);
+  color: var(--accent-11);
+  background-color: var(--accent-a2);
+}
+
+.rdp-outside .rdp-day_button {
+  color: var(--gray-8);
+  opacity: 0.6;
+}
+
+.rdp-disabled .rdp-day_button {
+  color: var(--gray-7);
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* 日期触发器与弹层 */
+
+.date-trigger {
+  width: 100%;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.date-popover {
+  padding: var(--space-2);
+}
+
+.date-trigger svg {
+  flex-shrink: 0;
+  color: var(--gray-9);
+}
+
+.date-trigger-text {
+  flex: 1;
+  text-align: left;
+}
+
+.date-shortcut {
+  width: 100%;
+}

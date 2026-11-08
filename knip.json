@@ -1,0 +1,14 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/main/index.ts",
+    "src/preload/index.ts",
+    "src/renderer/main.tsx",
+    "scripts/*.cjs",
+    "electron.vite.config.ts"
+  ],
+  "project": ["src/**/*.{ts,tsx}", "scripts/*.cjs"],
+  "ignoreDependencies": ["@fontsource-variable/public-sans"],
+  "ignoreFiles": ["src/renderer/vite-env.d.ts"],
+  "ignoreExportsUsedInFile": true
+}

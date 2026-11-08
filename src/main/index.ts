@@ -1,0 +1,263 @@
+import { BrowserWindow, app, screen, shell } from 'electron'
+import type { BrowserWindowConstructorOptions } from 'electron'
+import { join } from 'node:path'
+
+import { registerIpcHandlers } from './ipc'
+import { cleanupSettingsTempFiles, readSettings } from './services/settings'
+import { initLogger, logger } from './services/log'
+import { persistUnfinished } from './services/scanner'
+
+// electron-vite 在开发模式下注入渲染层 dev server 地址
+const rendererDevUrl = process.env['ELECTRON_RENDERER_URL']
+
+/**
+ * 运行期窗口 / 任务栏图标。
+ *
+ * 打包时 Windows 用的是 electron-builder 嵌进 exe 的 build/icon.ico，
+ * 但开发态和 macOS Dock 不读 exe 资源，会退回 Electron 默认图标；
+ * 这里显式指一张同源的 PNG（随 public 目录进 out/renderer/img）。
+ */
+const appIconPath = join(__dirname, '../renderer/img/icon.png')
+
+const DEFAULT_WINDOW_WIDTH = 1280
+const DEFAULT_WINDOW_HEIGHT = 800
+const MIN_WINDOW_WIDTH = 1080
+const MIN_WINDOW_HEIGHT = 600
+/** 窗口与工作区边缘的留白，避免贴边或压住任务栏 */
+const WINDOW_EDGE_MARGIN = 64
+
+/**
+ * 自定义标题栏高度，必须与渲染层 `.app-topbar` 的 40px 保持一致。
+ *
+ * 内容整体下移这一高度，窗口顶部只保留系统窗口控件：
+ * macOS 是红绿灯，Windows 是右上角的最小化/最大化/关闭。
+ */
+const WINDOW_CHROME_HEIGHT = 40
+
+/**
+ * 隐藏系统标题栏，只保留窗口控件。
+ *
+ * - macOS：hiddenInset 保留原生红绿灯，去掉系统标题
+ * - Windows：hidden + titleBarOverlay 只画右上角按钮，去掉图标与标题。
+ *   覆盖层颜色对应浅色主题的 --color-panel-solid（白）与 --gray-12；
+ *   主进程读不到 CSS 变量，这里用字面量。
+ */
+const windowChrome: BrowserWindowConstructorOptions =
+  process.platform === 'darwin'
+    ? { titleBarStyle: 'hiddenInset' }
+    : {
+        titleBarStyle: 'hidden',
+        titleBarOverlay: {
+          color: '#ffffff',
+          symbolColor: '#1c2024',
+          height: WINDOW_CHROME_HEIGHT,
+        },
+      }
+
+/**
+ * 按主屏工作区计算初始尺寸。
+ *
+ * workAreaSize 已排除任务栏，单位是 DIP，和 BrowserWindow 的宽高一致；
+ * 因此在 125%/150% 缩放下也按逻辑像素判断，不会把窗口算出屏幕。
+ */
+const resolveWindowSize = (): { width: number; height: number } => {
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize
+
+  return {
+    width: Math.max(
+      MIN_WINDOW_WIDTH,
+      Math.min(DEFAULT_WINDOW_WIDTH, width - WINDOW_EDGE_MARGIN),
+    ),
+    height: Math.max(
+      MIN_WINDOW_HEIGHT,
+      Math.min(DEFAULT_WINDOW_HEIGHT, height - WINDOW_EDGE_MARGIN),
+    ),
+  }
+}
+
+const createWindow = (): BrowserWindow => {
+  const { width, height } = resolveWindowSize()
+
+  const window = new BrowserWindow({
+    width,
+    height,
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
+    center: true,
+    show: false,
+    autoHideMenuBar: true,
+    backgroundColor: '#ffffff',
+    title: '秒取',
+    icon: appIconPath,
+    ...windowChrome,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+
+  // 等首屏渲染完成再显示，避免白屏闪烁
+  window.once('ready-to-show', () => window.show())
+
+  logger.info('window', 'window.created', { id: window.id })
+
+  window.webContents.on(
+    'did-fail-load',
+    (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      logger.warn('window', 'window.load-failed', {
+        errorCode,
+        errorDescription,
+        validatedURL,
+        isMainFrame,
+      })
+    },
+  )
+
+  window.webContents.on('render-process-gone', (_event, details) => {
+    logger.error('window', 'window.render-gone', {
+      reason: details.reason,
+      exitCode: details.exitCode,
+    })
+  })
+
+  window.webContents.on('preload-error', (_event, preloadPath, error) => {
+    logger.error('window', 'window.preload-error', { preloadPath, error })
+  })
+
+  window.on('unresponsive', () => {
+    logger.warn('window', 'window.unresponsive', { id: window.id })
+  })
+
+  // 外部链接交给系统浏览器，不在应用内开新窗口
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
+  if (rendererDevUrl) {
+    void window.loadURL(rendererDevUrl)
+  } else {
+    void window.loadFile(join(__dirname, '../renderer/index.html'))
+  }
+
+  return window
+}
+
+// 固定中文语言环境：日期控件与原生对话框按 zh-CN 显示
+// 必须在 app ready 之前设置
+app.commandLine.appendSwitch('lang', 'zh-CN')
+
+// 只记录，不主动退出：现场工具宁可继续跑，也不要因为一次异常直接消失。
+// initLogger 之前 logger 是 no-op，这段时间的异常仍会出现在终端。
+process.on('uncaughtException', (error) => {
+  logger.error('process', 'uncaught-exception', { error })
+  console.error('主进程未捕获异常:', error)
+})
+
+process.on('unhandledRejection', (reason) => {
+  logger.error('process', 'unhandled-rejection', { reason })
+  console.error('主进程未处理的 Promise 拒绝:', reason)
+})
+
+// 单实例锁：双开时两个进程会共写同一份 settings.json / history，
+// 后写覆盖先写，历史裁剪也会互相删记录。
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!hasSingleInstanceLock) {
+  // 直接退出，绕过 before-quit，避免第二个实例触发 persistUnfinished
+  app.exit(0)
+} else {
+  app.on('second-instance', () => {
+    logger.info('app', 'app.second-instance', {})
+
+    const window = BrowserWindow.getAllWindows()[0]
+
+    if (!window) return
+
+    if (window.isMinimized()) window.restore()
+
+    window.show()
+    window.focus()
+  })
+
+  app.whenReady().then(async () => {
+    // Windows 任务栏分组与通知标识
+    app.setAppUserModelId('com.lynusx.quickfetch')
+
+    // macOS 的 Dock 图标不跟着窗口走，开发态默认是 Electron 的图标，这里显式覆盖
+    if (process.platform === 'darwin') app.dock?.setIcon(appIconPath)
+
+    // 先按已落盘的开关初始化日志，后续启动步骤与现场操作都能被记录
+    const settings = await readSettings().catch(() => null)
+    await initLogger({
+      enabled: settings?.preferences.debugLogEnabled === true,
+    })
+
+    logger.info('app', 'app.ready', {
+      version: app.getVersion(),
+      platform: process.platform,
+      arch: process.arch,
+      userData: app.getPath('userData'),
+      logDir: logger.dir,
+      enabled: logger.isEnabled(),
+    })
+
+    // 上次进程被强杀时可能留下 settings.json.*.tmp，先清掉再开放读写
+    await cleanupSettingsTempFiles()
+
+    registerIpcHandlers()
+    createWindow()
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
+  })
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit()
+  })
+
+  /** 退出流程只跑一次，第二次 app.quit() 直接放行 */
+  let savedOnQuit = false
+
+  /**
+   * 退出前把还没跑完的扫描任务落盘。
+   *
+   * 一次扫描动辄几分钟，用户中途关窗口很常见；不拦一下的话，已经读到的
+   * 几千张图会随着进程消失，重启后历史里干干净净，像是从没扫过。
+   * 这里把当前进度按 interrupted 存进历史，重启后能看到「扫到哪儿了」，
+   * 参数也在，点一下就能按原参数重扫。
+   *
+   * 写盘是异步的，必须先拦下这次退出；但也不能无限等 —— 磁盘卡住或记录
+   * 特别大时最多等 3 秒，剩下的交给操作系统收尾。
+   */
+  app.on('before-quit', (event) => {
+    if (savedOnQuit) return
+
+    savedOnQuit = true
+    event.preventDefault()
+    logger.info('app', 'app.before-quit', {})
+
+    // 先藏窗口再写盘：让用户看到的是「关掉了」，而不是一个点不动的窗口
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.hide()
+    }
+
+    const timeout = new Promise<void>((resolve) => {
+      setTimeout(resolve, 3000)
+    })
+
+    void Promise.race([persistUnfinished(), timeout])
+      .catch((error: unknown) => {
+        console.error('退出前保存扫描历史失败:', error)
+        logger.error('app', 'persist-unfinished.failed', { error })
+      })
+      .then(() => {
+        logger.info('app', 'app.quit', {})
+        return logger.close(800)
+      })
+      .finally(() => app.quit())
+  })
+}

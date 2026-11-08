@@ -1,0 +1,120 @@
+/* 选择项：ChoiceList / ChoiceRadio。 */
+
+.choice-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.choice-cols-1 {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+.choice-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.choice-cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.choice-cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.choice-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--gray-a4);
+  border-radius: var(--radius-2);
+  background: var(--app-surface);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    border-color var(--app-transition),
+    background-color var(--app-transition),
+    color var(--app-transition);
+}
+
+.choice-cell:hover {
+  border-color: var(--gray-a6);
+  background: var(--gray-a2);
+}
+
+.choice-cell[data-selected='true'] {
+  border-color: var(--accent-a7);
+  background: var(--accent-a2);
+}
+
+.choice-cell[data-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.choice-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--gray-11);
+}
+
+.choice-cell[data-selected='true'] .choice-label {
+  font-weight: 600;
+  color: var(--accent-12);
+}
+
+.choice-meta {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--gray-9);
+  font-variant-numeric: tabular-nums;
+}
+
+/**
+ * 机台行尾的共享探测徽标。
+ *
+ * 三态必须能一眼分开，所以用颜色而不是文字位置：
+ * 灰=未探测、蓝=已探到、红=探过但没有。
+ */
+.machine-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+.share-badge {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 1px 5px;
+  border-radius: var(--radius-1);
+  font-size: 9.5px;
+  line-height: 1.5;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 84px;
+}
+
+.share-badge[data-tone='muted'] {
+  color: var(--gray-9);
+  background: var(--gray-a3);
+}
+
+.share-badge[data-tone='ready'] {
+  color: var(--accent-11);
+  background: var(--accent-a3);
+}
+
+.share-badge[data-tone='missing'] {
+  color: var(--red-11);
+  background: var(--red-a3);
+}

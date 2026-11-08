@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="title">
+  <title id="title">QuickFetch 秒取 — 符号</title>
+  <g fill="#111111">
+    <path fill-rule="evenodd" d="M126 38 A88 88 0 1 1 125.9 38 Z M126 78 A48 48 0 1 0 126.1 78 Z"/>
+    <circle cx="186" cy="186" r="32"/>
+  </g>
+</svg>

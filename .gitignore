@@ -10,6 +10,9 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+out
+release
+.pnpm-store
 *.local
 
 # Editor directories and files
@@ -23,3 +26,22 @@ dist-ssr
 *.sln
 *.sw?
 .env
+.npm-cache
+
+# Electron 崩溃时留下的 core dump
+core
+core.[0-9]*
+
+# 本地打包产物与截图，不入库
+*.zip
+shots/
+
+# Claude Code 的本地设置（skills 仍需入库，不整目录忽略）
+.claude/settings.local.json
+
+# logo-design 技能只在本地设计时用：1400+ 个示例 SVG / 13MB，不入库。
+# 需要时从 kaankiziltug/logo-design-skill 重新安装。
+.claude/skills/logo-design/
+
+# 现场临时资料（路径说明、快捷方式样本）
+.temp/
