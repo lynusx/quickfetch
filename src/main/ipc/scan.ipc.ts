@@ -8,6 +8,7 @@ import type {
   ShareState,
 } from '../../shared/ipc'
 import { DEFAULT_AOI_IMAGE_KIND, elPlantOf } from '../../shared/ipc'
+import { normalizeScanCategory } from '../../shared/scanCategories'
 import {
   createAoiResolver,
   createElResolver,
@@ -73,7 +74,10 @@ const validateParams = (params: ScanTaskParams): void => {
     throw new Error('日期格式不正确，应为 YYYYMMDD')
   }
   // 森标 AOI 的路径没有时段层，允许传空数组
-  if ((params.category ?? 'el') !== 'aoi' && !params.slots.length) {
+  if (
+    normalizeScanCategory(params.category) !== 'aoi' &&
+    !params.slots.length
+  ) {
     throw new Error('请至少选择一个时段')
   }
   if (!params.types.length) {
@@ -255,7 +259,7 @@ export const registerScanIpc = (): void => {
   handle('createScanTask', async (_event, params: ScanTaskParams) => {
     validateParams(params)
     const settings = await readSettings()
-    const category = params.category ?? 'el'
+    const category = normalizeScanCategory(params.category)
 
     return taskBuilders[category](settings, params)
   })

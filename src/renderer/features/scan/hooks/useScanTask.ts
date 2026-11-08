@@ -6,7 +6,11 @@ import type {
   ScanTaskParams,
   ScanTaskStatus,
 } from '@shared/ipc'
-import { SCAN_CATEGORY_LABEL, SCAN_CATEGORY_META } from '@shared/scanCategories'
+import {
+  SCAN_CATEGORY_LABEL,
+  SCAN_CATEGORY_META,
+  normalizeScanCategory,
+} from '@shared/scanCategories'
 import { copyStoreOf } from '@/features/copy'
 import {
   scanStoreOf,
@@ -74,7 +78,7 @@ export const useScanTask = ({
 
     const apply = (next: ScanTask): void => {
       // 广播里混着两个类别的任务，只处理本类别的
-      if ((next.params.category ?? 'el') !== category) return
+      if (normalizeScanCategory(next.params.category) !== category) return
 
       const current = store.getState().task
 
@@ -149,7 +153,10 @@ export const useScanTask = ({
     void window.electronAPI
       .getScanTask(current.id)
       .then((latest) => {
-        if (latest && (latest.params.category ?? 'el') === category) {
+        if (
+          latest &&
+          normalizeScanCategory(latest.params.category) === category
+        ) {
           store.getState().setTask(latest)
         }
       })
@@ -222,7 +229,9 @@ export const useScanTask = ({
   const otherTask: ScanTask | null = other ?? null
 
   const otherLabel = otherTask
-    ? `正在扫描 ${SCAN_CATEGORY_LABEL[otherTask.params.category ?? 'el']}（${
+    ? `正在扫描 ${
+        SCAN_CATEGORY_LABEL[normalizeScanCategory(otherTask.params.category)]
+      }（${
         otherTask.branches.filter((branch) => branch.status !== 'skipped')
           .length
       }/${otherTask.branches.length} 台），完成后再开始`

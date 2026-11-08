@@ -19,6 +19,7 @@ import type {
   ScannedImage,
 } from '../../../shared/ipc'
 import { isSettledScanStatus } from '../../../shared/ipc'
+import { normalizeScanCategory } from '../../../shared/scanCategories'
 
 import {
   normalizeHistoryLimit,
@@ -86,8 +87,8 @@ const toItem = (record: HistoryRecord): ScanHistoryItem => ({
   id: record.id,
   status: record.status,
   params: record.params,
-  // 既有记录可能没有 category，它们全是 EL 扫出来的，按 el 补齐即可
-  category: record.params.category ?? 'el',
+  // 既有记录可能没有 category，它们全是 EL 扫出来的，统一在这里补齐
+  category: normalizeScanCategory(record.params.category),
   totalImages: record.images.length,
   hitMachines: record.branches.filter((branch) => branch.images > 0).length,
   machineCount: record.branches.length,
@@ -104,7 +105,11 @@ const toItem = (record: HistoryRecord): ScanHistoryItem => ({
 export const toTask = (record: HistoryRecord): ScanTask => ({
   id: record.id,
   status: record.status,
-  params: record.params,
+  // 历史读取入口补齐 category，恢复出来的任务与实时任务结构一致
+  params: {
+    ...record.params,
+    category: normalizeScanCategory(record.params.category),
+  },
   progress: record.progress,
   branches: record.branches,
   pauseReason: null,

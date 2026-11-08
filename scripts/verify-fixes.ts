@@ -66,6 +66,7 @@ import { pruneMachinesToSide } from '../src/renderer/features/scan/stores/plantF
 import {
   SCAN_CATEGORIES,
   SCAN_CATEGORY_META,
+  normalizeScanCategory,
 } from '../src/shared/scanCategories'
 import {
   deriveCopyReadModel,
@@ -2719,6 +2720,47 @@ const historyStoreTests = async () => {
     assert.ok(record)
     assert.equal(toTask(record).preview.length, 200)
     assert.equal(toTask(record).totalImages, 201)
+  })
+
+  await test('类别归一化: 非法/缺省回落 el，合法值原样返回', async () => {
+    for (const value of [undefined, null, '', 'unknown', 123, {}]) {
+      assert.equal(normalizeScanCategory(value), 'el')
+    }
+    for (const category of SCAN_CATEGORIES) {
+      assert.equal(normalizeScanCategory(category), category)
+    }
+  })
+
+  await test('历史读取: 老记录缺 category 时补成 el', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'qf-history-category-'))
+    const store = createHistoryStore(dir)
+    const legacy = task('legacy', 'completed')
+
+    delete legacy.params.category
+    await store.saveRecord(legacy, [image(0)])
+
+    const summary = (await store.listHistory()).find(
+      (item) => item.id === 'legacy',
+    )
+    const record = await store.readRecord('legacy')
+
+    assert.equal(summary?.category, 'el')
+    assert.ok(record)
+    assert.equal(toTask(record).params.category, 'el')
+  })
+
+  await test('历史读取: 不认识的 category 回落 el', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'qf-history-category-bad-'))
+    const store = createHistoryStore(dir)
+    const legacy = task('bad-category', 'completed')
+
+    ;(legacy.params as { category?: string }).category = 'unknown'
+    await store.saveRecord(legacy, [image(0)])
+
+    const record = await store.readRecord('bad-category')
+
+    assert.ok(record)
+    assert.equal(toTask(record).params.category, 'el')
   })
 }
 

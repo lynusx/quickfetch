@@ -8,6 +8,7 @@ import type {
 } from '../../../shared/ipc'
 import { isFinalScanStatus } from '../../../shared/ipc'
 import { IPC_EVENTS } from '../../../shared/ipc'
+import { normalizeScanCategory } from '../../../shared/scanCategories'
 
 import { DEFAULT_HISTORY_LIMIT } from '../../../shared/historyLimit'
 import { readSettings } from '../settings'
@@ -88,14 +89,19 @@ export const createTask = (
   params: ScanTaskParams,
   context: TaskContext,
 ): ScanTask => {
-  const runner = new ScanTaskRunner(params, context, broadcast)
+  // 建任务入口是实时路径的唯一归一化点：之后的广播、历史与 store 都读这里
+  const normalized: ScanTaskParams = {
+    ...params,
+    category: normalizeScanCategory(params.category),
+  }
+  const runner = new ScanTaskRunner(normalized, context, broadcast)
 
   tasks.add(runner)
 
   logger.info('scan', 'scan.task.created', {
     taskId: runner.id,
-    category: params.category,
-    machines: params.machines.length,
+    category: normalized.category,
+    machines: normalized.machines.length,
   })
 
   // 创建瞬间就推送一次，前端进度条立即进入 0% 的待开始状态
@@ -159,7 +165,9 @@ export const startTask = (id: string): ScanTask | null => {
 
   if (active) {
     throw new Error(
-      `已有扫描任务在进行（${active.params.category ?? 'el'}），请先完成或取消`,
+      `已有扫描任务在进行（${normalizeScanCategory(
+        active.params.category,
+      )}），请先完成或取消`,
     )
   }
 

@@ -20,6 +20,19 @@ export const SCAN_CATEGORIES = [
   'aoi',
 ] as const satisfies readonly ScanCategory[]
 
+const CATEGORY_SET: ReadonlySet<string> = new Set(SCAN_CATEGORIES)
+
+/**
+ * 类别归一化的唯一落点。
+ *
+ * 老任务与历史 JSON 可能没有 category，或带着已删除的类别；实时任务在建
+ * 任务入口补一次，历史记录在读取入口补一次，其它地方不再各自回落 `el`。
+ */
+export const normalizeScanCategory = (value: unknown): ScanCategory =>
+  typeof value === 'string' && CATEGORY_SET.has(value)
+    ? (value as ScanCategory)
+    : 'el'
+
 export interface ScanCategoryMeta {
   /** 导航与提示里的名字 */
   label: string
