@@ -136,7 +136,23 @@ chmod +x node_modules/electron/dist/Electron.app/Contents/MacOS/Electron
 
 ```bash
 pnpm build                    # 产物输出到 out/（main、preload、renderer）
-pnpm dist:win                 # 先 build，再打 Windows x64 zip（QuickFetch-<version>-win-x64.zip）到 release/
+pnpm dist:win                 # 校验 → build → Windows x64 zip（QuickFetch-<version>-win-x64.zip）到 release/
+```
+
+`dist:win` 会先跑 `scripts/check-release.cjs`：`version` 必须是 `x.y.z`、与 `HEAD` 的
+`package.json` 一致，且工作区没有未提交改动。这样 zip 文件名、asar 内 `package.json`、
+`app.getVersion()` 与侧边栏显示的版本都对应同一次提交。校验失败时先提交或 `git stash`；
+只有明确要求未提交出包时才用覆盖开关（它仍会检查版本格式）：
+
+```powershell
+$env:SKIP_RELEASE_CHECK=1; pnpm dist:win
+```
+
+发布后手工打 tag，工具不会自动打：
+
+```bash
+git tag v3.2.0
+git push origin v3.2.0
 ```
 
 `pnpm start` 使用上一次 `pnpm build` 的产物预览；改完源码要先重新构建。

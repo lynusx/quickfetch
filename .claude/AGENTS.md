@@ -96,6 +96,12 @@ SKIP_VERSION=1 git commit -m "feat(pl): 利珀PL扫描入口"
 `post-commit` 会 `git add package.json` 并 amend；若工作区本来就有未暂存的 package.json 改动，
 会被一起带进本次提交。`SKIP_VERSION=1` 也要先把 package.json 完整 `git add`。
 
+**发布一致性**：`pnpm dist:win` 会先跑 `scripts/check-release.cjs`——`version` 必须与 `HEAD` 的
+`package.json` 一致、工作区干净（含未跟踪文件），merge/rebase/cherry-pick/revert 进行中直接拒绝。
+`SKIP_RELEASE_CHECK=1` 只用于「明确要求未提交出包」，跳过 Git 检查但不跳过版本格式校验。
+侧边栏版本经 `useAppVersion` 调 `app:version` 运行时读取，不要再注入 `VITE_APP_VERSION`
+或在渲染层复制版本号。发布后手工 `git tag vX.Y.Z`，命令见 README「构建与打包」。
+
 **提交信息**：Conventional Commits，由 commitlint 校验，格式 `type(scope): 描述`。
 
 **不要把 Claude Code 加为贡献者**：提交信息里不要出现 `Co-Authored-By: Claude Code <noreply@anthropic.com>`

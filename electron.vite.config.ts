@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
@@ -17,11 +16,6 @@ const bundledImageExts = [
   '.ico',
   '.webp',
 ]
-
-// 读取 package.json 获取版本信息
-const packageJson = JSON.parse(
-  readFileSync(resolve(rootDir, 'package.json'), 'utf-8'),
-) as { version: string }
 
 // 主进程与 preload 固定输出 CommonJS：
 // 仓库使用 type: module，但 Electron 的 preload 走 CJS 最稳，且主进程可直接用 __dirname。
@@ -54,9 +48,6 @@ export default defineConfig({
     root: resolve(rootDir, 'src/renderer'),
     base: './',
     publicDir: resolve(rootDir, 'src/renderer/public'),
-    define: {
-      'import.meta.env.VITE_APP_VERSION': JSON.stringify(packageJson.version),
-    },
     plugins: [react()],
     resolve: {
       alias: {

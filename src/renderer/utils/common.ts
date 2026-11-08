@@ -1,15 +1,3 @@
-// 获取应用版本信息
-export function getAppVersion(): string {
-  try {
-    // 在 Vite 环境中，可以通过 import.meta.env 获取版本信息
-    // 或者从 package.json 中读取
-    return import.meta.env.VITE_APP_VERSION || '0.0.0'
-  } catch (error) {
-    console.warn('无法获取版本信息:', error)
-    return '0.0.0'
-  }
-}
-
 // 获取班次信息
 export const getShiftInfo = (timestamp: Date) => {
   const date = new Date(timestamp)
