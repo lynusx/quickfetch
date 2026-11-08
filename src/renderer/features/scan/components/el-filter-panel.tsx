@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import {
   CalendarIcon,
   CheckIcon,
@@ -26,8 +27,20 @@ import { selectEl, useSettingsStore } from '@/features/settings'
 import { getAllAvailableTimes, getShiftInfo } from '@/utils/common'
 
 const ElFilterPanel = () => {
+  // 只选本面板用的字段：机台搜索词变化不该把筛选面板一起重渲染
   const { date, shift, slots, types, setDate, setShift, setSlots, setTypes } =
-    useElFilterStore()
+    useElFilterStore(
+      useShallow((state) => ({
+        date: state.date,
+        shift: state.shift,
+        slots: state.slots,
+        types: state.types,
+        setDate: state.setDate,
+        setShift: state.setShift,
+        setSlots: state.setSlots,
+        setTypes: state.setTypes,
+      })),
+    )
   const el = useSettingsStore(selectEl)
   const addType = useSettingsStore((state) => state.addType)
   const removeType = useSettingsStore((state) => state.removeType)

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import {
   FileIcon,
   MagnifyingGlassIcon,
@@ -18,7 +19,15 @@ const compare = (a: string, b: string): number =>
   a.localeCompare(b, 'zh-CN', { numeric: true })
 
 const ElSetupPanel = () => {
-  const { saving, load, saveRoot, refresh } = useSettingsStore()
+  // 动作引用稳定，saving 变化才需要重渲染；不要订阅整份 settings
+  const { saving, load, saveRoot, refresh } = useSettingsStore(
+    useShallow((state) => ({
+      saving: state.saving,
+      load: state.load,
+      saveRoot: state.saveRoot,
+      refresh: state.refresh,
+    })),
+  )
   const el = useSettingsStore(selectEl)
   const {
     plant,
@@ -27,7 +36,16 @@ const ElSetupPanel = () => {
     setPlant,
     setKeyword,
     setSelectedMachines,
-  } = useElFilterStore()
+  } = useElFilterStore(
+    useShallow((state) => ({
+      plant: state.plant,
+      keyword: state.keyword,
+      selectedMachines: state.selectedMachines,
+      setPlant: state.setPlant,
+      setKeyword: state.setKeyword,
+      setSelectedMachines: state.setSelectedMachines,
+    })),
+  )
 
   const [draft, setDraft] = useState(el.entryRoot ?? '')
   const [prevRootPath, setPrevRootPath] = useState(el.entryRoot)

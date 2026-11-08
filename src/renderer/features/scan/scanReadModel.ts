@@ -77,30 +77,27 @@ export const deriveScanTaskView = (task: ScanTask | null): ScanTaskView => {
     }
   }
 
-  const rows: ScanBranchRow[] = task.branches.map((branch) => {
-    const summary = branchSummary(branch, task.params)
+  const rows: ScanBranchRow[] = []
+  const inaccessible = emptyInaccessible()
+  let abnormalCount = 0
 
-    return {
+  // 行摘要、分组与异常计数共用一次遍历：分支最多几十台，但没必要跑三遍
+  for (const branch of task.branches) {
+    const summary = branchSummary(branch, task.params)
+    const kind = inaccessibleKindOf(branch)
+
+    rows.push({
       machine: branch.machine,
       tone: branchState(branch),
-      kind: inaccessibleKindOf(branch),
+      kind,
       statusText: summary.statusText,
       imagesText: summary.imagesText,
       detail: branch.detail ?? null,
-    }
-  })
+    })
 
-  const abnormalCount = task.branches.filter(
-    (branch) => branch.status !== 'hit' && branch.status !== 'empty',
-  ).length
-
-  // 按「下一步该做什么」分类统计。以前只统计 unreachableReason === 'network'，
-  // 现场 23 台失败只显示「不可达 3 台」，剩下 20 台去哪了没人知道。
-  const inaccessible = task.branches.reduce((acc, branch) => {
-    const kind = inaccessibleKindOf(branch)
-    if (kind) acc[kind] += 1
-    return acc
-  }, emptyInaccessible())
+    if (kind) inaccessible[kind] += 1
+    if (branch.status !== 'hit' && branch.status !== 'empty') abnormalCount += 1
+  }
 
   const hasInaccessible =
     inaccessible.network + inaccessible.auth + inaccessible.denied > 0

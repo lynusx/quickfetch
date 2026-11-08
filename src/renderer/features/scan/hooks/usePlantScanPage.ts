@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 
 import type { ScanCategory } from '@shared/ipc'
 
@@ -23,8 +24,19 @@ export const usePlantScanPage = ({
   typeCatalog,
 }: UsePlantScanPageOptions) => {
   const scope = scanScopeOf(category)
-  // 订阅整份筛选状态：任一字段变化都要重算 ready / missing / signature
-  const state = scope.store()
+  // 只订阅派生真正读取的字段：搜索词、检测面或动作变化不该重算整页
+  const state = scope.store(
+    useShallow((store) => ({
+      plant: store.plant,
+      selectedMachines: store.selectedMachines,
+      date: store.date,
+      shift: store.shift,
+      slots: store.slots,
+      types: store.types,
+      levels: store.levels,
+      imageKind: store.imageKind,
+    })),
+  )
 
   const derived = deriveScope(category, state, configured, typeCatalog)
 

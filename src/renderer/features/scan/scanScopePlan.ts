@@ -23,10 +23,23 @@ import type { PlantFilterSlice } from './stores/plantFilterStore'
  * 所以测试可以直接喂快照，不需要挂载页面。
  */
 
+/** 派生只读这些字段；订阅时也只选这些，搜索词变化不该重算页面 */
+export type ScanScopeState = Pick<
+  PlantFilterSlice,
+  | 'plant'
+  | 'selectedMachines'
+  | 'date'
+  | 'shift'
+  | 'slots'
+  | 'types'
+  | 'levels'
+  | 'imageKind'
+>
+
 /** 把 store 快照喂给纯函数 deriveScanParams；类别差异在这里注入 */
 export const deriveScope = (
   category: ScanCategory,
-  state: PlantFilterSlice,
+  state: ScanScopeState,
   configured: boolean,
   typeCatalog: string[],
 ): ScanParamsResult => {
