@@ -445,6 +445,18 @@ const FINAL_COPY_STATUSES: ReadonlySet<string> = new Set([
   'failed',
 ])
 
+/**
+ * 允许再次复制的扫描终态。
+ *
+ * interrupted 是程序退出时抢救下来的快照，已经扫到的图片仍然有效，
+ * 现场需要能把这些结果复制走；failed 只保留查看，不参与复制。
+ */
+const COPYABLE_SCAN_STATUSES: ReadonlySet<string> = new Set([
+  'completed',
+  'canceled',
+  'interrupted',
+])
+
 /** 任务正常结束（completed / canceled / failed），不含 interrupted */
 export const isSettledScanStatus = (status: ScanTaskStatus): boolean =>
   SETTLED_SCAN_STATUSES.has(status)
@@ -452,6 +464,10 @@ export const isSettledScanStatus = (status: ScanTaskStatus): boolean =>
 /** 任务不会再变化：正常终态 + interrupted */
 export const isFinalScanStatus = (status: ScanTaskStatus): boolean =>
   FINAL_SCAN_STATUSES.has(status)
+
+/** 扫描结果是否允许再次复制：completed / canceled / interrupted */
+export const canCopyScanStatus = (status: ScanTaskStatus): boolean =>
+  COPYABLE_SCAN_STATUSES.has(status)
 
 /** 复制只有三种终态，复制任务不会被「抢救落盘」 */
 export const isFinalCopyStatus = (status: CopyStatus): boolean =>
@@ -762,6 +778,8 @@ export interface CopyTask {
   id: string
   /** 关联的扫描任务 id，历史任务也有 */
   scanTaskId: string
+  /** 来源扫描的类别；复制快照按它隔离到对应页面 */
+  category: ScanCategory
   status: CopyStatus
   progress: CopyProgress
   error: string | null

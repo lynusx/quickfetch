@@ -92,9 +92,17 @@ const createCopyStore = (category: ScanCategory) =>
       (set) => ({
         ...initial,
 
-        setTask: (task) => set({ task }),
+        // 主进程把所有类别的复制任务广播给所有窗口，store 只接自己类别的
+        setTask: (task) => {
+          if (task && task.category !== category) return
+          set({ task })
+        },
         patchTask: (task) =>
-          set((state) => (state.task?.id === task.id ? { task } : state)),
+          set((state) =>
+            state.task?.id === task.id && task.category === category
+              ? { task }
+              : state,
+          ),
         setMachines: (machines) => set({ machines, selectionTouched: true }),
         toggleMachine: (machine) =>
           set((state) => ({

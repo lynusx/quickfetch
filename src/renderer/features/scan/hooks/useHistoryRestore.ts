@@ -6,6 +6,7 @@ import { useSettingsStore } from '@/features/settings'
 import { scanScopeOf } from '../scanScope'
 import { scanStoreOf } from '../stores/scanStore'
 import type { ScanCategory, ScanHistoryItem } from '@shared/ipc'
+import { canCopyScanStatus } from '@shared/ipc'
 import { toErrorMessage } from '@/utils/error'
 
 /**
@@ -69,7 +70,11 @@ export const useHistoryRestore = (
 
         showToast(
           '已载入历史记录',
-          `${item.totalImages} 张图片，可直接查看或复制`,
+          `${item.totalImages} 张图片，${
+            canCopyScanStatus(item.status)
+              ? '可直接查看或复制'
+              : '可查看历史结果'
+          }`,
           'info',
         )
       } catch (cause) {

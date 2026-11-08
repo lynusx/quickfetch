@@ -1,5 +1,10 @@
-import type { CopyPlanPreview, CopyTask, ScanTask } from '@shared/ipc'
-import { isFinalCopyStatus } from '@shared/ipc'
+import type {
+  CopyPlanPreview,
+  CopyTask,
+  ScanCategory,
+  ScanTask,
+} from '@shared/ipc'
+import { canCopyScanStatus, isFinalCopyStatus } from '@shared/ipc'
 import { formatFileSize } from '@/utils/common'
 
 export interface CopyMachineStat {
@@ -60,6 +65,17 @@ export interface CopyReadModel {
 }
 
 /**
+ * 复制快照是否属于当前类别。
+ *
+ * 主进程把复制任务广播给所有窗口，渲染层必须先按类别过滤，
+ * 否则 EL 的完成 toast 会弹到力禧特页面上。
+ */
+export const copyTaskMatchesCategory = (
+  category: ScanCategory,
+  task: Pick<CopyTask, 'category'>,
+): boolean => task.category === category
+
+/**
  * 复制面板与进度视图共享的 read model。
  *
  * 以前 percent、selectedCount、activeDir、done 分别在 useImageCopy、
@@ -89,8 +105,7 @@ export const deriveCopyReadModel = (
 
   // 扫描没结束、没有图片、没勾机台、没选目标目录时都不能复制。
   // 目标目录是硬前置：界面上的按钮在这之前保持禁用，避免点下去才弹选择框。
-  const scanReady =
-    scanTask?.status === 'completed' || scanTask?.status === 'canceled'
+  const scanReady = scanTask ? canCopyScanStatus(scanTask.status) : false
   const canCopy =
     Boolean(scanReady) &&
     (scanTask?.totalImages ?? 0) > 0 &&

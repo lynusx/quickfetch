@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { CopyTask, ScanCategory } from '@shared/ipc'
 import { isFinalCopyStatus } from '@shared/ipc'
 import { copyStoreOf } from './copyStore'
-import { deriveCopyReadModel } from './copyReadModel'
+import { copyTaskMatchesCategory, deriveCopyReadModel } from './copyReadModel'
 import { scanStoreOf } from '@/features/scan'
 import { selectPreferences, useSettingsStore } from '@/features/settings'
 import { formatFileSize } from '@/utils/common'
@@ -67,6 +67,9 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
   // 订阅主进程推送：复制进度、状态变化全靠它，暂停/取消后的收尾也走这里
   useEffect(() => {
     return window.electronAPI.onCopyTaskUpdate((next) => {
+      // 广播混着所有类别；先按类别早退，避免进度和 toast 串到别的页面
+      if (!copyTaskMatchesCategory(category, next)) return
+
       patchTask(next)
 
       // 只在「刚结束」这一帧提示一次，后续重复推送不再打扰
@@ -107,7 +110,7 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
         failed ? 'error' : 'success',
       )
     })
-  }, [patchTask, setError, showToast])
+  }, [category, patchTask, setError, showToast])
 
   /** 机台列表：优先用当前任务各机台的实际图片数，没有则回落到参数里的机台 */
   const machineStats = useMemo(() => {

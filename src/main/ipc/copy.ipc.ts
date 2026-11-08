@@ -14,6 +14,7 @@ import {
 } from '../services/copy'
 import { getArchive } from '../services/scanner'
 import { readSettings, loadFrom } from '../services/settings'
+import { normalizeScanCategory } from '../../shared/scanCategories'
 import { toFsPath } from '../utils/pathx'
 import { handle } from './handle'
 
@@ -80,12 +81,15 @@ export const registerCopyIpc = (): void => {
       }
 
       const profile = loadFrom((await readSettings()).preferences)
+      const scanTask = await getArchive().load(taskId)
 
       return startCopy({
         scanTaskId: taskId,
         targetDir: target,
         params,
         images,
+        // 类别从主进程的扫描快照派生，不信任渲染层传值
+        category: normalizeScanCategory(scanTask?.params.category),
         load: {
           concurrency: profile.copyConcurrency,
           batchSize: profile.copyBatchSize,

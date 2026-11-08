@@ -7,10 +7,12 @@ import type {
   CopyProgress,
   CopyTask,
   CopyTaskParams,
+  ScanCategory,
   ScannedImage,
 } from '../../../shared/ipc'
 
 import { DEFAULT_PREFERENCES, isFinalCopyStatus } from '../../../shared/ipc'
+import { normalizeScanCategory } from '../../../shared/scanCategories'
 import { createAdaptiveGate } from '../../utils/adaptive'
 import type { AdaptiveGate } from '../../utils/adaptive'
 import { createTaskLifecycle } from '../../utils/taskLifecycle'
@@ -150,6 +152,8 @@ export interface CopyRunnerOptions {
   params: CopyTaskParams
   images: ScannedImage[]
   emit: (task: CopyTask) => void
+  /** 来源扫描类别；主进程 IPC 入口会显式派生，测试可缺省为 el */
+  category?: ScanCategory
   load?: CopyLoadOptions
 }
 
@@ -165,6 +169,7 @@ export class CopyTaskRunner {
   readonly createdAt = Date.now()
   scanTaskId: string
   targetDir: string
+  readonly category: ScanCategory
   private params: CopyTaskParams
 
   private readonly source: ScannedImage[]
@@ -221,6 +226,7 @@ export class CopyTaskRunner {
   constructor(options: CopyRunnerOptions) {
     this.scanTaskId = options.scanTaskId
     this.targetDir = options.targetDir
+    this.category = normalizeScanCategory(options.category)
     this.params = options.params
     this.source = options.images
     this.emit = options.emit
@@ -265,6 +271,7 @@ export class CopyTaskRunner {
     logger.info('copy', 'copy.start', {
       copyId: this.id,
       scanTaskId: this.scanTaskId,
+      category: this.category,
       targetDir: this.targetDir,
       layout: this.params.layout,
       conflict: this.params.conflict,
@@ -399,6 +406,7 @@ export class CopyTaskRunner {
     return {
       id: this.id,
       scanTaskId: this.scanTaskId,
+      category: this.category,
       status: this.lifecycle.status,
       progress: this.progress(),
       error: this.error,

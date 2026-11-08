@@ -69,9 +69,11 @@ import {
   normalizeScanCategory,
 } from '../src/shared/scanCategories'
 import {
+  copyTaskMatchesCategory,
   deriveCopyReadModel,
   previewSizeLabel,
 } from '../src/renderer/features/copy/copyReadModel'
+import { copyStoreOf } from '../src/renderer/features/copy/copyStore'
 import { createTaskTable } from '../src/main/utils/taskTable'
 import { createTaskLifecycle } from '../src/main/utils/taskLifecycle'
 import { createTaskArchive } from '../src/main/services/scanner/archive'
@@ -90,6 +92,7 @@ import {
 import { formatEta } from '../src/renderer/utils/common'
 import type { CopyTask } from '../src/shared/ipc'
 import type { ScanTask } from '../src/shared/ipc'
+import { canCopyScanStatus } from '../src/shared/ipc'
 import { summarizeIpcArgs } from '../src/main/ipc/log-summary'
 import {
   describeUpdateError,
@@ -788,6 +791,26 @@ const copyTests = async () => {
         false,
       ),
       '2 KB',
+    )
+  })
+
+  await test('复制: 快照带类别，缺省回落 el', async () => {
+    const base = {
+      scanTaskId: 'scan-category',
+      targetDir: join(tmpdir(), 'qf-copy-category'),
+      params: {
+        machines: ['A'],
+        layout: 'flat' as const,
+        conflict: 'skip' as const,
+      },
+      images: [],
+      emit: () => undefined,
+    }
+
+    assert.equal(new CopyTaskRunner(base).snapshot().category, 'el')
+    assert.equal(
+      new CopyTaskRunner({ ...base, category: 'lxt' }).snapshot().category,
+      'lxt',
     )
   })
 }
@@ -2486,6 +2509,7 @@ const copyReadModelTests = async () => {
     ({
       id: 'copy-1',
       scanTaskId: 'scan-1',
+      category: 'el',
       status,
       progress: {
         status,
@@ -2588,6 +2612,69 @@ const copyReadModelTests = async () => {
       false,
       '没选目标目录',
     )
+    assert.equal(
+      deriveCopyReadModel({ ...input, scanTask: scanTask('canceled') }).canCopy,
+      true,
+      '取消的扫描已读到的图片仍可复制',
+    )
+    assert.equal(
+      deriveCopyReadModel({ ...input, scanTask: scanTask('interrupted') })
+        .canCopy,
+      true,
+      '退出抢救的历史结果仍可复制',
+    )
+    assert.equal(
+      deriveCopyReadModel({ ...input, scanTask: scanTask('failed') }).canCopy,
+      false,
+      '失败的扫描不参与复制',
+    )
+    for (const status of ['pending', 'paused', 'running']) {
+      assert.equal(
+        deriveCopyReadModel({ ...input, scanTask: scanTask(status) }).canCopy,
+        false,
+        `${status} 不是可复制终态`,
+      )
+    }
+    assert.equal(
+      deriveCopyReadModel({ ...input, scanTask: null }).canCopy,
+      false,
+      '没有扫描任务',
+    )
+
+    for (const status of ['completed', 'canceled', 'interrupted'] as const) {
+      assert.equal(canCopyScanStatus(status), true)
+    }
+    for (const status of ['pending', 'running', 'paused', 'failed'] as const) {
+      assert.equal(canCopyScanStatus(status), false)
+    }
+  })
+
+  await test('复制 read model: 复制快照按类别隔离', async () => {
+    const elTask = copyTask('running')
+    const lxtTask = { ...elTask, id: 'copy-2', category: 'lxt' as const }
+
+    assert.equal(copyTaskMatchesCategory('el', elTask), true)
+    assert.equal(copyTaskMatchesCategory('el', lxtTask), false)
+
+    const el = copyStoreOf('el')
+    el.getState().setTask(elTask)
+    el.getState().patchTask(lxtTask)
+    assert.equal(
+      el.getState().task?.id,
+      'copy-1',
+      '跨类别 patch 不能写进 el store',
+    )
+
+    const lxt = copyStoreOf('lxt')
+    lxt.getState().setTask(elTask)
+    assert.equal(lxt.getState().task, null, 'setTask 也要挡住别的类别')
+
+    lxt.getState().setTask(lxtTask)
+    lxt.getState().patchTask({ ...lxtTask, status: 'completed' })
+    assert.equal(lxt.getState().task?.status, 'completed')
+
+    el.getState().reset()
+    lxt.getState().reset()
   })
 }
 
