@@ -148,11 +148,14 @@ pnpm dist:win                 # 校验 → build → Windows x64 zip（QuickFetc
 $env:SKIP_RELEASE_CHECK=1; pnpm dist:win
 ```
 
-发布后手工打 tag，工具不会自动打：
+正式发版由 tag 触发：推送 `v3.3.0` 这类 tag 后，`.github/workflows/release.yml` 会校验
+tag 与版本、跑类型/格式检查、打包并创建 GitHub Release，变更说明由 GitHub 自动生成。
+tag 必须等于 `package.json` 的 version，且指向 `main` 上的提交；workflow 文件本身也要先
+随 `main` 推到远端，tag 才能触发它。手动出包仍用上面的 `pnpm dist:win`。
 
 ```bash
-git tag v3.2.0
-git push origin v3.2.0
+git tag v3.3.0
+git push origin v3.3.0
 ```
 
 `pnpm start` 使用上一次 `pnpm build` 的产物预览；改完源码要先重新构建。
