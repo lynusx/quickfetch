@@ -22,6 +22,8 @@ import { describeLeafFailure, summarize } from './diagnosis'
 import { isImageFile } from '../../../shared/imageExtensions'
 import { createLimiter } from './limiter'
 import type { Limiter } from './limiter'
+import { createScanLedger } from './ledger'
+import type { ScanLedger } from './ledger'
 import { createBreaker } from './breaker'
 import type { Breaker } from './breaker'
 import type { MachineResolver, PathShape } from './resolver'
@@ -36,12 +38,6 @@ export const DEFAULT_READ_CONCURRENCY = 4
 
 /** 每批处理的机台数：一批跑完再开下一批，避免所有机台的状态同时压在内存里 */
 export const DEFAULT_MACHINE_BATCH_SIZE = 2
-
-/** 探测阶段在进度条上占的权重，其余留给收图 */
-const PROBE_WEIGHT = 20
-
-/** 逐目录读文件明细占的权重 */
-const DETAIL_WEIGHT = 30
 
 /** 按固定大小切分数组，用于机台分批 */
 const chunk = <T>(items: T[], size: number): T[][] => {
@@ -169,17 +165,8 @@ export class ScanTaskRunner {
   private images: ScannedImage[] = []
   private progress: ScanTaskProgress = emptyProgress()
 
-  private totalLeaves = 0
-  private doneLeaves = 0
-  /**
-   * 已经下结论的机台数（探测完成、解析失败、中途断链都算）。
-   *
-   * 用来给"还要补读多少明细"和"还剩几台没下结论"提供确定的数字。
-   * 从进度数字倒推不行：断链时叶子记成"跳过"，从计数上看不出这台
-   * 机台其实已经处理完了。
-   */
-  private finishedMachines = 0
-  private probedMachines = 0
+  /** leaf / 机台 / 明细计数器与 percent、phase、ETA 的唯一 owner */
+  private readonly ledger: ScanLedger
   /**
    * 最近若干次读取结果（true = 不可达），判断整片断网用。
    *
@@ -203,9 +190,6 @@ export class ScanTaskRunner {
   private readonly gate: AdaptiveGate
   /** 已探测完但文件明细还没读的目录，分批清尾用 */
   private readonly pendingDetails: { dir: string; machine: string }[] = []
-  /** 逐目录明细阶段计入的总数与已完成数，用于收尾阶段进度 */
-  private detailTotal = 0
-  private detailDone = 0
 
   /** 前缀之后的层级差异（日期格式、机台名层、Fail/等级层），由解析器声明 */
   private readonly shape: PathShape
@@ -260,7 +244,10 @@ export class ScanTaskRunner {
       images: 0,
     }))
 
-    this.totalLeaves = params.machines.length * this.leavesPerBranch
+    this.ledger = createScanLedger({
+      machines: params.machines.length,
+      leavesPerBranch: this.leavesPerBranch,
+    })
 
     // 现场机器为 8G 内存，并发按保守档起步，必要时再按失败率下调
     this.readConcurrency = clamp(
@@ -489,10 +476,8 @@ export class ScanTaskRunner {
       // 探测完成后逐目录补读文件明细，同样走闸门，不再另开并发
       await this.collectDetails(limiter)
 
-      this.progress.phase = 'done'
       this.progress.currentPath = ''
-      this.progress.detailsPending = 0
-      this.progress.etaMs = 0
+      this.ledger.finish()
     } catch (error) {
       if (isAbortError(error)) {
         // 取消属于正常流程：保留已收集的结果，状态标记 canceled
@@ -661,8 +646,8 @@ export class ScanTaskRunner {
       return
     }
 
-    this.probedMachines += 1
-    this.finishedMachines += 1
+    this.ledger.machineProbed()
+    this.ledger.machineConcluded()
     // 这台机台一路读到了班次目录，网络是通的
     this.breaker.sampleMachine(true)
     if (this.slotless) {
@@ -683,8 +668,7 @@ export class ScanTaskRunner {
     if (missedSlots.length) {
       const skipped =
         missedSlots.length * this.levels.length * this.params.types.length
-      this.doneLeaves += skipped
-      this.progress.dirsSkipped += skipped
+      this.ledger.leavesConcluded(0, skipped)
     }
 
     if (!hitSlots.length) {
@@ -718,9 +702,10 @@ export class ScanTaskRunner {
 
       if (slotRead.status !== 'ok') {
         // 时段目录在列举后被删、或恰好无权限：按跳过处理，不阻断整次任务
-        this.doneLeaves += this.levels.length * this.params.types.length
-        this.progress.dirsSkipped +=
-          this.levels.length * this.params.types.length
+        this.ledger.leavesConcluded(
+          0,
+          this.levels.length * this.params.types.length,
+        )
         continue
       }
 
@@ -738,9 +723,10 @@ export class ScanTaskRunner {
         })
 
         if (failRead.status !== 'ok') {
-          this.doneLeaves += this.levels.length * this.params.types.length
-          this.progress.dirsSkipped +=
-            this.levels.length * this.params.types.length
+          this.ledger.leavesConcluded(
+            0,
+            this.levels.length * this.params.types.length,
+          )
           continue
         }
 
@@ -754,8 +740,7 @@ export class ScanTaskRunner {
       if (this.shape.hasLevel) {
         for (const level of this.levels) {
           if (!typeRootDirs.includes(level)) {
-            this.doneLeaves += this.params.types.length
-            this.progress.dirsSkipped += this.params.types.length
+            this.ledger.leavesConcluded(0, this.params.types.length)
             continue
           }
 
@@ -766,8 +751,7 @@ export class ScanTaskRunner {
           })
 
           if (levelRead.status !== 'ok') {
-            this.doneLeaves += this.params.types.length
-            this.progress.dirsSkipped += this.params.types.length
+            this.ledger.leavesConcluded(0, this.params.types.length)
             continue
           }
 
@@ -781,22 +765,19 @@ export class ScanTaskRunner {
         for (const type of level.dirs) typeSeen.add(type)
 
         for (const type of this.params.types) {
-          this.doneLeaves += 1
-
           if (!level.dirs.includes(type)) {
-            this.progress.dirsSkipped += 1
+            this.ledger.leavesConcluded(0, 1)
             continue
           }
 
+          this.ledger.leavesConcluded(1, 0)
           this.pendingDetails.push({ dir: join(level.dir, type), machine })
-          this.detailTotal += 1
+          this.ledger.detailQueued(1)
         }
       }
 
       this.touch(slotDir)
     }
-
-    this.progress.detailsPending = this.pendingDetails.length
 
     branch.availableTypes = [...typeSeen]
 
@@ -838,19 +819,16 @@ export class ScanTaskRunner {
     let matched = 0
 
     for (const type of this.params.types) {
-      this.doneLeaves += 1
-
       if (!seen.has(type)) {
-        this.progress.dirsSkipped += 1
+        this.ledger.leavesConcluded(0, 1)
         continue
       }
 
       matched += 1
+      this.ledger.leavesConcluded(1, 0)
       this.pendingDetails.push({ dir: join(shiftDir, type), machine })
-      this.detailTotal += 1
+      this.ledger.detailQueued(1)
     }
-
-    this.progress.detailsPending = this.pendingDetails.length
 
     if (!matched) {
       branch.status = 'empty'
@@ -887,8 +865,7 @@ export class ScanTaskRunner {
 
     // 切阶段要在开始读第一个明细之前：界面上"探测目录 / 收集图片"
     // 与实际动作对不上，用户会以为卡在探测
-    this.progress.phase = queue.length ? 'collect' : 'probe'
-    this.progress.detailTotal = this.detailTotal
+    this.ledger.enterCollect(queue.length > 0)
     this.touch('', true)
 
     // 不用 Promise.all(queue.map(...))：那样会把整个队列一次性派发下去，
@@ -973,18 +950,11 @@ export class ScanTaskRunner {
     const branch = this.branches.find((entry) => entry.machine === item.machine)
     const typeRead = await this.read(item.dir)
 
-    this.detailDone += 1
-    this.progress.detailDone = this.detailDone
-    this.progress.detailsPending = Math.max(
-      0,
-      this.detailTotal - this.detailDone,
-    )
+    this.ledger.detailConcluded(typeRead.status === 'ok')
 
     if (!branch) return
 
     if (typeRead.status !== 'ok') {
-      this.progress.dirsSkipped += 1
-
       logger.debug('scan', 'scan.detail.failed', {
         taskId: this.id,
         machine: item.machine,
@@ -1077,10 +1047,8 @@ export class ScanTaskRunner {
     where: string,
     detail?: BrokenDetail,
   ): void {
-    const skipped = this.leavesPerBranch
-    this.doneLeaves += skipped
-    this.progress.dirsSkipped += skipped
-    this.finishedMachines += 1
+    this.ledger.leavesConcluded(0, this.leavesPerBranch)
+    this.ledger.machineConcluded()
 
     // 分类、文案、断网样本统一由 diagnosis 决定；这里只落到 branch
     const diagnosis = describeLeafFailure({
@@ -1102,7 +1070,7 @@ export class ScanTaskRunner {
     branch.message = diagnosis.message
     branch.detail = diagnosis.detail
 
-    this.probedMachines += 1
+    this.ledger.machineProbed()
 
     const fields = {
       taskId: this.id,
@@ -1140,9 +1108,7 @@ export class ScanTaskRunner {
       unreachable?: ScanBranch['unreachableReason']
     },
   ): void {
-    const skipped = this.leavesPerBranch
-    this.doneLeaves += skipped
-    this.progress.dirsSkipped += skipped
+    this.ledger.leavesConcluded(0, this.leavesPerBranch)
 
     branch.brokenAt = resolved.brokenAt ?? '共享名'
     branch.status = resolved.unreachable ? 'unreachable' : 'missing'
@@ -1158,8 +1124,8 @@ export class ScanTaskRunner {
     // 机台自身的问题，把它们算成失败会让新阈值在 39 台未认证时误判断网。
     this.breaker.sampleMachine(resolved.unreachable !== 'network')
 
-    this.probedMachines += 1
-    this.finishedMachines += 1
+    this.ledger.machineProbed()
+    this.ledger.machineConcluded()
 
     logger.warn('scan', 'scan.machine.unresolved', {
       taskId: this.id,
@@ -1174,63 +1140,14 @@ export class ScanTaskRunner {
 
   // ---------------------------------------------------------------- 进度与节流
 
-  private computePercent(): number {
-    if (this.progress.phase === 'done') return 100
-
-    const machineTotal = this.params.machines.length || 1
-    const leafTotal = this.totalLeaves || 1
-
-    const probeRatio = Math.min(1, this.probedMachines / machineTotal)
-    const leafRatio = Math.min(1, this.doneLeaves / leafTotal)
-    const detailRatio =
-      this.detailTotal > 0 ? Math.min(1, this.detailDone / this.detailTotal) : 0
-
-    // 探测 20%、叶子确定 50%、逐目录读明细 30%，三者都完成才是 100%
-    return Math.min(
-      100,
-      Math.round(
-        probeRatio * PROBE_WEIGHT +
-          leafRatio * (100 - PROBE_WEIGHT - DETAIL_WEIGHT) +
-          detailRatio * DETAIL_WEIGHT,
-      ),
-    )
-  }
-
-  /** 按已完成比例估算剩余时间；样本太少时返回 null，避免一开始就跳变 */
-  private estimateEta(percent: number): number | null {
-    if (percent >= 100) return 0
-    if (percent < 5 || !this.lifecycle.startedAt) return null
-
-    const elapsed = Date.now() - this.lifecycle.startedAt
-    const remaining = (elapsed / percent) * (100 - percent)
-
-    return Number.isFinite(remaining) && remaining > 0
-      ? Math.round(remaining)
-      : null
-  }
-
   private touch(currentPath: string, force = false): void {
     if (currentPath) this.progress.currentPath = currentPath
 
-    // 派生值放在这里算最省心：不必在每条执行路径上都记得更新一次。
-    // 界面靠它说明"还在等几台机台"，而不是只给一个百分比。
-    this.progress.machinesPending = Math.max(
-      0,
-      this.params.machines.length - this.finishedMachines,
+    // 计数器与派生值都由 ledger 维护，这里只把结果并进快照
+    Object.assign(
+      this.progress,
+      this.ledger.project(Date.now(), this.lifecycle.startedAt),
     )
-
-    if (this.progress.phase !== 'done') {
-      // 判定用「已下结论」而不是「探测成功」：断链的机台永远到不了
-      // probedMachines，按后者算会一直挂着"探测目录"，
-      // 实际却已经在读明细了 —— 界面上就是"卡在探测"
-      this.progress.phase =
-        this.finishedMachines >= this.params.machines.length
-          ? 'collect'
-          : 'probe'
-    }
-
-    this.progress.percent = this.computePercent()
-    this.progress.etaMs = this.estimateEta(this.progress.percent)
 
     this.lifecycle.touch(force)
   }

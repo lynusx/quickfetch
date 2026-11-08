@@ -73,6 +73,7 @@ import {
 import { createTaskTable } from '../src/main/utils/taskTable'
 import { createTaskLifecycle } from '../src/main/utils/taskLifecycle'
 import { createTaskArchive } from '../src/main/services/scanner/archive'
+import { createScanLedger } from '../src/main/services/scanner/ledger'
 import type { CopyTask } from '../src/shared/ipc'
 import type { ScanTask } from '../src/shared/ipc'
 import { summarizeIpcArgs } from '../src/main/ipc/log-summary'
@@ -3036,6 +3037,99 @@ const archiveTests = async () => {
   })
 }
 
+/* ---------------------------------------------------------------- 21. 扫描进度账本 */
+
+const ledgerTests = async () => {
+  await test('账本: 初始状态与机台结论', async () => {
+    const ledger = createScanLedger({ machines: 2, leavesPerBranch: 3 })
+    const start = ledger.project(1000, 1000)
+
+    assert.equal(start.phase, 'probe')
+    assert.equal(start.percent, 0)
+    assert.equal(start.machinesPending, 2)
+    assert.equal(start.detailsPending, 0)
+    assert.equal(start.dirsSkipped, 0)
+
+    ledger.machineProbed()
+    ledger.machineConcluded()
+
+    const half = ledger.project(1000, 1000)
+
+    assert.equal(half.machinesPending, 1)
+    // 探测占 20%，两台里完成一台
+    assert.equal(half.percent, 10)
+  })
+
+  await test('账本: 断链机台也计入结论', async () => {
+    const ledger = createScanLedger({ machines: 2, leavesPerBranch: 3 })
+
+    // 解析失败的机台不会走 machineProbed，但仍要算「下结论」
+    ledger.machineConcluded()
+    ledger.machineConcluded()
+
+    assert.equal(ledger.project(1000, 1000).machinesPending, 0)
+  })
+
+  await test('账本: leaf 与明细事件推动百分比', async () => {
+    const ledger = createScanLedger({ machines: 2, leavesPerBranch: 3 })
+
+    ledger.machineProbed()
+    ledger.machineConcluded()
+    ledger.machineProbed()
+    ledger.machineConcluded()
+    ledger.leavesConcluded(2, 1)
+    ledger.leavesConcluded(3, 0)
+
+    assert.equal(ledger.project(1000, 1000).percent, 70)
+
+    ledger.detailQueued(2)
+    ledger.detailConcluded(true)
+    const one = ledger.project(1000, 1000)
+
+    assert.equal(one.detailsPending, 1)
+    assert.equal(one.detailDone, 1)
+    assert.equal(one.detailTotal, 2)
+
+    ledger.detailConcluded(false)
+    const done = ledger.project(1000, 1000)
+
+    assert.equal(done.detailsPending, 0)
+    // 1 个 leaf 跳过 + 1 个明细读取失败
+    assert.equal(done.dirsSkipped, 2)
+  })
+
+  await test('账本: 阶段切换与完成', async () => {
+    const ledger = createScanLedger({ machines: 1, leavesPerBranch: 1 })
+
+    ledger.machineProbed()
+    ledger.machineConcluded()
+    ledger.leavesConcluded(1, 0)
+
+    ledger.enterCollect(true)
+    assert.equal(ledger.project(1000, 1000).phase, 'collect')
+
+    ledger.finish()
+    const done = ledger.project(1000, 1000)
+
+    assert.equal(done.phase, 'done')
+    assert.equal(done.percent, 100)
+    assert.equal(done.etaMs, 0)
+  })
+
+  await test('账本: ETA 只在样本足够后给出', async () => {
+    const ledger = createScanLedger({ machines: 1, leavesPerBranch: 1 })
+
+    assert.equal(ledger.project(1000, 1000).etaMs, null)
+
+    ledger.machineProbed()
+    // 20% 时：已用 4 秒，按比例估剩余 16 秒
+    assert.equal(ledger.project(5000, 1000).etaMs, 16000)
+
+    ledger.finish()
+    assert.equal(ledger.project(5000, 1000).etaMs, 0)
+  })
+}
+
 /* ---------------------------------------------------------------- 主流程 */
 
 const main = async () => {
@@ -3079,6 +3173,8 @@ const main = async () => {
   await lifecycleTests()
   console.log('\n[20] 结果归档')
   await archiveTests()
+  console.log('\n[21] 扫描进度账本')
+  await ledgerTests()
 
   const failed = results.filter((r) => !r.ok)
   console.log(`\n共 ${results.length} 项，失败 ${failed.length} 项`)
