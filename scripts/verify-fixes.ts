@@ -74,6 +74,10 @@ import { createTaskTable } from '../src/main/utils/taskTable'
 import type { CopyTask } from '../src/shared/ipc'
 import type { ScanTask } from '../src/shared/ipc'
 import { summarizeIpcArgs } from '../src/main/ipc/log-summary'
+import {
+  describeUpdateError,
+  isTransientCheckError,
+} from '../src/main/services/update/errors'
 import { detectInstallModeFromDir } from '../src/main/services/update/installMode'
 import {
   describeTaskBlock,
@@ -2399,6 +2403,36 @@ const updateTests = async () => {
   await test('自动更新: IPC 摘要不记录参数', async () => {
     assert.deepEqual(summarizeIpcArgs('update:check', []), {})
     assert.deepEqual(summarizeIpcArgs('update:install', []), {})
+  })
+
+  await test('自动更新: 瞬时错误重试与文案', async () => {
+    assert.equal(
+      isTransientCheckError(new Error('500 "method: GET"')),
+      true,
+      '发版后 CDN 的 5xx 应重试',
+    )
+    assert.equal(
+      isTransientCheckError(new Error('net::ERR_HTTP_RESPONSE_CODE_FAILURE')),
+      true,
+    )
+    assert.equal(
+      isTransientCheckError(new Error('404 Not Found')),
+      false,
+      '缺 latest.yml 重试没有意义',
+    )
+
+    assert.match(
+      describeUpdateError(new Error('500 "method: GET"')),
+      /GitHub 暂时不可用/,
+    )
+    assert.match(
+      describeUpdateError(new Error('getaddrinfo ENOTFOUND github.com')),
+      /无法连接 GitHub Releases/,
+    )
+    assert.match(
+      describeUpdateError(new Error('404 Not Found')),
+      /缺少更新信息/,
+    )
   })
 }
 

@@ -7,6 +7,11 @@ import { logger } from '../log'
 import { flushScanPersistence } from '../scanner/registry'
 import { flushSettingsWrites } from '../settings'
 import { detectInstallMode } from './installMode'
+import {
+  describeUpdateError,
+  isCancellationError,
+  isTransientCheckError,
+} from './errors'
 import { initialState, reduceUpdateState } from './state'
 import { getTaskBlock } from './taskGate'
 
@@ -14,6 +19,8 @@ import { getTaskBlock } from './taskGate'
 const AUTO_CHECK_DELAY_MS = 10_000
 const TASK_RECOMPUTE_DELAY_MS = 250
 const INSTALL_FALLBACK_MS = 15_000
+/** 检查失败的瞬时错误重试间隔；覆盖发版后 CDN 短暂 5xx */
+const CHECK_RETRY_DELAYS_MS = [2_000, 5_000]
 
 let state: UpdateState = initialState(app.getVersion(), 'portable')
 let preferences: AppPreferences | null = null
@@ -49,32 +56,6 @@ const clearInstallFallback = (): void => {
 
   clearTimeout(installFallbackTimer)
   installFallbackTimer = null
-}
-
-const isCancellationError = (error: unknown): boolean =>
-  error instanceof Error &&
-  (error.name === 'CancellationError' || /cancell?ed/i.test(error.message))
-
-const describeUpdateError = (error: unknown): string => {
-  const message = error instanceof Error ? error.message : String(error)
-
-  if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ETIMEDOUT|net::/i.test(message)) {
-    return '无法连接 GitHub Releases，请检查网络后重试'
-  }
-
-  if (/404|CHANNEL_FILE_NOT_FOUND/i.test(message)) {
-    return 'Release 上缺少更新信息（latest.yml），请确认发版资产完整'
-  }
-
-  if (/sha512|checksum|integrity/i.test(message)) {
-    return '更新包校验失败，请重新下载'
-  }
-
-  if (/EACCES|EPERM/i.test(message)) {
-    return '没有权限写入更新缓存，请检查目录权限'
-  }
-
-  return `更新失败：${message}`
 }
 
 const refreshTaskBlock = (): void => {
@@ -207,25 +188,23 @@ const attachUpdaterListeners = (): void => {
   autoUpdater.on('error', (error) => {
     if (isCancellationError(error)) return
 
+    // 检查阶段的失败由 checkForUpdates 的重试循环统一处理，
+    // 这里再改状态会打断重试（error 事件可能先于 promise reject 触发）。
+    if (state.phase === 'checking') {
+      logger.debug('update', 'update.check.error-event', { error })
+      return
+    }
+
     if (state.phase === 'installing') {
       installing = false
       clearInstallFallback()
     }
 
-    if (
-      state.phase !== 'checking' &&
-      state.phase !== 'downloading' &&
-      state.phase !== 'installing'
-    ) {
+    if (state.phase !== 'downloading' && state.phase !== 'installing') {
       return
     }
 
-    const stage =
-      state.phase === 'downloading'
-        ? 'download'
-        : state.phase === 'installing'
-          ? 'install'
-          : 'check'
+    const stage = state.phase === 'downloading' ? 'download' : 'install'
 
     logger.warn('update', 'update.error', { error, stage })
     state = reduceUpdateState(state, {
@@ -323,19 +302,59 @@ export const checkForUpdates = async (
   })
 
   try {
-    const result = await autoUpdater.checkForUpdates()
+    let lastError: unknown = null
 
-    if (!result) {
-      state = reduceUpdateState(state, {
-        type: 'disabled',
-        message: '更新器未启用',
-      })
-      broadcast()
+    for (let attempt = 0; attempt <= CHECK_RETRY_DELAYS_MS.length; attempt++) {
+      try {
+        const result = await autoUpdater.checkForUpdates()
+
+        if (!result) {
+          state = reduceUpdateState(state, {
+            type: 'disabled',
+            message: '更新器未启用',
+          })
+          broadcast()
+        }
+
+        return state
+      } catch (error) {
+        if (isCancellationError(error)) return state
+
+        lastError = error
+
+        if (
+          attempt >= CHECK_RETRY_DELAYS_MS.length ||
+          !isTransientCheckError(error)
+        ) {
+          break
+        }
+
+        const delayMs = CHECK_RETRY_DELAYS_MS[attempt]
+
+        logger.warn('update', 'update.check.retry', {
+          attempt: attempt + 1,
+          delayMs,
+          error,
+        })
+
+        await delay(delayMs)
+
+        // 用户在等待期间关闭/切换了状态，不再继续重试
+        if (state.phase !== 'checking') return state
+      }
     }
-  } catch (error) {
-    if (isCancellationError(error)) return state
 
-    logger.warn('update', 'update.check.failed', { error })
+    logger.warn('update', 'update.check.failed', { error: lastError })
+    state = reduceUpdateState(state, {
+      type: 'failed',
+      stage: 'check',
+      message: describeUpdateError(lastError),
+      at: Date.now(),
+    })
+    broadcast()
+  } catch (error) {
+    // 理论到不了这里；兜底避免重试循环外的异常把状态卡在 checking
+    logger.error('update', 'update.check.unexpected', { error })
     state = reduceUpdateState(state, {
       type: 'failed',
       stage: 'check',
