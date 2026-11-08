@@ -8,9 +8,7 @@ import {
   UnconfiguredNotice,
 } from '../components/scan-notices'
 import { NETWORK_HINT } from '@shared/networkHint'
-import { SCAN_CATEGORY_META } from '@shared/scanCategories'
 import { usePlantScanPage } from '../hooks/usePlantScanPage'
-import { useLxtFilterStore } from '../stores/lxtFilterStore'
 import { selectLxt, useSettingsStore } from '@/features/settings'
 
 /**
@@ -19,8 +17,6 @@ import { selectLxt, useSettingsStore } from '@/features/settings'
  * 与其他「厂区/机台」类扫描共用同一套页面骨架（PlantScanPage），
  * 这里只提供力禧特自己的机台来源与筛选面板。
  */
-const META = SCAN_CATEGORY_META.lxt
-
 const LxtScanPage = () => {
   const lxt = useSettingsStore(selectLxt)
   const load = useSettingsStore((state) => state.load)
@@ -33,10 +29,8 @@ const LxtScanPage = () => {
   const active = lxt.machines.filter((item) => !item.stale)
   const { ready, missing, filterSignature, getParams, getSignature } =
     usePlantScanPage({
-      store: useLxtFilterStore,
+      category: 'lxt',
       configured,
-      hasSlots: META.hasSlots,
-      requiresLevels: META.requiresLevels,
       typeCatalog: lxt.typeCatalog,
     })
 

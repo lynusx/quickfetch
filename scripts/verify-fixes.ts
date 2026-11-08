@@ -74,6 +74,13 @@ import { createTaskTable } from '../src/main/utils/taskTable'
 import { createTaskLifecycle } from '../src/main/utils/taskLifecycle'
 import { createTaskArchive } from '../src/main/services/scanner/archive'
 import { createScanLedger } from '../src/main/services/scanner/ledger'
+import {
+  activeMachineKeys,
+  aliveTypes,
+  deriveScope,
+  planFilterRestore,
+} from '../src/renderer/features/scan/scanScopePlan'
+import type { PlantFilterSlice } from '../src/renderer/features/scan/stores/plantFilterStore'
 import type { CopyTask } from '../src/shared/ipc'
 import type { ScanTask } from '../src/shared/ipc'
 import { summarizeIpcArgs } from '../src/main/ipc/log-summary'
@@ -3173,6 +3180,147 @@ const ipcContractTests = async () => {
   })
 }
 
+/* ---------------------------------------------------------------- 23. 扫描范围 */
+
+const scanScopeTests = async () => {
+  const item = (
+    category: ScanCategory,
+    params: Partial<ScanTaskParams> & { machines: string[] },
+  ): ScanHistoryItem => ({
+    id: 'h1',
+    status: 'completed',
+    category,
+    params: {
+      category,
+      date: '20261104',
+      shift: '夜班',
+      slots: ['8'],
+      types: ['NG'],
+      ...params,
+    },
+    totalImages: 1,
+    hitMachines: 1,
+    machineCount: params.machines.length,
+    elapsedMs: 1000,
+    createdAt: 1,
+    finishedAt: 2,
+    diagnosed: true,
+    restorable: true,
+  })
+
+  const slice = (patch: Partial<PlantFilterSlice> = {}): PlantFilterSlice => ({
+    plant: '',
+    keyword: '',
+    selectedMachines: ['东区/1A'],
+    date: '20261104',
+    shift: '夜班',
+    slots: ['8'],
+    types: ['NG'],
+    levels: [],
+    imageKind: 'whole',
+    side: 'all',
+    ...patch,
+  })
+
+  await test('范围: EL 历史回填按首台机台定厂区', async () => {
+    const plan = planFilterRestore(
+      'el',
+      item('el', { machines: ['A7B', 'B8C'] }),
+    )
+
+    assert.equal(plan.plant, elPlantOf('A7B'))
+    assert.deepEqual(plan.machines, ['A7B', 'B8C'])
+    assert.deepEqual(plan.slots, ['8'])
+    assert.equal(plan.levels, undefined)
+  })
+
+  await test('范围: 力禧特从复合键取厂区，不带等级', async () => {
+    const plan = planFilterRestore(
+      'lxt',
+      item('lxt', {
+        machines: ['东区/7A', '东区/7B'],
+        levels: ['A'],
+      }),
+    )
+
+    assert.equal(plan.plant, '东区')
+    assert.deepEqual(plan.machines, ['东区/7A', '东区/7B'])
+    assert.equal(plan.levels, undefined)
+  })
+
+  await test('范围: 利珀保留等级', async () => {
+    const plan = planFilterRestore(
+      'pl',
+      item('pl', { machines: ['东区/6B'], levels: ['A', 'B'] }),
+    )
+
+    assert.deepEqual(plan.levels, ['A', 'B'])
+  })
+
+  await test('范围: AOI 无时段、图片类型与检测面', async () => {
+    const plan = planFilterRestore(
+      'aoi',
+      item('aoi', { machines: ['东区/1A正检'], aoiImageKind: 'partial' }),
+    )
+
+    assert.deepEqual(plan.slots, [])
+    assert.equal(plan.imageKind, 'partial')
+    assert.equal(plan.side, 'front')
+  })
+
+  await test('范围: 按入口与类型清单裁剪', async () => {
+    const settings = defaultSettings()
+
+    settings.categories.el.machines = [
+      { plant: '东区', name: 'A1', deleted: false },
+    ] as never
+    settings.categories.el.typeCatalog = ['NG']
+    settings.categories.lxt.typeCatalog = ['NG']
+    settings.categories.lxt.machines = [
+      {
+        plant: '东区',
+        name: '7A',
+        key: '东区/7A',
+        host: '\\\\10.0.0.1',
+        share: null,
+        stale: false,
+      },
+      {
+        plant: '东区',
+        name: '7B',
+        key: '东区/7B',
+        host: '\\\\10.0.0.2',
+        share: null,
+        stale: true,
+      },
+    ]
+
+    assert.deepEqual(activeMachineKeys('el', settings), ['A1'])
+    assert.deepEqual(activeMachineKeys('lxt', settings), ['东区/7A'])
+    assert.deepEqual(aliveTypes('lxt', settings, ['NG', 'OLD']), ['NG'])
+    assert.deepEqual(aliveTypes('el', settings, ['NG', 'OLD']), ['NG'])
+    assert.deepEqual(activeMachineKeys('pl', null), [])
+  })
+
+  await test('范围: deriveScope 注入类别差异', async () => {
+    const aoi = deriveScope(
+      'aoi',
+      slice({ imageKind: 'partial', side: 'front' }),
+      true,
+      ['NG'],
+    )
+
+    assert.equal(aoi.ready, true)
+    assert.deepEqual(aoi.params.slots, [])
+    assert.equal(aoi.params.aoiImageKind, 'partial')
+
+    const pl = deriveScope('pl', slice({ levels: [] }), true, ['NG'])
+
+    assert.equal(pl.ready, false)
+    assert.ok(pl.missing.includes('等级'))
+  })
+}
+
 /* ---------------------------------------------------------------- 主流程 */
 
 const main = async () => {
@@ -3220,6 +3368,8 @@ const main = async () => {
   await ledgerTests()
   console.log('\n[22] IPC 通道描述表')
   await ipcContractTests()
+  console.log('\n[23] 扫描范围')
+  await scanScopeTests()
 
   const failed = results.filter((r) => !r.ok)
   console.log(`\n共 ${results.length} 项，失败 ${failed.length} 项`)

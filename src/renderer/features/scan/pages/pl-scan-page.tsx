@@ -8,9 +8,7 @@ import {
   UnconfiguredNotice,
 } from '../components/scan-notices'
 import { NETWORK_HINT } from '@shared/networkHint'
-import { SCAN_CATEGORY_META } from '@shared/scanCategories'
 import { usePlantScanPage } from '../hooks/usePlantScanPage'
-import { usePlFilterStore } from '../stores/plFilterStore'
 import { selectPl, useSettingsStore } from '@/features/settings'
 
 /**
@@ -19,8 +17,6 @@ import { selectPl, useSettingsStore } from '@/features/settings'
  * 与力禧特共用页面骨架与选择器，差别只有路径层级：利珀在日期下多一层
  * 机台名、类型外面还包着 Fail/等级，所以筛选面板多了「等级」。
  */
-const META = SCAN_CATEGORY_META.pl
-
 const PlScanPage = () => {
   const pl = useSettingsStore(selectPl)
   const load = useSettingsStore((state) => state.load)
@@ -33,10 +29,8 @@ const PlScanPage = () => {
   const active = pl.machines.filter((item) => !item.stale)
   const { ready, missing, filterSignature, getParams, getSignature } =
     usePlantScanPage({
-      store: usePlFilterStore,
+      category: 'pl',
       configured,
-      hasSlots: META.hasSlots,
-      requiresLevels: META.requiresLevels,
       typeCatalog: pl.typeCatalog,
     })
 

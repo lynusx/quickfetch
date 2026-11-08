@@ -8,9 +8,7 @@ import {
   UnconfiguredNotice,
 } from '../components/scan-notices'
 import { NETWORK_HINT } from '@shared/networkHint'
-import { SCAN_CATEGORY_META } from '@shared/scanCategories'
 import { usePlantScanPage } from '../hooks/usePlantScanPage'
-import { useAoiFilterStore } from '../stores/aoiFilterStore'
 import { selectAoi, useSettingsStore } from '@/features/settings'
 
 /**
@@ -20,8 +18,6 @@ import { selectAoi, useSettingsStore } from '@/features/settings'
  * 这里只提供 AOI 自己的机台来源与筛选面板。路径没有时段层，
  * 因此 getParams 固定传 slots: []。
  */
-const META = SCAN_CATEGORY_META.aoi
-
 const AoiScanPage = () => {
   const aoi = useSettingsStore(selectAoi)
   const load = useSettingsStore((state) => state.load)
@@ -34,12 +30,9 @@ const AoiScanPage = () => {
   const active = aoi.machines.filter((item) => !item.stale)
   const { ready, missing, filterSignature, getParams, getSignature } =
     usePlantScanPage({
-      store: useAoiFilterStore,
+      category: 'aoi',
       configured,
-      hasSlots: META.hasSlots,
-      requiresLevels: META.requiresLevels,
       typeCatalog: aoi.typeCatalog,
-      hasImageKind: META.hasImageKind,
     })
 
   return (
