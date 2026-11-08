@@ -61,7 +61,9 @@ Windows 上实际位置是 `%APPDATA%\QuickFetch\`，**和开发态是同一个�
 `src/main/services/scanner/shareProbe.ts`。渲染层的 ready/missing/参数指纹只在
 `src/renderer/features/scan/scanParams.ts` + `usePlantScanPage`；扫描页的 scan/copy/history 接线走
 `useScanSession`；复制的 done/percent/有效目录走 `copyReadModel`；任务容量与淘汰走
-`src/main/utils/taskTable.ts`；历史文件读写用 `createHistoryStore(dir)` 注入目录，测试不要依赖 app userData。
+`src/main/utils/taskTable.ts`。扫描结果的落盘资格、幂等、裁剪与 live-vs-历史查找只在
+`src/main/services/scanner/archive.ts`；文件格式与原子写留在 `history.ts` 的
+`createHistoryStore(dir)`（目录由调用方注入，测试不要依赖 app userData）。
 改这些规则时改对应 module，不要在 resolver、页面或 registry 里再抄一份。
 
 **任务生命周期只有一个实现**：状态、暂停等待、中断信号、终态 promise、进度节流与心跳统一在

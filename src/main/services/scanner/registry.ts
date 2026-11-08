@@ -1,4 +1,5 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, app } from 'electron'
+import { join } from 'node:path'
 
 import type {
   ScanTask,
@@ -9,7 +10,8 @@ import { isFinalScanStatus } from '../../../shared/ipc'
 
 import { DEFAULT_HISTORY_LIMIT } from '../../../shared/historyLimit'
 import { readSettings } from '../settings'
-import { saveRecord, trimRecords } from './history'
+import { createTaskArchive } from './archive'
+import type { TaskArchive } from './archive'
 import { ScanTaskRunner } from './task'
 import type { TaskContext } from './task'
 import { logger } from '../log'
@@ -26,8 +28,7 @@ const tasks = createTaskTable<ScanTaskRunner>({
     logger.debug('scan', 'scan.task.evicted', { taskId: runner.id }),
 })
 
-/** 已经触发过落盘的任务，避免重复写同一个文件 */
-const persisted = new Set<string>()
+/** 已经触发过落盘的任务由 archive 自己记住，registry 不再维护集合 */
 
 /** 任务快照推送到所有窗口；多窗口打开时进度保持一致 */
 const broadcast = (task: ScanTask): void => {
@@ -47,47 +48,39 @@ const currentHistoryLimit = async (): Promise<number> =>
 const isFinished = (status: ScanTaskStatus): boolean =>
   isFinalScanStatus(status)
 
+let archive: TaskArchive | null = null
+
+/**
+ * 扫描结果的归档入口。
+ *
+ * 延迟到第一次访问才解析 userData，测试与启动早期都不需要 Electron 路径。
+ * live 查询由这里注入；archive 不反向 import registry，避免循环依赖。
+ */
+export const getArchive = (): TaskArchive => {
+  archive ??= createTaskArchive({
+    dir: join(app.getPath('userData'), 'history'),
+    live: {
+      task: (id) => tasks.get(id)?.snapshot() ?? null,
+      images: (id) => tasks.get(id)?.getImages() ?? null,
+    },
+    limit: currentHistoryLimit,
+  })
+
+  return archive
+}
+
 /**
  * 任务结束时把结果写入历史。
  *
- * 不放在 runner 里是因为 runner 只关心「怎么扫」，落盘属于任务表职责；
- * 而且取消时 runner 会立即返回 canceled，随后异步收尾，这里在收尾后统一处理。
+ * 资格、幂等与裁剪都在 archive 里；这里只负责等执行体真正收尾。
+ * 取消时 runner 会立即返回 canceled，随后异步收尾，落盘必须等 settle。
  */
 const persistWhenSettled = async (runner: ScanTaskRunner): Promise<void> => {
   const settled = await runner.waitSettled()
 
-  if (!settled || persisted.has(runner.id)) return
+  if (!settled) return
 
-  persisted.add(runner.id)
-
-  try {
-    const task = runner.snapshot()
-
-    logger.info('history', 'history.persist.start', {
-      taskId: task.id,
-      status: task.status,
-      images: task.totalImages,
-    })
-
-    const startedAt = Date.now()
-
-    await saveRecord(task, runner.getImages())
-
-    const limit = await currentHistoryLimit()
-    await trimRecords(limit)
-
-    logger.info('history', 'history.persist.done', {
-      taskId: task.id,
-      elapsedMs: Date.now() - startedAt,
-      historyLimit: limit,
-    })
-  } catch (error) {
-    console.error('保存扫描历史失败:', error)
-    logger.error('history', 'history.persist.failed', {
-      taskId: runner.id,
-      error,
-    })
-  }
+  await getArchive().settle(runner.snapshot(), runner.getImages())
 }
 
 export const createTask = (
@@ -189,8 +182,9 @@ export const getRunner = (id: string): ScanTaskRunner | null =>
  * 这里把当前快照按 interrupted 落盘，重启后在历史里能看到「扫到哪儿了」，
  * 参数也一并保留，点一下就能接着扫。
  *
- * 不写 persisted 集合：任务如果还来得及跑完，persistWhenSettled 会
- * 用正常终态覆盖同一条记录，比这里的中途快照更准。
+ * 不写 settled 集合：任务如果还来得及跑完，persistWhenSettled 会
+ * 用正常终态覆盖同一条记录，比这里的中途快照更准（archive 只在
+ * 终态落盘时记入 settled）。
  */
 export const persistUnfinished = async (): Promise<void> => {
   const pending = tasks.values().filter((runner) => {
@@ -207,21 +201,11 @@ export const persistUnfinished = async (): Promise<void> => {
     taskIds: pending.map((runner) => runner.id),
   })
 
-  const limit = await currentHistoryLimit()
+  const target = getArchive()
 
   for (const runner of pending) {
-    try {
-      await saveRecord(runner.snapshot(), runner.getImages(), {
-        interrupted: true,
-      })
-    } catch (error) {
-      console.error(`保存中断的扫描任务失败(${runner.id}):`, error)
-      logger.error('history', 'history.persist-unfinished.failed', {
-        taskId: runner.id,
-        error,
-      })
-    }
+    await target.settle(runner.snapshot(), runner.getImages(), {
+      interrupted: true,
+    })
   }
-
-  await trimRecords(limit).catch(() => undefined)
 }

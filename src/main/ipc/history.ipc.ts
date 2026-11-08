@@ -1,40 +1,31 @@
 import type { ScanHistoryItem } from '../../shared/ipc'
-import {
-  clearRecords,
-  deleteRecord,
-  getTask,
-  listHistory,
-  readRecord,
-  toTask,
-  trimRecords,
-} from '../services/scanner'
+import { getArchive } from '../services/scanner'
 import { saveHistoryLimit } from '../services/settings'
 import { handle } from './handle'
 
 export const registerHistoryIpc = (): void => {
-  handle('history:list', (): Promise<ScanHistoryItem[]> => listHistory())
+  handle('history:list', (): Promise<ScanHistoryItem[]> => getArchive().list())
 
-  handle('history:load', async (_event, taskId: string) => {
-    const live = getTask(taskId)
-    if (live) return live
-
-    const record = await readRecord(taskId)
-    return record ? toTask(record) : null
-  })
+  handle('history:load', (_event, taskId: string) => getArchive().load(taskId))
 
   handle('history:delete', async (_event, taskId: string) => {
-    await deleteRecord(taskId)
-    return listHistory()
+    const archive = getArchive()
+
+    await archive.remove(taskId)
+    return archive.list()
   })
 
   handle('history:clear', async () => {
-    await clearRecords()
-    return listHistory()
+    const archive = getArchive()
+
+    await archive.clear()
+    return archive.list()
   })
 
   handle('history:set-limit', async (_event, limit: number) => {
     const settings = await saveHistoryLimit(limit)
-    await trimRecords(settings.historyLimit)
+
+    await getArchive().trim(settings.historyLimit)
     return settings
   })
 }

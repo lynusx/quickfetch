@@ -1,4 +1,3 @@
-import { app } from 'electron'
 import { existsSync } from 'node:fs'
 import {
   mkdir,
@@ -121,11 +120,12 @@ export const toTask = (record: HistoryRecord): ScanTask => ({
 })
 
 export interface HistoryStore {
+  /** 是否真的写了盘；未到终态或没有可存内容时返回 false */
   saveRecord: (
     task: ScanTask,
     images: ScannedImage[],
     options?: { interrupted?: boolean },
-  ) => Promise<void>
+  ) => Promise<boolean>
   listRecords: () => Promise<HistoryRecord[]>
   listHistory: () => Promise<ScanHistoryItem[]>
   readRecord: (id: string) => Promise<HistoryRecord | null>
@@ -195,12 +195,12 @@ export const createHistoryStore = (dir: string): HistoryStore => {
     task: ScanTask,
     images: ScannedImage[],
     options?: { interrupted?: boolean },
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     const interrupted = options?.interrupted === true && !isSettled(task.status)
 
     if (!interrupted) {
-      if (task.status === 'pending' || task.status === 'running') return
-      if (task.status === 'paused') return
+      if (task.status === 'pending' || task.status === 'running') return false
+      if (task.status === 'paused') return false
     }
 
     // 「有诊断」只认真正读过目录的分支：断链会给 missing/unreachable，
@@ -210,7 +210,7 @@ export const createHistoryStore = (dir: string): HistoryStore => {
       (branch) => branch.status !== 'skipped',
     )
 
-    if (!images.length && !diagnosed && !interrupted) return
+    if (!images.length && !diagnosed && !interrupted) return false
 
     const record: HistoryRecord = {
       version: RECORD_VERSION,
@@ -260,6 +260,8 @@ export const createHistoryStore = (dir: string): HistoryStore => {
     } catch {
       // 列表回落到完整记录
     }
+
+    return true
   }
 
   const listRecords = async (): Promise<HistoryRecord[]> => {
@@ -387,34 +389,5 @@ export const createHistoryStore = (dir: string): HistoryStore => {
     trimRecords,
   }
 }
-
-let defaultStore: HistoryStore | null = null
-
-const store = (): HistoryStore => {
-  defaultStore ??= createHistoryStore(join(app.getPath('userData'), 'history'))
-
-  return defaultStore
-}
-
-// 生产路径：默认 store 延迟到第一次访问才解析 userData，便于测试注入临时目录
-export const saveRecord = (
-  ...args: Parameters<HistoryStore['saveRecord']>
-): Promise<void> => store().saveRecord(...args)
-
-export const listRecords = (): Promise<HistoryRecord[]> => store().listRecords()
-
-export const listHistory = (): Promise<ScanHistoryItem[]> =>
-  store().listHistory()
-
-export const readRecord = (id: string): Promise<HistoryRecord | null> =>
-  store().readRecord(id)
-
-export const deleteRecord = (id: string): Promise<void> =>
-  store().deleteRecord(id)
-
-export const clearRecords = (): Promise<void> => store().clearRecords()
-
-export const trimRecords = (limit: number): Promise<void> =>
-  store().trimRecords(limit)
 
 export type { HistoryRecord }

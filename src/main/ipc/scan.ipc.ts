@@ -17,10 +17,10 @@ import {
 import type { MachineResolver } from '../services/scanner/resolver'
 import {
   createTask,
+  getArchive,
   getRunner,
   getTask,
   startTask,
-  taskImagePage,
 } from '../services/scanner'
 import {
   ENTRY,
@@ -286,6 +286,6 @@ export const registerScanIpc = (): void => {
   handle(
     'scan:images',
     (_event, taskId: string, offset: number, limit: number) =>
-      taskImagePage(taskId, offset, limit),
+      getArchive().imagePage(taskId, offset, limit),
   )
 }

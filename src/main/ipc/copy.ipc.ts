@@ -12,7 +12,7 @@ import {
   selectCopyImages,
   startCopy,
 } from '../services/copy'
-import { taskImages } from '../services/scanner'
+import { getArchive } from '../services/scanner'
 import { readSettings, loadFrom } from '../services/settings'
 import { toFsPath } from '../utils/pathx'
 import { handle } from './handle'
@@ -36,7 +36,7 @@ export const registerCopyIpc = (): void => {
       params: CopyTaskParams,
       targetDir?: string,
     ): Promise<CopyPlanPreview> => {
-      const images = await taskImages(taskId)
+      const images = await getArchive().images(taskId)
 
       if (!images.length) {
         throw new Error('该任务没有可复制的图片，请重新扫描')
@@ -66,7 +66,7 @@ export const registerCopyIpc = (): void => {
         throw new Error('请至少勾选一个机台')
       }
 
-      const images = await taskImages(taskId)
+      const images = await getArchive().images(taskId)
 
       if (!images.length) {
         throw new Error('该任务没有可复制的图片，请重新扫描')

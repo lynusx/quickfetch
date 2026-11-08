@@ -72,6 +72,7 @@ import {
 } from '../src/renderer/features/copy/copyReadModel'
 import { createTaskTable } from '../src/main/utils/taskTable'
 import { createTaskLifecycle } from '../src/main/utils/taskLifecycle'
+import { createTaskArchive } from '../src/main/services/scanner/archive'
 import type { CopyTask } from '../src/shared/ipc'
 import type { ScanTask } from '../src/shared/ipc'
 import { summarizeIpcArgs } from '../src/main/ipc/log-summary'
@@ -2873,6 +2874,168 @@ const lifecycleTests = async () => {
   })
 }
 
+/* ---------------------------------------------------------------- 20. 结果归档 */
+
+const archiveTests = async () => {
+  const image = (index: number) => ({
+    path: `A/EL/20261104/夜班/8/NG/x${index}.jpg`,
+    absolutePath: `/tmp/x${index}.jpg`,
+    name: `x${index}.jpg`,
+    machine: 'A',
+  })
+
+  const task = (
+    id: string,
+    status: ScanTask['status'],
+    images = 1,
+    createdAt = 1,
+  ): ScanTask =>
+    ({
+      id,
+      status,
+      params: {
+        category: 'el',
+        machines: ['A'],
+        date: '20261104',
+        shift: '夜班',
+        slots: ['8'],
+        types: ['NG'],
+      },
+      progress: {
+        phase: 'done',
+        percent: 100,
+        dirsScanned: 1,
+        dirsHit: 1,
+        dirsSkipped: 0,
+        dirsUnreachable: 0,
+        images,
+        currentPath: '',
+        detailsPending: 0,
+        concurrency: 1,
+        batchIndex: 1,
+        batchTotal: 1,
+        detailTotal: 1,
+        detailDone: 1,
+        machinesPending: 0,
+        etaMs: 0,
+      },
+      branches: [{ machine: 'A', status: 'hit', matchedDirs: 1, images }],
+      pauseReason: null,
+      error: null,
+      createdAt,
+      startedAt: createdAt + 1,
+      finishedAt: createdAt + 2,
+      totalImages: images,
+      preview: [],
+      elapsedMs: 1,
+    }) as unknown as ScanTask
+
+  const setup = async (layout = 10) => {
+    const root = await mkdtemp(join(tmpdir(), 'qf-archive-'))
+    const dir = join(root, 'history')
+    const live = new Map<
+      string,
+      { task: ScanTask; images: ReturnType<typeof image>[] }
+    >()
+    const archive = createTaskArchive({
+      dir,
+      live: {
+        task: (id) => live.get(id)?.task ?? null,
+        images: (id) => live.get(id)?.images ?? null,
+      },
+      limit: async () => layout,
+    })
+
+    return { dir, live, archive }
+  }
+
+  await test('归档: 正常终态只写一次', async () => {
+    const { archive } = await setup()
+
+    assert.equal(
+      await archive.settle(task('done', 'completed'), [image(0)]),
+      true,
+    )
+    assert.equal(
+      await archive.settle(task('done', 'completed'), [image(0)]),
+      false,
+    )
+    assert.equal((await archive.list()).length, 1)
+  })
+
+  await test('归档: 未终态不落盘', async () => {
+    const { archive } = await setup()
+
+    assert.equal(
+      await archive.settle(task('running', 'running'), [image(0)]),
+      false,
+    )
+    assert.equal((await archive.list()).length, 0)
+  })
+
+  await test('归档: 中断快照可被正常终态覆盖', async () => {
+    const { archive } = await setup()
+
+    assert.equal(
+      await archive.settle(task('task', 'running'), [image(0)], {
+        interrupted: true,
+      }),
+      true,
+    )
+    assert.equal((await archive.load('task'))?.status, 'interrupted')
+
+    assert.equal(
+      await archive.settle(task('task', 'completed'), [image(0)]),
+      true,
+    )
+    assert.equal((await archive.load('task'))?.status, 'completed')
+  })
+
+  await test('归档: live 任务优先，结束后回落到记录', async () => {
+    const { archive, live } = await setup()
+    const snapshot = task('live', 'completed', 2)
+
+    live.set('live', { task: snapshot, images: [image(0), image(1)] })
+
+    assert.equal((await archive.load('live'))?.id, 'live')
+    assert.equal((await archive.images('live')).length, 2)
+
+    live.delete('live')
+    await archive.settle(snapshot, [image(0), image(1)])
+
+    assert.equal((await archive.load('live'))?.totalImages, 2)
+    assert.equal((await archive.images('live')).length, 2)
+
+    const page = await archive.imagePage('live', 1, 1)
+    assert.equal(page.total, 2)
+    assert.deepEqual(
+      page.images.map((item) => item.name),
+      ['x1.jpg'],
+    )
+  })
+
+  await test('归档: 落盘后按保留条数裁剪', async () => {
+    const { archive } = await setup(2)
+
+    await archive.settle(task('old', 'completed', 1, 1), [image(0)])
+    await archive.settle(task('mid', 'completed', 1, 2), [image(1)])
+    await archive.settle(task('new', 'completed', 1, 3), [image(2)])
+
+    const ids = (await archive.list()).map((item) => item.id)
+
+    assert.deepEqual(ids, ['new', 'mid'])
+
+    await archive.remove('new')
+    assert.deepEqual(
+      (await archive.list()).map((item) => item.id),
+      ['mid'],
+    )
+
+    await archive.clear()
+    assert.deepEqual(await archive.list(), [])
+  })
+}
+
 /* ---------------------------------------------------------------- 主流程 */
 
 const main = async () => {
@@ -2914,6 +3077,8 @@ const main = async () => {
   await updateTests()
   console.log('\n[19] 任务生命周期')
   await lifecycleTests()
+  console.log('\n[20] 结果归档')
+  await archiveTests()
 
   const failed = results.filter((r) => !r.ok)
   console.log(`\n共 ${results.length} 项，失败 ${failed.length} 项`)
