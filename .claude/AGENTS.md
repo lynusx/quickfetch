@@ -32,7 +32,10 @@
 方法名分支；`pnpm verify` 会比对 main 的注册与 `IPC_INVOKE` 是否一一对应。
 
 **配置落盘**：只走 `src/main/services/settings/settings.ts` 写 `userData/settings.json`，不要在渲染层用 `localStorage`
-存业务配置——主进程扫描时读的是磁盘，两边会不一致。写文件是「临时文件 + rename」的原子写，别改成直接写。
+存业务配置——主进程扫描时读的是磁盘，两边会不一致。持久化内核（ENOENT 才回落、损坏留档、
+原子写、读改写串行队列、残留 tmp 清理）在 `settings/store.ts` 的
+`createSettingsStore({ file, fallback, isSupported, normalize })`，测试用临时目录；
+`settings.ts` 只管领域字段、normalizer 与 mutator。
 例外是纯界面偏好（类型清单、上次勾选的类型）：这些只影响筛选面板长什么样，扫描参数仍随 IPC 传给主进程，
 所以走 `userPreferencesStore` / 各 `filterStore` 的 `persist`。**类型清单一律默认空**，不替用户预设
 （现场命名差异大，猜错一次就得先删），谁用谁加。

@@ -1,7 +1,6 @@
 import { app } from 'electron'
-import { randomUUID } from 'node:crypto'
-import { readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { basename, dirname, join } from 'node:path'
+import { readdir } from 'node:fs/promises'
+import { basename, join } from 'node:path'
 
 import type {
   AoiMachine,
@@ -37,6 +36,8 @@ import { plKey } from '../discovery/pl'
 import { logger } from '../log'
 import { describeAccessError } from '../scanner/diagnosis'
 import { toFsPath } from '../../utils/pathx'
+import { createSettingsStore } from './store'
+import type { SettingsStore } from './store'
 
 const SETTINGS_VERSION = 2 as const
 
@@ -100,10 +101,11 @@ const clampPreference = (
  * 既有 settings.json 可能没有 preferences 字段，这里必须能接住 ——
  * 用户升级后不该因为缺字段被重置根目录。
  */
-export const normalizePreferences = (
-  raw: Partial<AppPreferences> | null | undefined,
-): AppPreferences => {
-  const source = raw ?? {}
+export const normalizePreferences = (raw: unknown): AppPreferences => {
+  const source =
+    raw !== null && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Partial<AppPreferences>)
+      : {}
   const merged = { ...DEFAULT_PREFERENCES, ...source }
   const layouts = ['flat', 'machine', 'type', 'machine-type'] as const
   const conflicts = ['rename', 'skip', 'overwrite'] as const
@@ -406,148 +408,47 @@ const fallbackSettings = (): AppSettings => ({
 })
 
 /**
- * 把损坏/版本不认识的配置文件留档，避免下一次写入把现场配置直接覆盖掉。
- * 留档失败不阻塞启动，只记录日志。
+ * 磁盘上的原始对象 → 当前版本的配置形状。
+ *
+ * 版本对不代表形状完整：categories 可能缺失，交给各 normalizer 兜底；
+ * 显式组装，不展开 parsed，避免残留的顶层字段被下次写入带回。
  */
-const quarantineSettings = async (reason: string): Promise<void> => {
-  const target = settingsFile()
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const backup = `${target}.corrupt-${stamp}`
+const normalizeSettings = (raw: Record<string, unknown>): AppSettings => {
+  const categories = raw.categories as Record<string, unknown> | undefined
 
-  try {
-    await rename(target, backup)
-    logger.warn('settings', 'settings.quarantined', {
-      path: target,
-      backup,
-      reason,
-    })
-  } catch (error) {
-    logger.error('settings', 'settings.quarantine.failed', {
-      path: target,
-      reason,
-      error,
-    })
-  }
-}
-
-/** 读取配置；文件缺失或损坏时回落到默认值，不让应用起不来 */
-export const readSettings = async (): Promise<AppSettings> => {
-  let raw: string
-
-  try {
-    raw = await readFile(settingsFile(), 'utf-8')
-  } catch (error) {
-    // 只有“文件不存在”能安全回落默认值。权限/占用等临时错误如果也当成
-    // 没配置，接下来的任意写入都会把现场配置覆盖成默认值。
-    if ((error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
-      return fallbackSettings()
-    }
-
-    logger.error('settings', 'settings.read.failed', {
-      path: settingsFile(),
-      error,
-    })
-
-    throw new Error(
-      `读取配置文件失败：${(error as Error)?.message ?? '未知错误'}`,
-    )
-  }
-
-  let parsed: unknown
-
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    await quarantineSettings('invalid-json')
-    return fallbackSettings()
-  }
-
-  if (!isAppSettings(parsed)) {
-    // v1 及更早的配置不再兼容：留档后回落默认，现场重新配置
-    await quarantineSettings('unsupported-version')
-    return fallbackSettings()
-  }
-
-  // 版本对不代表形状完整：categories 可能缺失，交给各 normalizer 兜底
-  const parsedCategories = (
-    parsed as unknown as { categories?: Record<string, unknown> }
-  ).categories
-
-  // 显式组装，不再展开 parsed，避免残留的顶层字段被下次写入带回
   return {
     version: SETTINGS_VERSION,
-    historyLimit: normalizeHistoryLimit(parsed.historyLimit),
-    preferences: normalizePreferences(parsed.preferences),
+    historyLimit: normalizeHistoryLimit(raw.historyLimit),
+    preferences: normalizePreferences(raw.preferences),
     categories: {
-      el: normalizeEl(parsedCategories?.el),
-      lxt: normalizeLxt(parsedCategories?.lxt),
-      pl: normalizePl(parsedCategories?.pl),
-      aoi: normalizeAoi(parsedCategories?.aoi),
+      el: normalizeEl(categories?.el),
+      lxt: normalizeLxt(categories?.lxt),
+      pl: normalizePl(categories?.pl),
+      aoi: normalizeAoi(categories?.aoi),
     },
     // 运行期字段，不落盘，每次读的时候按当前环境算
     envOverrides: envOverriddenKeys(),
   }
 }
 
-/** 原子写：先写临时文件再 rename，避免断电留下半截 JSON */
-const writeSettings = async (settings: AppSettings): Promise<void> => {
-  const target = settingsFile()
-  // 并发写时固定的 .tmp 会互相截断；唯一后缀保证每次写入各用各的临时文件
-  const temp = `${target}.${process.pid}.${randomUUID()}.tmp`
-  // envOverrides 是运行时算出来的，写进文件没有意义
-  const { envOverrides: _runtime, ...persisted } = settings
-  const body = JSON.stringify(persisted, null, 2)
+let store: SettingsStore<AppSettings> | null = null
 
-  await writeFile(temp, body, 'utf-8')
-  await rename(temp, target)
-  logger.debug('settings', 'settings.write', {
-    path: target,
-    bytes: body.length,
-  })
-}
+/** 延迟到第一次访问才解析 userData，测试与启动早期都不需要 Electron 路径 */
+const settingsStore = (): SettingsStore<AppSettings> =>
+  (store ??= createSettingsStore({
+    file: settingsFile(),
+    fallback: fallbackSettings,
+    isSupported: isAppSettings,
+    normalize: normalizeSettings,
+    // envOverrides 是运行时算出来的，写进文件没有意义
+    serialize: ({ envOverrides: _runtime, ...persisted }) => persisted,
+  }))
 
-/**
- * 清理上次进程被强杀时留下的 settings.json.*.tmp。
- *
- * 正常写入会 rename 掉临时文件；只有写盘途中进程消失才会残留。
- * 只在启动时清一次，避免和正在进行的写入抢同一个临时文件。
- */
-export const cleanupSettingsTempFiles = async (): Promise<void> => {
-  const target = settingsFile()
-  const dir = dirname(target)
-  const prefix = `${basename(target)}.`
+/** 读取配置；文件缺失或损坏时回落到默认值，不让应用起不来 */
+export const readSettings = (): Promise<AppSettings> => settingsStore().read()
 
-  try {
-    const names = await readdir(dir)
-    await Promise.all(
-      names
-        .filter((name) => name.startsWith(prefix) && name.endsWith('.tmp'))
-        .map((name) => rm(join(dir, name), { force: true })),
-    )
-  } catch (error) {
-    // 清理失败不影响启动，下次启动再试
-    console.error('清理设置临时文件失败:', error)
-    logger.error('settings', 'cleanup-temp.failed', { error })
-  }
-}
-
-/**
- * 设置文件的读改写串行队列。
- *
- * 所有 mutator 都是「读全量 → 改 → 写全量」，并发时后写会覆盖先写
- * （扫描时多台机台同时回写探测结果就会丢缓存）。只在 writeSettings
- * 外面排队不够，必须把读、改、写整体串起来。
- */
-let settingsQueue: Promise<unknown> = Promise.resolve()
-
-const withSettingsLock = <T>(task: () => Promise<T>): Promise<T> => {
-  const run = settingsQueue.then(task, task)
-  settingsQueue = run.then(
-    () => undefined,
-    () => undefined,
-  )
-  return run
-}
+export const cleanupSettingsTempFiles = (): Promise<void> =>
+  settingsStore().cleanupTemp()
 
 /**
  * 在串行队列里完成一次读改写。
@@ -557,15 +458,7 @@ const withSettingsLock = <T>(task: () => Promise<T>): Promise<T> => {
  */
 const updateSettings = (
   mutate: (current: AppSettings) => AppSettings | Promise<AppSettings>,
-): Promise<AppSettings> =>
-  withSettingsLock(async () => {
-    const current = await readSettings()
-    const next = await mutate(current)
-
-    if (next !== current) await writeSettings(next)
-
-    return next
-  })
+): Promise<AppSettings> => settingsStore().update(mutate)
 
 /**
  * 等待当前排队的设置写入全部落盘。
@@ -573,11 +466,7 @@ const updateSettings = (
  * 自动更新安装前要退出进程，不能让「刚改的设置」丢在队列里；
  * 失败也放行，安装不能被一次写盘错误永久卡住。
  */
-export const flushSettingsWrites = (): Promise<void> =>
-  settingsQueue.then(
-    () => undefined,
-    () => undefined,
-  )
+export const flushSettingsWrites = (): Promise<void> => settingsStore().flush()
 
 /** 设置根目录：校验通过后立即识别机台并落盘，失败时不写坏数据 */
 export const saveRootPath = async (rootPath: string): Promise<AppSettings> => {

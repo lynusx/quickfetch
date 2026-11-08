@@ -55,6 +55,7 @@ import {
   normalizePreferences,
   normalizeTypeCatalog,
 } from '../src/main/services/settings'
+import { createSettingsStore } from '../src/main/services/settings/store'
 import {
   createHistoryStore,
   toTask,
@@ -3321,6 +3322,115 @@ const scanScopeTests = async () => {
   })
 }
 
+/* ---------------------------------------------------------------- 24. 设置持久化内核 */
+
+const settingsStoreTests = async () => {
+  interface Shape {
+    version: number
+    count: number
+  }
+
+  const make = async (initial?: string) => {
+    const dir = await mkdtemp(join(tmpdir(), 'qf-settings-store-'))
+    const file = join(dir, 'settings.json')
+
+    if (initial !== undefined) await writeFile(file, initial, 'utf-8')
+
+    const store = createSettingsStore<Shape>({
+      file,
+      fallback: () => ({ version: 1, count: 0 }),
+      isSupported: (value) =>
+        typeof value === 'object' &&
+        value !== null &&
+        (value as Shape).version === 1,
+      normalize: (raw) => ({
+        version: 1,
+        count: Number(raw.count ?? 0),
+      }),
+      serialize: (value) => value,
+    })
+
+    return { dir, file, store }
+  }
+
+  await test('设置内核: 缺失回落、update 落盘', async () => {
+    const { store } = await make()
+
+    assert.deepEqual(await store.read(), { version: 1, count: 0 })
+
+    const next = await store.update((current) => ({
+      ...current,
+      count: current.count + 2,
+    }))
+
+    assert.equal(next.count, 2)
+    assert.equal((await store.read()).count, 2)
+  })
+
+  await test('设置内核: 损坏 JSON 留档并回落', async () => {
+    const { dir, store } = await make('{ not json')
+
+    assert.deepEqual(await store.read(), { version: 1, count: 0 })
+
+    const names = await readdir(dir)
+    assert.ok(
+      names.some((name) => name.startsWith('settings.json.corrupt-')),
+      '损坏文件应留档',
+    )
+  })
+
+  await test('设置内核: 不支持的版本同样留档', async () => {
+    const { store } = await make(JSON.stringify({ version: 99, count: 7 }))
+
+    assert.deepEqual(await store.read(), { version: 1, count: 0 })
+  })
+
+  await test('设置内核: 并发 update 串行，不丢写', async () => {
+    const { store } = await make()
+
+    await Promise.all([
+      store.update(async (current) => {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        return { ...current, count: current.count + 1 }
+      }),
+      store.update((current) => ({ ...current, count: current.count + 1 })),
+      store.update((current) => ({ ...current, count: current.count + 1 })),
+    ])
+
+    assert.equal((await store.read()).count, 3)
+  })
+
+  await test('设置内核: flush 等到排队的写入完成', async () => {
+    const { store } = await make()
+
+    const pending = store.update(async (current) => {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      return { ...current, count: 1 }
+    })
+
+    await store.flush()
+    assert.equal((await store.read()).count, 1)
+
+    await pending
+  })
+
+  await test('设置内核: 清理残留 tmp 但不碰其它文件', async () => {
+    const { dir, file, store } = await make(
+      JSON.stringify({ version: 1, count: 0 }),
+    )
+    const tmp = `${file}.123.tmp`
+
+    await writeFile(tmp, 'stale', 'utf-8')
+    await writeFile(join(dir, 'keep.txt'), 'keep', 'utf-8')
+
+    await store.cleanupTemp()
+
+    assert.equal(existsSync(tmp), false)
+    assert.equal(existsSync(join(dir, 'keep.txt')), true)
+    assert.equal(existsSync(file), true)
+  })
+}
+
 /* ---------------------------------------------------------------- 主流程 */
 
 const main = async () => {
@@ -3370,6 +3480,8 @@ const main = async () => {
   await ipcContractTests()
   console.log('\n[23] 扫描范围')
   await scanScopeTests()
+  console.log('\n[24] 设置持久化内核')
+  await settingsStoreTests()
 
   const failed = results.filter((r) => !r.ok)
   console.log(`\n共 ${results.length} 项，失败 ${failed.length} 项`)
