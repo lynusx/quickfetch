@@ -29,7 +29,7 @@ const requireCopyRunner = (copyId: string) => {
 
 export const registerCopyIpc = (): void => {
   handle(
-    'copy:preview',
+    'previewCopyPlan',
     async (
       _event,
       taskId: string,
@@ -51,7 +51,7 @@ export const registerCopyIpc = (): void => {
   )
 
   handle(
-    'copy:start',
+    'startCopyTask',
     async (
       _event,
       taskId: string,
@@ -94,29 +94,29 @@ export const registerCopyIpc = (): void => {
     },
   )
 
-  handle('copy:pause', (_event, copyId: string) =>
+  handle('pauseCopyTask', (_event, copyId: string) =>
     requireCopyRunner(copyId).pause(),
   )
 
-  handle('copy:resume', (_event, copyId: string) =>
+  handle('resumeCopyTask', (_event, copyId: string) =>
     requireCopyRunner(copyId).resume(),
   )
 
-  handle('copy:cancel', (_event, copyId: string) =>
+  handle('cancelCopyTask', (_event, copyId: string) =>
     requireCopyRunner(copyId).cancel(),
   )
 
-  handle('copy:retry', (_event, copyId: string) =>
+  handle('retryCopyFailures', (_event, copyId: string) =>
     requireCopyRunner(copyId).retry(),
   )
 
   handle(
-    'copy:get',
+    'getCopyTask',
     (_event, copyId: string) => getCopyRunner(copyId)?.snapshot() ?? null,
   )
 
   handle(
-    'copy:reveal',
+    'revealCopyTarget',
     async (_event, targetDir: string): Promise<string | null> => {
       const result = await shell.openPath(toFsPath(targetDir))
       return result ? result : null

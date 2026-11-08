@@ -2,6 +2,7 @@ import { BrowserWindow, app } from 'electron'
 import { autoUpdater } from 'electron-updater'
 
 import type { AppPreferences, UpdateState } from '../../../shared/ipc'
+import { IPC_EVENTS } from '../../../shared/ipc'
 import { onActivityChange } from '../../utils/activity'
 import { logger } from '../log'
 import { flushScanPersistence } from '../scanner/registry'
@@ -34,7 +35,7 @@ let installing = false
 const broadcast = (): void => {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
-      window.webContents.send('update:state', state)
+      window.webContents.send(IPC_EVENTS.updateState, state)
     }
   }
 }

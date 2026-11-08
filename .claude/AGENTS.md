@@ -24,9 +24,12 @@
 
 ## 这个项目的几条硬约束
 
-**架构**：Electron 三进程，IPC 契约全部集中在 `src/shared/ipc.ts`。新增通道三处一起改：
-`src/shared/ipc.ts` 定类型 → `src/main/ipc/<域>.ipc.ts` 注册（入口 `src/main/ipc/index.ts`
-聚合）→ `src/preload/index.ts` 暴露，漏一处就断链。
+**架构**：Electron 三进程，IPC 契约全部集中在 `src/shared/ipc.ts`。新增通道的顺序是：
+在 `ElectronAPI` 加方法 → 在 `IPC_INVOKE` 补通道（漏了会类型报错）→ 在
+`src/main/ipc/<域>.ipc.ts` 用方法名 `handle('methodName')` 注册（入口 `src/main/ipc/index.ts`
+聚合）。preload 的 invoke 方法由描述表自动生成，不要再手写通道字符串。事件通道加
+`IPC_EVENTS`，send-only 通道加 `IPC_SEND`，两端都引用同一常量。`summarizeIpcArgs` 也按
+方法名分支；`pnpm verify` 会比对 main 的注册与 `IPC_INVOKE` 是否一一对应。
 
 **配置落盘**：只走 `src/main/services/settings/settings.ts` 写 `userData/settings.json`，不要在渲染层用 `localStorage`
 存业务配置——主进程扫描时读的是磁盘，两边会不一致。写文件是「临时文件 + rename」的原子写，别改成直接写。

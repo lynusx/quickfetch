@@ -7,6 +7,7 @@ import type {
   ScanTaskStatus,
 } from '../../../shared/ipc'
 import { isFinalScanStatus } from '../../../shared/ipc'
+import { IPC_EVENTS } from '../../../shared/ipc'
 
 import { DEFAULT_HISTORY_LIMIT } from '../../../shared/historyLimit'
 import { readSettings } from '../settings'
@@ -36,7 +37,7 @@ const broadcast = (task: ScanTask): void => {
 
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
-      window.webContents.send('scan:task-update', task)
+      window.webContents.send(IPC_EVENTS.scanTaskUpdate, task)
     }
   }
 }

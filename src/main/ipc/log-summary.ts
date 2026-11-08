@@ -1,10 +1,14 @@
 import { serializeLogValue } from '../services/log/format'
+import type { IpcInvokeMethod } from '../../shared/ipc'
 
 /**
  * IPC 参数摘要：只保留排障需要的小字段。
  *
  * 大数组转 `{count, sample}`，Uint8Array 只留字节数，路径截断到 300 字符；
- * 未知通道走浅序列化，最终 JSON 超过 4 KB 只留 `{__truncated:true}`。
+ * 没有专门规则的方法走浅序列化，最终 JSON 超过 4 KB 只留 `{__truncated:true}`。
+ *
+ * 入参是方法名而不是通道字符串：与 `handle()` 共用同一张描述表，
+ * 漏写或拼错在编译期就能发现。
  */
 
 const MAX_PATH_CHARS = 300
@@ -55,76 +59,76 @@ const copyParamsSummary = (
 }
 
 const buildSummary = (
-  channel: string,
+  method: IpcInvokeMethod,
   args: readonly unknown[],
 ): Record<string, unknown> => {
-  switch (channel) {
-    case 'scan:create':
+  switch (method) {
+    case 'createScanTask':
       return paramsSummary(args[0])
-    case 'scan:start':
-    case 'scan:pause':
-    case 'scan:resume':
-    case 'scan:cancel':
-    case 'scan:get':
+    case 'startScanTask':
+    case 'pauseScanTask':
+    case 'resumeScanTask':
+    case 'cancelScanTask':
+    case 'getScanTask':
       return { taskId: args[0] }
-    case 'scan:images':
+    case 'getScanTaskImages':
       return { taskId: args[0], offset: args[1], limit: args[2] }
-    case 'history:load':
-    case 'history:delete':
+    case 'loadScanHistory':
+    case 'deleteScanHistory':
       return { taskId: args[0] }
-    case 'history:set-limit':
+    case 'setHistoryLimit':
       return { limit: args[0] }
-    case 'history:list':
-    case 'history:clear':
-    case 'settings:read':
-    case 'settings:refresh':
-    case 'app:version':
-    case 'logs:info':
-    case 'logs:open':
-    case 'update:get-state':
-    case 'update:check':
-    case 'update:download':
-    case 'update:install':
-    case 'update:open-release-page':
+    case 'listScanHistory':
+    case 'clearScanHistory':
+    case 'readSettings':
+    case 'refreshMachines':
+    case 'getVersion':
+    case 'getLogInfo':
+    case 'openLogDir':
+    case 'getUpdateState':
+    case 'checkForUpdates':
+    case 'downloadUpdate':
+    case 'installUpdate':
+    case 'openUpdateReleasePage':
       return {}
-    case 'settings:save-root':
+    case 'saveRootPath':
       return { rootPath: truncatePath(args[0]) }
-    case 'settings:save-preferences': {
+    case 'savePreferences': {
       const patch = asRecord(args[0])
 
       return { keys: Object.keys(patch), values: patch }
     }
-    case 'lxt:setup-root':
-    case 'pl:setup-root':
-    case 'aoi:setup-root':
+    case 'setupLxtRoot':
+    case 'setupPlRoot':
+    case 'setupAoiRoot':
       return { entryRoot: truncatePath(args[0]) }
-    case 'lxt:refresh':
-    case 'pl:refresh':
-    case 'aoi:refresh':
+    case 'refreshLxtMachines':
+    case 'refreshPlMachines':
+    case 'refreshAoiMachines':
       return {}
-    case 'share:reprobe':
+    case 'reprobeShares':
       return { category: args[0], keys: sample(args[1]) }
-    case 'copy:preview':
+    case 'previewCopyPlan':
       return copyParamsSummary(args[1], {
         taskId: args[0],
         targetDir: truncatePath(args[2]),
       })
-    case 'copy:start':
+    case 'startCopyTask':
       return copyParamsSummary(args[2], {
         taskId: args[0],
         targetDir: truncatePath(args[1]),
       })
-    case 'copy:reveal':
+    case 'revealCopyTarget':
       return { targetDir: truncatePath(args[0]) }
-    case 'copy:pause':
-    case 'copy:resume':
-    case 'copy:cancel':
-    case 'copy:retry':
-    case 'copy:get':
+    case 'pauseCopyTask':
+    case 'resumeCopyTask':
+    case 'cancelCopyTask':
+    case 'retryCopyFailures':
+    case 'getCopyTask':
       return { copyId: args[0] }
-    case 'fs:pick-directory':
+    case 'pickDirectory':
       return { title: asRecord(args[0]).title }
-    case 'fs:save-excel': {
+    case 'saveExcel': {
       const params = asRecord(args[0])
       const data = params.data
 
@@ -148,11 +152,11 @@ const buildSummary = (
 }
 
 export const summarizeIpcArgs = (
-  channel: string,
+  method: IpcInvokeMethod,
   args: readonly unknown[],
 ): Record<string, unknown> => {
   try {
-    const summary = buildSummary(channel, args)
+    const summary = buildSummary(method, args)
     const json = JSON.stringify(summary)
 
     return json && json.length > MAX_SUMMARY_CHARS

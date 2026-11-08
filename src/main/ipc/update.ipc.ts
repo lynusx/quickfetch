@@ -11,17 +11,17 @@ import {
 import { handle } from './handle'
 
 export const registerUpdateIpc = (): void => {
-  handle('update:get-state', (): UpdateState => getUpdateState())
+  handle('getUpdateState', (): UpdateState => getUpdateState())
 
-  handle('update:check', (): Promise<UpdateState> =>
+  handle('checkForUpdates', (): Promise<UpdateState> =>
     checkForUpdates({ manual: true }),
   )
 
-  handle('update:download', (): Promise<UpdateState> => downloadUpdate())
+  handle('downloadUpdate', (): Promise<UpdateState> => downloadUpdate())
 
-  handle('update:install', (): Promise<UpdateState> => installUpdate())
+  handle('installUpdate', (): Promise<UpdateState> => installUpdate())
 
-  handle('update:open-release-page', async (): Promise<string | null> => {
+  handle('openUpdateReleasePage', async (): Promise<string | null> => {
     try {
       await shell.openExternal(UPDATE_RELEASE_PAGE_URL)
       return null

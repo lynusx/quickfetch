@@ -959,3 +959,93 @@ export interface ElectronAPI {
     data: Uint8Array
   }) => Promise<string | null>
 }
+
+/**
+ * IPC 通道描述表。
+ *
+ * 以前 42 条 invoke 通道在 preload 与 main 各写一遍，事件通道又在 emitter
+ * 里写一遍；TypeScript 只检查方法名，不检查字符串，typo、漏注册、preload
+ * 多一个方法都能通过编译。这里按 ElectronAPI 的方法名集中声明通道：
+ *
+ * - preload 的 invoke 方法由它生成；
+ * - main 的 handle() 只接受 descriptor 里的方法名，并从这里取通道；
+ * - 事件与 send-only 通道各有一张表，两端的常量都引用它。
+ *
+ * 新增方法时先改 `ElectronAPI`，类型会要求这里同步补齐。
+ */
+type InvokeMethod = {
+  [K in keyof ElectronAPI]: ElectronAPI[K] extends (
+    ...args: never[]
+  ) => Promise<unknown>
+    ? K
+    : never
+}[keyof ElectronAPI]
+
+export const IPC_INVOKE = {
+  getVersion: 'app:version',
+
+  getUpdateState: 'update:get-state',
+  checkForUpdates: 'update:check',
+  downloadUpdate: 'update:download',
+  installUpdate: 'update:install',
+  openUpdateReleasePage: 'update:open-release-page',
+
+  pickDirectory: 'fs:pick-directory',
+
+  readSettings: 'settings:read',
+  saveRootPath: 'settings:save-root',
+  refreshMachines: 'settings:refresh',
+  savePreferences: 'settings:save-preferences',
+  setTypeCatalog: 'settings:set-type-catalog',
+
+  getLogInfo: 'logs:info',
+  openLogDir: 'logs:open',
+
+  setupLxtRoot: 'lxt:setup-root',
+  refreshLxtMachines: 'lxt:refresh',
+  setupPlRoot: 'pl:setup-root',
+  refreshPlMachines: 'pl:refresh',
+  setupAoiRoot: 'aoi:setup-root',
+  refreshAoiMachines: 'aoi:refresh',
+
+  createScanTask: 'scan:create',
+  startScanTask: 'scan:start',
+  pauseScanTask: 'scan:pause',
+  resumeScanTask: 'scan:resume',
+  cancelScanTask: 'scan:cancel',
+  getScanTask: 'scan:get',
+  getScanTaskImages: 'scan:images',
+
+  listScanHistory: 'history:list',
+  loadScanHistory: 'history:load',
+  deleteScanHistory: 'history:delete',
+  clearScanHistory: 'history:clear',
+  setHistoryLimit: 'history:set-limit',
+
+  previewCopyPlan: 'copy:preview',
+  startCopyTask: 'copy:start',
+  pauseCopyTask: 'copy:pause',
+  resumeCopyTask: 'copy:resume',
+  cancelCopyTask: 'copy:cancel',
+  retryCopyFailures: 'copy:retry',
+  getCopyTask: 'copy:get',
+  revealCopyTarget: 'copy:reveal',
+
+  reprobeShares: 'share:reprobe',
+
+  saveExcel: 'fs:save-excel',
+} as const satisfies Record<InvokeMethod, string>
+
+export type IpcInvokeMethod = keyof typeof IPC_INVOKE
+
+/** main → renderer 的单向事件 */
+export const IPC_EVENTS = {
+  updateState: 'update:state',
+  scanTaskUpdate: 'scan:task-update',
+  copyTaskUpdate: 'copy:task-update',
+} as const
+
+/** renderer → main 的单向发送（不等待结果） */
+export const IPC_SEND = {
+  logRenderer: 'log:renderer',
+} as const

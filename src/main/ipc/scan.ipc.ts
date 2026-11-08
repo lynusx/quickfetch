@@ -252,7 +252,7 @@ const taskBuilders = {
 >
 
 export const registerScanIpc = (): void => {
-  handle('scan:create', async (_event, params: ScanTaskParams) => {
+  handle('createScanTask', async (_event, params: ScanTaskParams) => {
     validateParams(params)
     const settings = await readSettings()
     const category = params.category ?? 'el'
@@ -261,7 +261,7 @@ export const registerScanIpc = (): void => {
   })
 
   // 启动走 registry.startTask：它在任务结束后负责把结果写入历史
-  handle('scan:start', (_event, taskId: string): ScanTask => {
+  handle('startScanTask', (_event, taskId: string): ScanTask => {
     const task = startTask(taskId)
 
     if (!task) throw new Error('任务不存在或已过期，请重新开始扫描')
@@ -269,22 +269,22 @@ export const registerScanIpc = (): void => {
     return task
   })
 
-  handle('scan:pause', (_event, taskId: string) =>
+  handle('pauseScanTask', (_event, taskId: string) =>
     requireRunner(taskId).pause('user'),
   )
 
-  handle('scan:resume', (_event, taskId: string) =>
+  handle('resumeScanTask', (_event, taskId: string) =>
     requireRunner(taskId).resume(),
   )
 
-  handle('scan:cancel', (_event, taskId: string) =>
+  handle('cancelScanTask', (_event, taskId: string) =>
     requireRunner(taskId).cancel(),
   )
 
-  handle('scan:get', (_event, taskId: string) => getTask(taskId))
+  handle('getScanTask', (_event, taskId: string) => getTask(taskId))
 
   handle(
-    'scan:images',
+    'getScanTaskImages',
     (_event, taskId: string, offset: number, limit: number) =>
       getArchive().imagePage(taskId, offset, limit),
   )

@@ -2,6 +2,7 @@ import { ipcMain, shell } from 'electron'
 import { mkdir } from 'node:fs/promises'
 
 import type { LogInfo, LogLevel, RendererLogEntry } from '../../shared/ipc'
+import { IPC_SEND } from '../../shared/ipc'
 import { logger } from '../services/log'
 import { handle } from './handle'
 
@@ -34,9 +35,9 @@ const normalizeEntry = (value: unknown): RendererLogEntry | null => {
 }
 
 export const registerLogsIpc = (): void => {
-  handle('logs:info', (): LogInfo => logger.getInfo())
+  handle('getLogInfo', (): LogInfo => logger.getInfo())
 
-  handle('logs:open', async (): Promise<string | null> => {
+  handle('openLogDir', async (): Promise<string | null> => {
     const { dir } = logger.getInfo()
 
     if (!dir) return '日志目录尚未初始化'
@@ -56,7 +57,7 @@ export const registerLogsIpc = (): void => {
   let accepted = 0
   let dropped = 0
 
-  ipcMain.on('log:renderer', (_event, value: unknown) => {
+  ipcMain.on(IPC_SEND.logRenderer, (_event, value: unknown) => {
     try {
       const now = Date.now()
 

@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron'
 
 import type { CopyTask } from '../../../shared/ipc'
+import { IPC_EVENTS } from '../../../shared/ipc'
 
 import { CopyTaskRunner } from './copy'
 import type { CopyRunnerOptions } from './copy'
@@ -29,7 +30,7 @@ const broadcast = (task: CopyTask): void => {
 
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
-      window.webContents.send('copy:task-update', task)
+      window.webContents.send(IPC_EVENTS.copyTaskUpdate, task)
     }
   }
 }

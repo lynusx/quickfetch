@@ -114,10 +114,10 @@ const setupAoi = (entryRoot: string): Promise<AoiSetupResult> =>
   })
 
 export const registerSettingsIpc = (): void => {
-  handle('app:version', () => app.getVersion())
+  handle('getVersion', () => app.getVersion())
 
   handle(
-    'fs:pick-directory',
+    'pickDirectory',
     async (
       event,
       options: { title?: string } = {},
@@ -140,38 +140,31 @@ export const registerSettingsIpc = (): void => {
     },
   )
 
-  handle('settings:read', () => readSettings())
+  handle('readSettings', () => readSettings())
 
-  handle('settings:save-root', (_event, rootPath: string) =>
-    saveRootPath(rootPath),
+  handle('saveRootPath', (_event, rootPath: string) => saveRootPath(rootPath))
+
+  handle('refreshMachines', () => refreshMachines())
+
+  handle('savePreferences', async (_event, patch: Partial<AppPreferences>) => {
+    const next = await savePreferences(patch)
+
+    if ('updateAutoCheckEnabled' in patch) {
+      applyUpdatePreferences(next.preferences)
+    }
+
+    return next
+  })
+
+  handle('setTypeCatalog', (_event, category: ScanCategory, types: string[]) =>
+    saveTypeCatalog(category, types),
   )
 
-  handle('settings:refresh', () => refreshMachines())
-
-  handle(
-    'settings:save-preferences',
-    async (_event, patch: Partial<AppPreferences>) => {
-      const next = await savePreferences(patch)
-
-      if ('updateAutoCheckEnabled' in patch) {
-        applyUpdatePreferences(next.preferences)
-      }
-
-      return next
-    },
-  )
-
-  handle(
-    'settings:set-type-catalog',
-    (_event, category: ScanCategory, types: string[]) =>
-      saveTypeCatalog(category, types),
-  )
-
-  handle('lxt:setup-root', (_event, entryRoot: string) =>
+  handle('setupLxtRoot', (_event, entryRoot: string) =>
     setupLxt(entryRoot.trim()),
   )
 
-  handle('lxt:refresh', async () => {
+  handle('refreshLxtMachines', async () => {
     const current = await readSettings()
 
     if (!current.categories.lxt.entryRoot) {
@@ -181,11 +174,11 @@ export const registerSettingsIpc = (): void => {
     return setupLxt(current.categories.lxt.entryRoot)
   })
 
-  handle('pl:setup-root', (_event, entryRoot: string) =>
+  handle('setupPlRoot', (_event, entryRoot: string) =>
     setupPl(entryRoot.trim()),
   )
 
-  handle('pl:refresh', async () => {
+  handle('refreshPlMachines', async () => {
     const current = await readSettings()
 
     if (!current.categories.pl.entryRoot) {
@@ -195,11 +188,11 @@ export const registerSettingsIpc = (): void => {
     return setupPl(current.categories.pl.entryRoot)
   })
 
-  handle('aoi:setup-root', (_event, entryRoot: string) =>
+  handle('setupAoiRoot', (_event, entryRoot: string) =>
     setupAoi(entryRoot.trim()),
   )
 
-  handle('aoi:refresh', async () => {
+  handle('refreshAoiMachines', async () => {
     const current = await readSettings()
 
     if (!current.categories.aoi.entryRoot) {
@@ -217,7 +210,7 @@ export const registerSettingsIpc = (): void => {
    * 串行探测：46 台并发会把现场那台 8G 机器和无线网一起拖垮。
    */
   handle(
-    'share:reprobe',
+    'reprobeShares',
     async (
       _event,
       category: 'lxt' | 'pl',

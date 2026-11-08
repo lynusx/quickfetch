@@ -6,7 +6,7 @@ import { handle } from './handle'
 
 export const registerExcelIpc = (): void => {
   handle(
-    'fs:save-excel',
+    'saveExcel',
     async (
       event,
       params: { defaultName: string; data: Uint8Array },

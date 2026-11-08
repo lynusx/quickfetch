@@ -103,6 +103,9 @@ import { copyStoreOf } from '../src/renderer/features/copy/copyStore'
 import {
   AOI_IMAGE_DIRS,
   DEFAULT_AOI_IMAGE_KIND,
+  IPC_EVENTS,
+  IPC_INVOKE,
+  IPC_SEND,
   aoiSideOfMachines,
   aoiSideOfName,
   elPlantOf,
@@ -2404,8 +2407,8 @@ const updateTests = async () => {
   })
 
   await test('自动更新: IPC 摘要不记录参数', async () => {
-    assert.deepEqual(summarizeIpcArgs('update:check', []), {})
-    assert.deepEqual(summarizeIpcArgs('update:install', []), {})
+    assert.deepEqual(summarizeIpcArgs('checkForUpdates', []), {})
+    assert.deepEqual(summarizeIpcArgs('installUpdate', []), {})
   })
 
   await test('自动更新: 瞬时错误重试与文案', async () => {
@@ -2708,13 +2711,13 @@ const historyStoreTests = async () => {
 
 const logIpcTests = async () => {
   await test('log: IPC 参数摘要不输出大字节/大数组', async () => {
-    const excel = summarizeIpcArgs('fs:save-excel', [
+    const excel = summarizeIpcArgs('saveExcel', [
       { defaultName: 'a.xlsx', data: new Uint8Array(1024 * 1024) },
     ])
     assert.equal(excel.dataBytes, 1024 * 1024)
     assert.ok(JSON.stringify(excel).length < 500)
 
-    const scan = summarizeIpcArgs('scan:create', [
+    const scan = summarizeIpcArgs('createScanTask', [
       {
         category: 'el',
         date: '20261104',
@@ -2728,7 +2731,7 @@ const logIpcTests = async () => {
     assert.equal(machines.count, 6)
     assert.equal(machines.sample.length, 5)
 
-    const copy = summarizeIpcArgs('copy:start', [
+    const copy = summarizeIpcArgs('startCopyTask', [
       't1',
       'C:/out',
       { layout: 'flat', conflict: 'rename', machines: ['A'] },
@@ -2739,7 +2742,7 @@ const logIpcTests = async () => {
 
     const circular: Record<string, unknown> = {}
     circular.self = circular
-    assert.doesNotThrow(() => summarizeIpcArgs('unknown:channel', [circular]))
+    assert.doesNotThrow(() => summarizeIpcArgs('setTypeCatalog', [circular]))
   })
 
   await test('settings: debugLogEnabled 只认严格布尔值', async () => {
@@ -3130,6 +3133,46 @@ const ledgerTests = async () => {
   })
 }
 
+/* ---------------------------------------------------------------- 22. IPC 通道描述表 */
+
+const ipcContractTests = async () => {
+  await test('IPC: 通道唯一且格式一致', async () => {
+    const invokes = Object.values(IPC_INVOKE)
+    const events = Object.values(IPC_EVENTS)
+    const sends = Object.values(IPC_SEND)
+    const all = [...invokes, ...events, ...sends]
+
+    assert.equal(new Set(all).size, all.length, '通道不能重复')
+    assert.ok(invokes.length > 0)
+
+    for (const channel of all) {
+      assert.match(channel, /^[a-z-]+:[a-z-]+$/, `通道格式不对: ${channel}`)
+    }
+  })
+
+  await test('IPC: main 注册与描述表一一对应', async () => {
+    const dir = join(process.cwd(), 'src/main/ipc')
+    const registered = new Set<string>()
+
+    for (const name of await readdir(dir)) {
+      if (!name.endsWith('.ipc.ts')) continue
+
+      const source = await readFile(join(dir, name), 'utf-8')
+
+      for (const match of source.matchAll(/handle\(\s*'([A-Za-z]+)'/g)) {
+        registered.add(match[1])
+      }
+    }
+
+    // 漏注册、多注册或把通道字符串当方法名都会在这里失败
+    assert.deepEqual(
+      [...registered].sort(),
+      Object.keys(IPC_INVOKE).sort(),
+      'main 的 handle() 方法与 IPC_INVOKE 不一致',
+    )
+  })
+}
+
 /* ---------------------------------------------------------------- 主流程 */
 
 const main = async () => {
@@ -3175,6 +3218,8 @@ const main = async () => {
   await archiveTests()
   console.log('\n[21] 扫描进度账本')
   await ledgerTests()
+  console.log('\n[22] IPC 通道描述表')
+  await ipcContractTests()
 
   const failed = results.filter((r) => !r.ok)
   console.log(`\n共 ${results.length} 项，失败 ${failed.length} 项`)
