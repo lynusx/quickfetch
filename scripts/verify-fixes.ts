@@ -82,6 +82,11 @@ import {
   planFilterRestore,
 } from '../src/renderer/features/scan/scanScopePlan'
 import type { PlantFilterSlice } from '../src/renderer/features/scan/stores/plantFilterStore'
+import {
+  deriveScanTaskView,
+  elapsedLabel,
+} from '../src/renderer/features/scan/scanReadModel'
+import { formatEta } from '../src/renderer/utils/common'
 import type { CopyTask } from '../src/shared/ipc'
 import type { ScanTask } from '../src/shared/ipc'
 import { summarizeIpcArgs } from '../src/main/ipc/log-summary'
@@ -3431,6 +3436,147 @@ const settingsStoreTests = async () => {
   })
 }
 
+/* ---------------------------------------------------------------- 25. 扫描展示模型 */
+
+const scanReadModelTests = async () => {
+  const base = (): ScanTask =>
+    ({
+      id: 't1',
+      status: 'running',
+      params: {
+        category: 'el',
+        machines: ['A', 'B', 'C', 'D', 'E', 'F'],
+        date: '20261104',
+        shift: '夜班',
+        slots: ['8'],
+        types: ['NG'],
+      },
+      progress: {
+        phase: 'probe',
+        percent: 60,
+        dirsScanned: 9,
+        dirsHit: 2,
+        dirsSkipped: 3,
+        dirsUnreachable: 3,
+        images: 5,
+        currentPath: 'A/EL',
+        detailsPending: 0,
+        concurrency: 4,
+        batchIndex: 1,
+        batchTotal: 2,
+        detailTotal: 0,
+        detailDone: 0,
+        machinesPending: 2,
+        etaMs: 65_000,
+      },
+      branches: [
+        { machine: 'A', status: 'hit', matchedDirs: 2, images: 5 },
+        {
+          machine: 'B',
+          status: 'empty',
+          matchedDirs: 0,
+          images: 0,
+          brokenAt: '类型',
+        },
+        {
+          machine: 'C',
+          status: 'missing',
+          matchedDirs: 0,
+          images: 0,
+          missingName: '20261104',
+        },
+        {
+          machine: 'D',
+          status: 'unreachable',
+          matchedDirs: 0,
+          images: 0,
+          unreachableReason: 'network',
+        },
+        {
+          machine: 'E',
+          status: 'unreachable',
+          matchedDirs: 0,
+          images: 0,
+          unreachableReason: 'auth',
+        },
+        {
+          machine: 'F',
+          status: 'unreachable',
+          matchedDirs: 0,
+          images: 0,
+          unreachableReason: 'denied',
+        },
+      ],
+      pauseReason: null,
+      error: null,
+      createdAt: 1,
+      startedAt: 2,
+      finishedAt: null,
+      totalImages: 5,
+      preview: [],
+      elapsedMs: 1000,
+    }) as unknown as ScanTask
+
+  await test('展示模型: 统计、分组与每行摘要', async () => {
+    const view = deriveScanTaskView(base())
+
+    assert.equal(view.abnormalCount, 4)
+    assert.deepEqual(view.inaccessible, { network: 1, auth: 1, denied: 1 })
+    assert.equal(view.hasInaccessible, true)
+    assert.equal(view.etaText, formatEta(65_000))
+    assert.equal(view.machinesPending, 2)
+    assert.equal(view.phaseDescription, '探测目录')
+    assert.equal(view.rows.length, 6)
+
+    const [hit, , missing, network, auth, denied] = view.rows
+
+    assert.equal(hit.tone, 'success')
+    assert.equal(hit.statusText, '2 个目录')
+    assert.equal(hit.imagesText, '5 张')
+
+    assert.equal(missing.tone, 'warn')
+    assert.equal(missing.kind, null)
+    assert.equal(missing.statusText, '20261104 目录不存在')
+
+    assert.equal(network.tone, 'danger')
+    assert.equal(network.kind, 'network')
+    assert.equal(network.statusText, '网络不通')
+    assert.equal(network.imagesText, '—')
+
+    assert.equal(auth.kind, 'auth')
+    assert.equal(auth.tone, 'warn')
+    assert.equal(denied.kind, 'denied')
+  })
+
+  await test('展示模型: 空任务与终态文案', async () => {
+    const empty = deriveScanTaskView(null)
+
+    assert.deepEqual(empty.rows, [])
+    assert.equal(empty.phaseDescription, '尚未开始扫描')
+    assert.equal(empty.etaText, null)
+    assert.equal(elapsedLabel(null), '—')
+
+    const done = deriveScanTaskView({
+      ...base(),
+      status: 'completed',
+      progress: { ...base().progress, phase: 'done', percent: 100 },
+    })
+
+    assert.equal(done.phaseDescription, '已完成')
+    assert.equal(done.etaText, null)
+
+    const interrupted = deriveScanTaskView({
+      ...base(),
+      status: 'interrupted',
+    })
+
+    assert.equal(
+      interrupted.phaseDescription,
+      '上次退出时保存，可按原参数重新扫描',
+    )
+  })
+}
+
 /* ---------------------------------------------------------------- 主流程 */
 
 const main = async () => {
@@ -3482,6 +3628,8 @@ const main = async () => {
   await scanScopeTests()
   console.log('\n[24] 设置持久化内核')
   await settingsStoreTests()
+  console.log('\n[25] 扫描展示模型')
+  await scanReadModelTests()
 
   const failed = results.filter((r) => !r.ok)
   console.log(`\n共 ${results.length} 项，失败 ${failed.length} 项`)

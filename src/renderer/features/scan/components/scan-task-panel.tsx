@@ -24,20 +24,9 @@ import {
 import { Panel, PanelBody, PanelHeader } from '@/components/panel'
 import { Stat, StatGrid } from '@/components/stat'
 import type { ScanTask } from '@shared/ipc'
-import { formatDuration, formatEta } from '@/utils/common'
-import {
-  SCAN_STATUS_META,
-  branchState,
-  branchSummary,
-  inaccessibleKindOf,
-} from './scanStatus'
+import { formatDuration } from '@/utils/common'
+import { elapsedLabel, deriveScanTaskView } from '../scanReadModel'
 import { ScanStatusBadge } from './scan-status-badge'
-
-const PHASE_LABEL: Record<string, string> = {
-  probe: '探测目录',
-  collect: '收集图片',
-  done: '已结束',
-}
 
 const DOT_TONE: Record<string, string> = {
   success: 'success',
@@ -92,42 +81,15 @@ export const ScanTaskPanel = ({
   onCancel,
   onClear,
 }: ScanTaskPanelProps) => {
-  const status = task ? SCAN_STATUS_META[task.status] : null
-  const branches = task?.branches ?? []
-
-  const abnormal = branches.filter(
-    (branch) => branch.status !== 'hit' && branch.status !== 'empty',
-  )
-  // 按「下一步该做什么」分类统计。以前只统计 unreachableReason === 'network'，
-  // 现场 23 台失败只显示「不可达 3 台」，剩下 20 台去哪了没人知道。
-  const inaccessible = branches.reduce(
-    (acc, branch) => {
-      const kind = inaccessibleKindOf(branch)
-      if (kind) acc[kind] += 1
-      return acc
-    },
-    { network: 0, auth: 0, denied: 0 },
-  )
-  const hasInaccessible =
-    inaccessible.network + inaccessible.auth + inaccessible.denied > 0
-  const eta =
-    task && task.status === 'running' ? formatEta(task.progress.etaMs) : null
-  const runningPending = task?.progress.machinesPending ?? 0
-
-  const phaseDescription = task
-    ? task.status === 'interrupted'
-      ? '上次退出时保存，可按原参数重新扫描'
-      : task.progress.phase === 'done'
-        ? status?.label
-        : PHASE_LABEL[task.progress.phase]
-    : '尚未开始扫描'
+  // 统计、分组、阶段文案、ETA 与每行摘要都在纯 read model 里；这里只渲染
+  const view = deriveScanTaskView(task)
 
   return (
     <Panel>
       <PanelHeader
         icon={<ActivityLogIcon width={13} height={13} />}
         title="扫描任务"
-        description={phaseDescription}
+        description={view.phaseDescription}
         actions={
           <>
             {task ? <ScanStatusBadge status={task.status} size="1" /> : null}
@@ -160,10 +122,7 @@ export const ScanTaskPanel = ({
               value={task?.progress.dirsSkipped ?? 0}
               unit="个"
             />
-            <Stat
-              label="用时"
-              value={task ? formatDuration(task.elapsedMs) : '—'}
-            />
+            <Stat label="用时" value={elapsedLabel(task)} />
           </StatGrid>
 
           <Box>
@@ -213,31 +172,31 @@ export const ScanTaskPanel = ({
                 分不清是卡住还是快好了，加这个数字就能判断。
                 运行态才显示：暂停时最想知道的是"还差多少"，已完成则没必要。
               */}
-              {task && task.status === 'running' && runningPending > 0 ? (
+              {task && task.status === 'running' && view.machinesPending > 0 ? (
                 <Text as="span" size="1" color="amber">
-                  正在等 {runningPending} 台机台
+                  正在等 {view.machinesPending} 台机台
                 </Text>
               ) : null}
-              {eta ? (
+              {view.etaText ? (
                 <Text as="span" size="1" color="gray">
-                  剩余 {eta}
+                  剩余 {view.etaText}
                 </Text>
               ) : null}
-              {hasInaccessible ? (
+              {view.hasInaccessible ? (
                 <Flex as="span" align="center" gap="2" wrap="wrap">
-                  {inaccessible.network > 0 ? (
+                  {view.inaccessible.network > 0 ? (
                     <Text as="span" size="1" color="red">
-                      网络不通 {inaccessible.network} 台
+                      网络不通 {view.inaccessible.network} 台
                     </Text>
                   ) : null}
-                  {inaccessible.auth > 0 ? (
+                  {view.inaccessible.auth > 0 ? (
                     <Text as="span" size="1" color="amber">
-                      未认证 {inaccessible.auth} 台
+                      未认证 {view.inaccessible.auth} 台
                     </Text>
                   ) : null}
-                  {inaccessible.denied > 0 ? (
+                  {view.inaccessible.denied > 0 ? (
                     <Text as="span" size="1" color="amber">
-                      无权限 {inaccessible.denied} 台
+                      无权限 {view.inaccessible.denied} 台
                     </Text>
                   ) : null}
                 </Flex>
@@ -376,7 +335,8 @@ export const ScanTaskPanel = ({
                 </Text>
                 <Text as="span" size="1" color="gray" className="field-count">
                   {formatDuration(task.elapsedMs)}
-                  {abnormal.length > 0 && ` · ${abnormal.length} 台无结果`}
+                  {view.abnormalCount > 0 &&
+                    ` · ${view.abnormalCount} 台无结果`}
                 </Text>
               </Flex>
 
@@ -398,53 +358,47 @@ export const ScanTaskPanel = ({
                     图片
                   </Text>
                 </Grid>
-                {branches.map((branch) => {
-                  const tone = branchState(branch)
-                  const kind = inaccessibleKindOf(branch)
-                  const summary = branchSummary(branch, task?.params)
-
-                  return (
-                    <Grid
-                      className="data-row"
-                      key={branch.machine}
-                      data-state={kind ?? undefined}
+                {view.rows.map((row) => (
+                  <Grid
+                    className="data-row"
+                    key={row.machine}
+                    data-state={row.kind ?? undefined}
+                  >
+                    <Text
+                      as="span"
+                      size="1"
+                      className="data-row-machine"
+                      title={row.machine}
                     >
-                      <Text
+                      {row.machine}
+                    </Text>
+                    <Flex
+                      as="span"
+                      className="data-row-status"
+                      align="center"
+                      gap="1"
+                      title={row.detail ?? undefined}
+                    >
+                      <Box
                         as="span"
-                        size="1"
-                        className="data-row-machine"
-                        title={branch.machine}
-                      >
-                        {branch.machine}
+                        className="status-dot"
+                        data-tone={DOT_TONE[row.tone] || undefined}
+                      />
+                      <Text as="span" size="1" className="data-row-message">
+                        {row.statusText}
                       </Text>
-                      <Flex
-                        as="span"
-                        className="data-row-status"
-                        align="center"
-                        gap="1"
-                        title={branch.detail ?? undefined}
-                      >
-                        <Box
-                          as="span"
-                          className="status-dot"
-                          data-tone={DOT_TONE[tone] || undefined}
-                        />
-                        <Text as="span" size="1" className="data-row-message">
-                          {summary.statusText}
-                        </Text>
-                      </Flex>
-                      <Text
-                        as="span"
-                        size="1"
-                        align="right"
-                        weight="medium"
-                        className="data-row-value"
-                      >
-                        {summary.imagesText}
-                      </Text>
-                    </Grid>
-                  )
-                })}
+                    </Flex>
+                    <Text
+                      as="span"
+                      size="1"
+                      align="right"
+                      weight="medium"
+                      className="data-row-value"
+                    >
+                      {row.imagesText}
+                    </Text>
+                  </Grid>
+                ))}
               </Box>
             </Box>
           ) : null}
