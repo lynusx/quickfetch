@@ -64,6 +64,11 @@ Windows 上实际位置是 `%APPDATA%\QuickFetch\`，**和开发态是同一个�
 `src/main/utils/taskTable.ts`；历史文件读写用 `createHistoryStore(dir)` 注入目录，测试不要依赖 app userData。
 改这些规则时改对应 module，不要在 resolver、页面或 registry 里再抄一份。
 
+**任务生命周期只有一个实现**：状态、暂停等待、中断信号、终态 promise、进度节流与心跳统一在
+`src/main/utils/taskLifecycle.ts`。扫描与复制只提供自己的业务状态与快照；`begin()` 每轮重建终态
+promise 与 abort 信号，复制 retry 依赖这条规则。不要在 runner 里再手写 `paused` / `resumeWaiters`
+/ `settled` / ticker。
+
 **扫描历史是四类页面的公共能力**：EL / 力禧特EL / 利珀PL / 森标 AOI 都必须挂 `HistoryPanel`，
 四处共用 `hooks/useHistoryRestore` 回填参数与载入快照。当前任务快照只存在内存里，
 重启后为空，历史是唯一的恢复入口——少挂一个页面，那一类扫描的结果就等于「扫完就没了」。

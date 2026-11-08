@@ -13,6 +13,8 @@ import type {
 import { DEFAULT_PREFERENCES, isFinalCopyStatus } from '../../../shared/ipc'
 import { createAdaptiveGate } from '../../utils/adaptive'
 import type { AdaptiveGate } from '../../utils/adaptive'
+import { createTaskLifecycle } from '../../utils/taskLifecycle'
+import type { TaskLifecycle } from '../../utils/taskLifecycle'
 import { toFsPath } from '../../utils/pathx'
 import { logger } from '../log'
 import { cachedSizeOf, measureImageSizes } from './measure'
@@ -40,8 +42,6 @@ export const DEFAULT_COPY_CONCURRENCY = 6
 /** 每批复制的文件数：批与批之间让出事件循环，进度也能按批反馈 */
 export const DEFAULT_COPY_BATCH_SIZE = 50
 
-const PROGRESS_INTERVAL_MS = 120
-
 /**
  * 文件之间没有进度事件时，也按秒推一次快照。
  *
@@ -60,12 +60,6 @@ const MANIFEST_NAME = 'source.txt'
 export interface CopyLoadOptions {
   concurrency?: number
   batchSize?: number
-}
-
-const abortError = (): Error => {
-  const error = new Error('复制已取消')
-  error.name = 'AbortError'
-  return error
 }
 
 const isAbortError = (error: unknown): boolean =>
@@ -180,7 +174,6 @@ export class CopyTaskRunner {
   /** 失败率采样器，与扫描共用同一套降档逻辑 */
   private readonly gate: AdaptiveGate
 
-  private status: CopyTask['status'] = 'pending'
   private error: string | null = null
   private manifestPath: string | null = null
 
@@ -206,13 +199,15 @@ export class CopyTaskRunner {
   private sizeUnknown = 0
   private failures: CopyFailure[] = []
   private currentPath = ''
-  private startedAt: number | null = null
-  private finishedAt: number | null = null
-  private lastEmitAt = 0
   /** 最近几秒的字节采样，用于实时网速 */
   private readonly speed = new SpeedMeter()
-  /** 运行中按秒推快照，让进度信息在长文件复制期间也能刷新 */
-  private ticker: ReturnType<typeof setInterval> | null = null
+  /** 状态、暂停、中断信号、终态、节流与心跳统一由 lifecycle 维护 */
+  private readonly lifecycle: TaskLifecycle = createTaskLifecycle({
+    emit: () => this.emit(this.snapshot()),
+    tickEveryMs: PROGRESS_TICK_MS,
+    onTick: () => this.speed.value(Date.now(), this.copiedBytes),
+    cancelMessage: '复制已取消',
+  })
 
   /**
    * 是否已经规划过。
@@ -222,26 +217,6 @@ export class CopyTaskRunner {
    * 重跑 buildPlan，把「只重试失败项」变成「全量重跑」。
    */
   private planned = false
-
-  private paused = false
-  /** 暂停累计时长与本次暂停起点，用于算真实吞吐（不含暂停） */
-  private pausedMs = 0
-  private pausedAt: number | null = null
-  private resumeWaiters: (() => void)[] = []
-  /**
-   * 每次 run 重新创建：取消过的信号会一直是 aborted，
-   * 重试时沿用它会让任务一启动就自己取消。
-   */
-  private abortController = new AbortController()
-  /**
-   * 本轮执行的终态信号。
-   *
-   * 不能只在构造时建一次：Promise 一旦 resolve 就永远保持 resolved，
-   * 重试之后 waitSettled() 会立刻返回，调用方以为新的一轮已经跑完。
-   * 所以每次 run() 都换一个新的。
-   */
-  private settled: Promise<void> = Promise.resolve()
-  private markSettled: () => void = () => {}
 
   constructor(options: CopyRunnerOptions) {
     this.scanTaskId = options.scanTaskId
@@ -276,19 +251,16 @@ export class CopyTaskRunner {
         this.touch('', true)
       },
     })
-
-    this.resetSettled()
   }
 
   // ---------------------------------------------------------------- 对外操作
 
   start(): CopyTask {
-    if (this.status !== 'pending') return this.snapshot()
+    // 首次启动只认 pending；retry() 走 begin()，不受这里限制
+    if (this.lifecycle.status !== 'pending') return this.snapshot()
+    if (!this.lifecycle.begin()) return this.snapshot()
 
-    this.status = 'running'
-    this.startedAt = Date.now()
-    this.speed.reset(this.startedAt, this.copiedBytes)
-    this.startTicker()
+    this.speed.reset(this.lifecycle.startedAt ?? Date.now(), this.copiedBytes)
 
     logger.info('copy', 'copy.start', {
       copyId: this.id,
@@ -309,12 +281,7 @@ export class CopyTaskRunner {
   }
 
   pause(): CopyTask {
-    if (this.status !== 'running') return this.snapshot()
-
-    this.paused = true
-    this.pausedAt = Date.now()
-    this.status = 'paused'
-    this.stopTicker()
+    if (!this.lifecycle.pause()) return this.snapshot()
 
     logger.info('copy', 'copy.pause', {
       copyId: this.id,
@@ -330,25 +297,15 @@ export class CopyTaskRunner {
   }
 
   resume(): CopyTask {
-    if (this.status !== 'paused') return this.snapshot()
+    if (!this.lifecycle.resume()) return this.snapshot()
 
-    if (this.pausedAt !== null) {
-      this.pausedMs += Date.now() - this.pausedAt
-      this.pausedAt = null
-    }
-
-    this.paused = false
-    this.status = 'running'
     // 暂停期间没有字节流动，重新开始计时，别把暂停时长摊进网速
     this.speed.reset(Date.now(), this.copiedBytes)
-    this.startTicker()
 
     logger.info('copy', 'copy.resume', {
       copyId: this.id,
-      pausedMs: this.pausedMs,
+      pausedMs: this.lifecycle.pausedMs(),
     })
-
-    for (const resolve of this.resumeWaiters.splice(0)) resolve()
 
     this.touch('', true)
 
@@ -356,20 +313,7 @@ export class CopyTaskRunner {
   }
 
   cancel(): CopyTask {
-    if (this.isFinal()) return this.snapshot()
-
-    if (this.pausedAt !== null) {
-      this.pausedMs += Date.now() - this.pausedAt
-      this.pausedAt = null
-    }
-
-    this.stopTicker()
-    this.abortController.abort()
-    this.paused = false
-
-    for (const resolve of this.resumeWaiters.splice(0)) resolve()
-
-    this.status = 'canceled'
+    if (!this.lifecycle.cancel()) return this.snapshot()
 
     logger.info('copy', 'copy.cancel', {
       copyId: this.id,
@@ -441,14 +385,10 @@ export class CopyTaskRunner {
     this.failedBytes = 0
     this.sizeUnknown = 0
     this.failures = []
-    this.finishedAt = null
     this.error = null
-    this.pausedMs = 0
-    this.pausedAt = null
-    this.status = 'running'
-    this.startedAt = Date.now()
-    this.speed.reset(this.startedAt, this.copiedBytes)
-    this.startTicker()
+    // 新一轮执行：终态 promise、中断信号与暂停计时都由 lifecycle 重置
+    if (!this.lifecycle.begin()) return this.snapshot()
+    this.speed.reset(this.lifecycle.startedAt ?? Date.now(), this.copiedBytes)
     this.touch('', true)
     void this.run()
 
@@ -459,7 +399,7 @@ export class CopyTaskRunner {
     return {
       id: this.id,
       scanTaskId: this.scanTaskId,
-      status: this.status,
+      status: this.lifecycle.status,
       progress: this.progress(),
       error: this.error,
       // 失败明细带上限：几万条全塞进 IPC 会拖垮渲染层。
@@ -470,18 +410,11 @@ export class CopyTaskRunner {
   }
 
   isFinal(): boolean {
-    return isFinalCopyStatus(this.status)
+    return isFinalCopyStatus(this.lifecycle.status)
   }
 
   waitSettled(): Promise<void> {
-    return this.settled
-  }
-
-  /** 换一个新的终态 promise，供下一轮 run() 使用 */
-  private resetSettled(): void {
-    this.settled = new Promise<void>((resolve) => {
-      this.markSettled = resolve
-    })
+    return this.lifecycle.waitSettled().then(() => undefined)
   }
 
   // ---------------------------------------------------------------- 执行主体
@@ -494,12 +427,12 @@ export class CopyTaskRunner {
     const done =
       this.copied + this.failures.length + this.skipped + this.alreadyExists
     // 吞吐不算暂停：用户暂停十分钟再继续，不该把速度摊薄成接近 0
-    const activePausedMs =
-      this.pausedMs + (this.pausedAt !== null ? Date.now() - this.pausedAt : 0)
+    const now = Date.now()
+    const activePausedMs = this.lifecycle.pausedMs(now)
     const elapsed = Math.max(
       0,
-      (this.finishedAt ?? Date.now()) -
-        (this.startedAt ?? Date.now()) -
+      (this.lifecycle.finishedAt ?? now) -
+        (this.lifecycle.startedAt ?? now) -
         activePausedMs,
     )
     const ratio = total > 0 ? Math.min(1, done / total) : 0
@@ -510,7 +443,7 @@ export class CopyTaskRunner {
       elapsed > 0 ? Math.round((this.copiedBytes / elapsed) * 1000) : 0
     // 运行中显示最近 5 秒的实时速度；终态/暂停给出整轮平均，供界面标注「平均网速」
     const bytesPerSecond =
-      this.status === 'running'
+      this.lifecycle.status === 'running'
         ? this.speed.value(Date.now(), this.copiedBytes)
         : averageBytesPerSecond
     // 窗口刚开始时还没有样本，ETA 仍有累计平均可用
@@ -519,7 +452,7 @@ export class CopyTaskRunner {
     // 有完整字节信息时优先按字节估剩余；否则回退到按张数
     let etaMs: number | null = null
 
-    if (this.status === 'running' && ratio < 1) {
+    if (this.lifecycle.status === 'running' && ratio < 1) {
       const remainingBytes =
         this.totalBytes - this.copiedBytes - this.failedBytes
 
@@ -537,7 +470,7 @@ export class CopyTaskRunner {
     }
 
     return {
-      status: this.status,
+      status: this.lifecycle.status,
       copied: this.copied,
       total,
       copyTotal: this.copyTotal,
@@ -562,8 +495,8 @@ export class CopyTaskRunner {
       bytesPerSecond,
       sizeUnknown: this.sizeUnknown,
       currentPath: this.currentPath,
-      startedAt: this.startedAt,
-      finishedAt: this.finishedAt,
+      startedAt: this.lifecycle.startedAt,
+      finishedAt: this.lifecycle.finishedAt,
       pausedMs: activePausedMs,
       elapsedMs: elapsed,
       etaMs,
@@ -571,10 +504,6 @@ export class CopyTaskRunner {
   }
 
   private async run(): Promise<void> {
-    // 新一轮执行必须用干净的中断信号，否则「取消后再重试」会秒退
-    this.abortController = new AbortController()
-    this.resetSettled()
-
     try {
       // 只有从未规划过才做规划；重试时 plan 已是失败项的子集，
       // 重试后 planned 保持 true，空计划直接结束
@@ -614,15 +543,17 @@ export class CopyTaskRunner {
     }
   }
 
-  private finish(status: CopyTask['status']): void {
-    this.stopTicker()
-    this.finishedAt = Date.now()
-    this.status = status
+  private finish(status: 'completed' | 'canceled' | 'failed'): void {
+    // 已经被 cancel() 定稿时不会覆盖
+    this.lifecycle.finish(status)
     this.currentPath = ''
+
+    const { status: finalStatus, startedAt } = this.lifecycle
+    const finishedAt = this.lifecycle.finishedAt ?? Date.now()
 
     logger.info('copy', 'copy.end', {
       copyId: this.id,
-      status,
+      status: finalStatus,
       copied: this.copied,
       copyTotal: this.copyTotal,
       failed: this.failures.length,
@@ -632,11 +563,11 @@ export class CopyTaskRunner {
       totalBytes: this.totalBytes,
       copiedBytes: this.copiedBytes,
       failedBytes: this.failedBytes,
-      elapsedMs: this.finishedAt - (this.startedAt ?? this.finishedAt),
+      elapsedMs: finishedAt - (startedAt ?? finishedAt),
       error: this.error,
     })
 
-    if (status === 'failed') {
+    if (finalStatus === 'failed') {
       logger.error('copy', 'copy.failed', {
         copyId: this.id,
         error: this.error,
@@ -644,7 +575,7 @@ export class CopyTaskRunner {
     }
 
     this.touch('', true)
-    this.markSettled()
+    this.lifecycle.settle()
   }
 
   /** 本次任务应复制的完整图片集合；清单从这里取 */
@@ -895,49 +826,15 @@ export class CopyTaskRunner {
     }
   }
 
-  /** 运行中每秒推一次快照；暂停/取消/结束时必须停掉，否则会一直发事件 */
-  private startTicker(): void {
-    if (this.ticker) return
-
-    this.ticker = setInterval(() => {
-      if (this.status !== 'running') return
-
-      this.speed.value(Date.now(), this.copiedBytes)
-      this.touch('', true)
-    }, PROGRESS_TICK_MS)
-
-    // 不让计时器拖住进程退出；Electron 主进程里 Timeout 有 unref
-    this.ticker.unref?.()
-  }
-
-  private stopTicker(): void {
-    if (!this.ticker) return
-
-    clearInterval(this.ticker)
-    this.ticker = null
-  }
-
   private touch(currentPath: string, force = false): void {
     if (currentPath) this.currentPath = currentPath
 
-    const now = Date.now()
-    if (!force && now - this.lastEmitAt < PROGRESS_INTERVAL_MS) return
-
-    this.lastEmitAt = now
-    this.emit(this.snapshot())
+    this.lifecycle.touch(force)
   }
 
   /** 暂停/取消检查点：遍历待办项与每个文件粘贴前都会经过这里 */
-  private async checkpoint(): Promise<void> {
-    if (this.abortController.signal.aborted) throw abortError()
-
-    while (this.paused) {
-      await new Promise<void>((resolve) => {
-        this.resumeWaiters.push(resolve)
-      })
-    }
-
-    if (this.abortController.signal.aborted) throw abortError()
+  private checkpoint(): Promise<void> {
+    return this.lifecycle.checkpoint()
   }
 
   /**

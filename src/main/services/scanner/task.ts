@@ -10,10 +10,12 @@ import type {
   ScannedImage,
 } from '../../../shared/ipc'
 
-import { isSettledScanStatus, PL_LEVELS } from '../../../shared/ipc'
+import { PL_LEVELS } from '../../../shared/ipc'
 import { PREVIEW_LIMIT } from '../../../shared/historyLimit'
 import { timeoutForConcurrency, createAdaptiveGate } from '../../utils/adaptive'
 import type { AdaptiveGate } from '../../utils/adaptive'
+import { createTaskLifecycle } from '../../utils/taskLifecycle'
+import type { TaskLifecycle } from '../../utils/taskLifecycle'
 import { isNetworkError, readDirSafe } from './fsx'
 import type { DirReadResult } from './fsx'
 import { describeLeafFailure, summarize } from './diagnosis'
@@ -34,9 +36,6 @@ export const DEFAULT_READ_CONCURRENCY = 4
 
 /** 每批处理的机台数：一批跑完再开下一批，避免所有机台的状态同时压在内存里 */
 export const DEFAULT_MACHINE_BATCH_SIZE = 2
-
-/** 进度推送最小间隔，避免高频 IPC 压满渲染进程 */
-const PROGRESS_INTERVAL_MS = 120
 
 /** 探测阶段在进度条上占的权重，其余留给收图 */
 const PROBE_WEIGHT = 20
@@ -162,19 +161,9 @@ export class ScanTaskRunner {
   private readonly context: TaskContext
   private readonly emit: (task: ScanTask) => void
 
-  private status: ScanTaskStatus = 'pending'
-  private pauseReason: 'user' | 'network' | null = null
+  /** 状态、暂停、中断信号、终态与推送节流统一由 lifecycle 维护 */
+  private readonly lifecycle: TaskLifecycle
   private error: string | null = null
-  private startedAt: number | null = null
-  private finishedAt: number | null = null
-
-  private paused = false
-  private resumeWaiters: (() => void)[] = []
-  private readonly abortController = new AbortController()
-
-  /** 执行体的终态信号，落盘历史前等它 */
-  private readonly settled: Promise<boolean>
-  private markSettled: (ok: boolean) => void = () => {}
 
   private branches: ScanBranch[] = []
   private images: ScannedImage[] = []
@@ -202,7 +191,6 @@ export class ScanTaskRunner {
    */
   /** 断网熔断：滑动窗口 + 按机台跨批累计，策略在 breaker.ts */
   private readonly breaker: Breaker
-  private lastEmitAt = 0
 
   /** 当前生效的并发档位与单次读取超时，会随失败率自动调整 */
   private readConcurrency: number
@@ -238,15 +226,16 @@ export class ScanTaskRunner {
     this.context = context
     this.emit = emit
 
+    this.lifecycle = createTaskLifecycle({
+      emit: () => this.emit(this.snapshot()),
+      cancelMessage: '任务已取消',
+    })
+
     // 断网策略与扫描流程解耦：执行器只喂样本，阈值与两条规则留在 breaker
     this.breaker = createBreaker({
       taskId: this.id,
-      isRunning: () => this.status === 'running',
+      isRunning: () => this.lifecycle.status === 'running',
       onPause: () => this.pause('network'),
-    })
-
-    this.settled = new Promise<boolean>((resolve) => {
-      this.markSettled = resolve
     })
 
     // 层级差异全部来自解析器：EL / 力禧特是标准三层，利珀多机台名层与等级层
@@ -319,10 +308,9 @@ export class ScanTaskRunner {
   // ---------------------------------------------------------------- 对外操作
 
   start(): ScanTask {
-    if (this.status !== 'pending') return this.snapshot()
-
-    this.status = 'running'
-    this.startedAt = Date.now()
+    // 扫描只启动一次；复制允许 retry，所以 begin() 本身不限制终态
+    if (this.lifecycle.status !== 'pending') return this.snapshot()
+    if (!this.lifecycle.begin()) return this.snapshot()
 
     logger.info('scan', 'scan.start', {
       taskId: this.id,
@@ -345,11 +333,7 @@ export class ScanTaskRunner {
   }
 
   pause(reason: 'user' | 'network' = 'user'): ScanTask {
-    if (this.status !== 'running') return this.snapshot()
-
-    this.paused = true
-    this.pauseReason = reason
-    this.status = 'paused'
+    if (!this.lifecycle.pause(reason)) return this.snapshot()
 
     logger.info('scan', 'scan.pause', {
       taskId: this.id,
@@ -365,22 +349,16 @@ export class ScanTaskRunner {
   }
 
   resume(): ScanTask {
-    if (this.status !== 'paused') return this.snapshot()
+    if (!this.lifecycle.resume()) return this.snapshot()
 
-    this.paused = false
-    this.pauseReason = null
     // 清空样本窗口：用户点「继续」就是在说「网络已经好了」，
     // 带着旧样本继续统计，接回网络后的头几次读取仍然会被算成失败
     this.breaker.reset()
-    this.status = 'running'
 
     logger.info('scan', 'scan.resume', {
       taskId: this.id,
       percent: this.progress.percent,
     })
-
-    const waiters = this.resumeWaiters.splice(0)
-    for (const resolve of waiters) resolve()
 
     this.touch('', true)
 
@@ -388,17 +366,7 @@ export class ScanTaskRunner {
   }
 
   cancel(): ScanTask {
-    if (isSettledScanStatus(this.status)) return this.snapshot()
-
-    // 已取消的任务不再执行任何目录读取，checkpoint 会抛出 AbortError
-    this.abortController.abort()
-    this.paused = false
-
-    const waiters = this.resumeWaiters.splice(0)
-    for (const resolve of waiters) resolve()
-
-    // 立即反馈状态，不等执行体在下一个检查点退出；已完成的结果原样保留
-    this.status = 'canceled'
+    if (!this.lifecycle.cancel()) return this.snapshot()
 
     logger.info('scan', 'scan.cancel', {
       taskId: this.id,
@@ -412,21 +380,22 @@ export class ScanTaskRunner {
   }
 
   snapshot(): ScanTask {
+    const { status, pauseReason, startedAt, finishedAt } = this.lifecycle
+
     return {
       id: this.id,
-      status: this.status,
+      status,
       params: this.params,
       progress: { ...this.progress },
       branches: this.branches.map((branch) => ({ ...branch })),
-      pauseReason: this.pauseReason,
+      pauseReason,
       error: this.error,
       createdAt: this.createdAt,
-      startedAt: this.startedAt,
-      finishedAt: this.finishedAt,
+      startedAt,
+      finishedAt,
       totalImages: this.images.length,
       preview: this.images.slice(0, PREVIEW_LIMIT),
-      elapsedMs:
-        (this.finishedAt ?? Date.now()) - (this.startedAt ?? this.createdAt),
+      elapsedMs: (finishedAt ?? Date.now()) - (startedAt ?? this.createdAt),
     }
   }
 
@@ -436,7 +405,7 @@ export class ScanTaskRunner {
   }
 
   getStatus(): ScanTaskStatus {
-    return this.status
+    return this.lifecycle.status
   }
 
   /**
@@ -446,12 +415,14 @@ export class ScanTaskRunner {
    * 落盘历史必须等收尾完成，否则会把「取消瞬间」的中间结果写成最终结果。
    */
   waitSettled(): Promise<boolean> {
-    return this.settled
+    return this.lifecycle.waitSettled()
   }
 
   // ---------------------------------------------------------------- 执行主体
 
   private async run(): Promise<void> {
+    let finalStatus: 'completed' | 'canceled' | 'failed' = 'completed'
+
     try {
       // 阶段 0：配置预检。少配了根目录/入口就在开跑前说清楚，
       // 不必让每台机台都各自失败一次再汇总。
@@ -522,16 +493,20 @@ export class ScanTaskRunner {
       this.progress.currentPath = ''
       this.progress.detailsPending = 0
       this.progress.etaMs = 0
-      this.status = 'completed'
     } catch (error) {
       if (isAbortError(error)) {
         // 取消属于正常流程：保留已收集的结果，状态标记 canceled
-        this.status = 'canceled'
+        finalStatus = 'canceled'
       } else {
+        finalStatus = 'failed'
         this.fail((error as Error)?.message ?? '扫描过程中发生未知错误', error)
       }
     } finally {
-      this.finishedAt = Date.now()
+      // 已经被 cancel() 定稿时不会覆盖；否则写入本轮终态并记下结束时间
+      this.lifecycle.finish(finalStatus)
+
+      const { status, startedAt } = this.lifecycle
+      const finishedAt = this.lifecycle.finishedAt ?? Date.now()
 
       const branches = this.branches.reduce<Record<string, number>>(
         (counts, branch) => {
@@ -543,8 +518,8 @@ export class ScanTaskRunner {
 
       logger.info('scan', 'scan.end', {
         taskId: this.id,
-        status: this.status,
-        elapsedMs: this.finishedAt - (this.startedAt ?? this.finishedAt),
+        status,
+        elapsedMs: finishedAt - (startedAt ?? finishedAt),
         images: this.progress.images,
         dirsScanned: this.progress.dirsScanned,
         dirsHit: this.progress.dirsHit,
@@ -559,12 +534,12 @@ export class ScanTaskRunner {
       // 现场看到的「卡住，点继续立刻出结果」有一部分就是这么来的
       this.touch('', true)
       // 通知等待方：快照已定稿，可以落盘了
-      this.markSettled(true)
+      this.lifecycle.settle()
     }
   }
 
   private fail(message: string, error?: unknown): void {
-    this.status = 'failed'
+    this.lifecycle.finish('failed')
     this.error = message
 
     logger.error('scan', 'scan.fail', {
@@ -933,7 +908,7 @@ export class ScanTaskRunner {
       while (next < queue.length) {
         await this.checkpoint()
 
-        if (this.abortController.signal.aborted) return
+        if (this.lifecycle.signal.aborted) return
 
         const index = next
         next += 1
@@ -993,7 +968,7 @@ export class ScanTaskRunner {
   }): Promise<void> {
     // this.read() 里还会检查一次，但那是在拿到并发名额之后；
     // 这里先挡一道，取消后连名额都不必去抢
-    if (this.abortController.signal.aborted) throw abortError()
+    if (this.lifecycle.signal.aborted) throw abortError()
 
     const branch = this.branches.find((entry) => entry.machine === item.machine)
     const typeRead = await this.read(item.dir)
@@ -1224,9 +1199,9 @@ export class ScanTaskRunner {
   /** 按已完成比例估算剩余时间；样本太少时返回 null，避免一开始就跳变 */
   private estimateEta(percent: number): number | null {
     if (percent >= 100) return 0
-    if (percent < 5 || !this.startedAt) return null
+    if (percent < 5 || !this.lifecycle.startedAt) return null
 
-    const elapsed = Date.now() - this.startedAt
+    const elapsed = Date.now() - this.lifecycle.startedAt
     const remaining = (elapsed / percent) * (100 - percent)
 
     return Number.isFinite(remaining) && remaining > 0
@@ -1257,23 +1232,11 @@ export class ScanTaskRunner {
     this.progress.percent = this.computePercent()
     this.progress.etaMs = this.estimateEta(this.progress.percent)
 
-    const now = Date.now()
-    if (!force && now - this.lastEmitAt < PROGRESS_INTERVAL_MS) return
-
-    this.lastEmitAt = now
-    this.emit(this.snapshot())
+    this.lifecycle.touch(force)
   }
 
   /** 暂停/取消检查点：每个目录读取之前都会经过这里 */
-  private async checkpoint(): Promise<void> {
-    if (this.abortController.signal.aborted) throw abortError()
-
-    while (this.paused) {
-      await new Promise<void>((resolve) => {
-        this.resumeWaiters.push(resolve)
-      })
-    }
-
-    if (this.abortController.signal.aborted) throw abortError()
+  private checkpoint(): Promise<void> {
+    return this.lifecycle.checkpoint()
   }
 }

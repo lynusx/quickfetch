@@ -71,6 +71,7 @@ import {
   previewSizeLabel,
 } from '../src/renderer/features/copy/copyReadModel'
 import { createTaskTable } from '../src/main/utils/taskTable'
+import { createTaskLifecycle } from '../src/main/utils/taskLifecycle'
 import type { CopyTask } from '../src/shared/ipc'
 import type { ScanTask } from '../src/shared/ipc'
 import { summarizeIpcArgs } from '../src/main/ipc/log-summary'
@@ -2754,6 +2755,124 @@ const logIpcTests = async () => {
   })
 }
 
+/* ---------------------------------------------------------------- 19. 任务生命周期 */
+
+const lifecycleTests = async () => {
+  await test('生命周期: 暂停阻塞检查点，恢复后继续', async () => {
+    const lifecycle = createTaskLifecycle({ emit: () => {} })
+
+    assert.equal(lifecycle.status, 'pending')
+    assert.equal(lifecycle.begin(), true)
+    assert.equal(lifecycle.status, 'running')
+    assert.notEqual(lifecycle.startedAt, null)
+
+    assert.equal(lifecycle.pause('network'), true)
+    assert.equal(lifecycle.status, 'paused')
+    assert.equal(lifecycle.pauseReason, 'network')
+
+    let resumed = false
+    const waiting = lifecycle.checkpoint().then(() => {
+      resumed = true
+    })
+
+    await Promise.resolve()
+    assert.equal(resumed, false)
+
+    assert.equal(lifecycle.resume(), true)
+    await waiting
+    assert.equal(resumed, true)
+    assert.equal(lifecycle.pauseReason, null)
+  })
+
+  await test('生命周期: 暂停中取消让检查点抛 AbortError', async () => {
+    const lifecycle = createTaskLifecycle({
+      emit: () => {},
+      cancelMessage: '复制已取消',
+    })
+
+    lifecycle.begin()
+    lifecycle.pause()
+
+    const waiting = lifecycle.checkpoint()
+
+    assert.equal(lifecycle.cancel(), true)
+    assert.equal(lifecycle.status, 'canceled')
+    assert.ok(lifecycle.signal.aborted)
+
+    await assert.rejects(waiting, (error: Error) => {
+      assert.equal(error.name, 'AbortError')
+      assert.equal(error.message, '复制已取消')
+      return true
+    })
+
+    assert.equal(lifecycle.pause(), false)
+    assert.equal(lifecycle.finish('completed'), false)
+  })
+
+  await test('生命周期: 每轮重建终态 promise 与中断信号', async () => {
+    const lifecycle = createTaskLifecycle({ emit: () => {} })
+
+    lifecycle.begin()
+    const first = lifecycle.waitSettled()
+    lifecycle.finish('completed')
+    lifecycle.settle()
+    assert.equal(await first, true)
+
+    // 终态后可以再开一轮（复制 retry）
+    assert.equal(lifecycle.begin(), true)
+    assert.equal(lifecycle.signal.aborted, false)
+
+    let secondDone = false
+    const second = lifecycle.waitSettled().then(() => {
+      secondDone = true
+    })
+
+    await Promise.resolve()
+    assert.equal(secondDone, false)
+
+    lifecycle.finish('failed')
+    lifecycle.settle()
+    await second
+    assert.equal(secondDone, true)
+  })
+
+  await test('生命周期: 进度节流与强制推送', async () => {
+    let emits = 0
+    const lifecycle = createTaskLifecycle({
+      emit: () => {
+        emits += 1
+      },
+      throttleMs: 60_000,
+    })
+
+    lifecycle.begin()
+    lifecycle.touch()
+    lifecycle.touch()
+    assert.equal(emits, 1)
+
+    lifecycle.touch(true)
+    assert.equal(emits, 2)
+  })
+
+  await test('生命周期: 暂停时长在恢复与取消时累计', async () => {
+    const lifecycle = createTaskLifecycle({ emit: () => {} })
+
+    lifecycle.begin()
+    lifecycle.pause()
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    assert.ok(lifecycle.pausedMs() >= 20)
+
+    lifecycle.resume()
+    const afterResume = lifecycle.pausedMs()
+    assert.ok(afterResume >= 20)
+
+    lifecycle.pause()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    lifecycle.cancel()
+    assert.ok(lifecycle.pausedMs() >= afterResume + 10)
+  })
+}
+
 /* ---------------------------------------------------------------- 主流程 */
 
 const main = async () => {
@@ -2793,6 +2912,8 @@ const main = async () => {
   await settingsContractTests()
   console.log('\n[18] 自动更新')
   await updateTests()
+  console.log('\n[19] 任务生命周期')
+  await lifecycleTests()
 
   const failed = results.filter((r) => !r.ok)
   console.log(`\n共 ${results.length} 项，失败 ${failed.length} 项`)
