@@ -8,6 +8,7 @@ import type {
   AppPreferences,
   AppSettings,
   CategoryConfig,
+  EntrySetupResult,
   LxtSettings,
   LxtSetupResult,
   MachineInfo,
@@ -125,6 +126,32 @@ export const selectEl = (state: {
 export const selectEnvOverrides = (state: {
   settings: AppSettings | null
 }): PreferenceKey[] => state.settings?.envOverrides ?? []
+
+type SettingsSet = (partial: Partial<SettingsState>) => void
+
+/**
+ * 入口识别/重新识别的共同状态机：saving、error 与 settings 写回。
+ * 三个类别只差请求与失败文案，流程不再各写一遍。
+ */
+const runEntryAction = async (
+  set: SettingsSet,
+  request: () => Promise<EntrySetupResult>,
+  errorLabel: string,
+): Promise<EntrySetupResult | null> => {
+  set({ saving: true, error: null })
+
+  try {
+    const result = await request()
+
+    set({ settings: result.settings })
+    return result
+  } catch (error) {
+    set({ error: toErrorMessage(error, errorLabel) })
+    return null
+  } finally {
+    set({ saving: false })
+  }
+}
 
 /**
  * 根目录与机台列表由主进程持久化在 userData/settings.json，
@@ -248,89 +275,47 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
       }
     },
 
-    setupLxt: async (entryRoot) => {
-      set({ saving: true, error: null })
-      try {
-        const result = await window.electronAPI.setupLxtRoot(entryRoot)
-        set({ settings: result.settings })
-        return result
-      } catch (error) {
-        set({ error: toErrorMessage(error, '识别力禧特EL入口失败') })
-        return null
-      } finally {
-        set({ saving: false })
-      }
-    },
+    setupLxt: (entryRoot) =>
+      runEntryAction(
+        set,
+        () => window.electronAPI.setupLxtRoot(entryRoot),
+        '识别力禧特EL入口失败',
+      ),
 
-    refreshLxt: async () => {
-      set({ saving: true, error: null })
-      try {
-        const result = await window.electronAPI.refreshLxtMachines()
-        set({ settings: result.settings })
-        return result
-      } catch (error) {
-        set({ error: toErrorMessage(error, '重新识别入口失败') })
-        return null
-      } finally {
-        set({ saving: false })
-      }
-    },
+    refreshLxt: () =>
+      runEntryAction(
+        set,
+        () => window.electronAPI.refreshLxtMachines(),
+        '重新识别入口失败',
+      ),
 
-    setupPl: async (entryRoot) => {
-      set({ saving: true, error: null })
-      try {
-        const result = await window.electronAPI.setupPlRoot(entryRoot)
-        set({ settings: result.settings })
-        return result
-      } catch (error) {
-        set({ error: toErrorMessage(error, '识别利珀PL入口失败') })
-        return null
-      } finally {
-        set({ saving: false })
-      }
-    },
+    setupPl: (entryRoot) =>
+      runEntryAction(
+        set,
+        () => window.electronAPI.setupPlRoot(entryRoot),
+        '识别利珀PL入口失败',
+      ),
 
-    refreshPl: async () => {
-      set({ saving: true, error: null })
-      try {
-        const result = await window.electronAPI.refreshPlMachines()
-        set({ settings: result.settings })
-        return result
-      } catch (error) {
-        set({ error: toErrorMessage(error, '重新识别入口失败') })
-        return null
-      } finally {
-        set({ saving: false })
-      }
-    },
+    refreshPl: () =>
+      runEntryAction(
+        set,
+        () => window.electronAPI.refreshPlMachines(),
+        '重新识别入口失败',
+      ),
 
-    setupAoi: async (entryRoot) => {
-      set({ saving: true, error: null })
-      try {
-        const result = await window.electronAPI.setupAoiRoot(entryRoot)
-        set({ settings: result.settings })
-        return result
-      } catch (error) {
-        set({ error: toErrorMessage(error, '识别森标 AOI 入口失败') })
-        return null
-      } finally {
-        set({ saving: false })
-      }
-    },
+    setupAoi: (entryRoot) =>
+      runEntryAction(
+        set,
+        () => window.electronAPI.setupAoiRoot(entryRoot),
+        '识别森标 AOI 入口失败',
+      ),
 
-    refreshAoi: async () => {
-      set({ saving: true, error: null })
-      try {
-        const result = await window.electronAPI.refreshAoiMachines()
-        set({ settings: result.settings })
-        return result
-      } catch (error) {
-        set({ error: toErrorMessage(error, '重新识别入口失败') })
-        return null
-      } finally {
-        set({ saving: false })
-      }
-    },
+    refreshAoi: () =>
+      runEntryAction(
+        set,
+        () => window.electronAPI.refreshAoiMachines(),
+        '重新识别入口失败',
+      ),
 
     reprobeShares: async (category) => {
       set({ saving: true, error: null })
