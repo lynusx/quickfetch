@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
 
-import { useExcelDataProcessor } from './useExcelDataProcessor'
+import { buildPreview } from '../pipeline'
 import { useExcelOperations } from './useExcelOperations'
 import { useExcelStore } from '../stores/excelStore'
 import { useSheetFilterStore } from '../stores/sheetFilterStore'
@@ -12,8 +12,6 @@ export const useExcelViewer = () => {
   const [isCopy, setIsCopy] = useState(false)
   const [isExport, setIsExport] = useState(false)
 
-  const { sheet2json, filterWith, counterWith, generateSheetData } =
-    useExcelDataProcessor()
   const { copyToClipboard, exportToExcel } = useExcelOperations()
   const { setSheet, file } = useExcelStore()
   const {
@@ -51,89 +49,38 @@ export const useExcelViewer = () => {
     }
   }
 
-  // 生成预览数据
+  // 生成预览数据。解析、首次加载与筛选规则都在 pipeline 里，这里只负责写回 store
   const generateSheetDate = useCallback(() => {
-    setSheet({
-      name: '',
-      data: [],
-      rowCount: 0,
-      colCount: 0,
+    const result = buildPreview({
+      file,
+      lines,
+      defects,
+      selectedLines,
+      selectedDefects,
     })
 
-    try {
-      if (!file || file.sheets.length === 0) return
+    setLines(result.allLines)
+    setDefects(result.allDefects)
 
-      // 默认只处理第一个工作表
-      const firstSheetData = file.sheets[0]
+    if (result.nextSelectedLines) setSelectedLines(result.nextSelectedLines)
+    if (result.nextSelectedDefects)
+      setSelectedDefects(result.nextSelectedDefects)
 
-      // 1. 将工作表数据转换为 JSON 数组
-      const {
-        jsonSheet,
-        lines: allLines,
-        defects: allDefects,
-      } = sheet2json(firstSheetData)
-      // 更新可选项到 store
-      setLines(allLines)
-      setDefects(allDefects)
+    setSheet(result.sheet)
 
-      // 判断是否为首次加载（store 中没有可选项且用户未手动选择）
-      const isFirstLoad =
-        lines.size === 0 &&
-        defects.size === 0 &&
-        selectedLines.length === 0 &&
-        selectedDefects.length === 0
-
-      // 首次加载时默认全选所有可选项；若用户已手动清空，则保留空状态
-      if (isFirstLoad) {
-        if (allLines.size > 0) setSelectedLines(Array.from(allLines))
-        if (allDefects.size > 0) setSelectedDefects(Array.from(allDefects))
-      }
-
-      // 2. 根据目标产线和不良项筛选数据
-      // 当用户清空选择时，传空数组表示不应用该过滤条件（filterWith 会根据长度判断是否生效）
-      const effectiveLines =
-        selectedLines.length > 0
-          ? selectedLines
-          : isFirstLoad
-            ? Array.from(allLines)
-            : []
-      const effectiveDefects =
-        selectedDefects.length > 0
-          ? selectedDefects
-          : isFirstLoad
-            ? Array.from(allDefects)
-            : []
-
-      const filteredData = filterWith({
-        jsonSheet: jsonSheet,
-        targetLines: effectiveLines,
-        targetDefects: effectiveDefects,
-      })
-
-      // 3. 对筛选后的数据进行分组统计
-      const countedData = counterWith(filteredData)
-
-      // 4. 将分组统计结果转换为表格格式数据
-      const sheetData = generateSheetData(countedData, firstSheetData.name)
-
-      setSheet(sheetData)
-    } catch (error) {
-      console.error('生成预览数据失败:', error)
+    if (result.error) {
+      console.error('生成预览数据失败:', result.error)
     }
   }, [
     file,
-    lines.size,
-    defects.size,
+    lines,
+    defects,
     selectedLines,
     selectedDefects,
-    sheet2json,
     setLines,
     setDefects,
     setSelectedLines,
     setSelectedDefects,
-    filterWith,
-    counterWith,
-    generateSheetData,
     setSheet,
   ])
 

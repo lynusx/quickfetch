@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import {
   ClipboardCopyIcon,
   Cross2Icon,
@@ -24,7 +24,6 @@ import SheetFilterPanel from './sheet-filter-panel'
 import SheetTablePreview from './sheet-table-preview'
 import { useExcelViewer } from '../hooks/useExcelViewer'
 import { useExcelStore } from '../stores/excelStore'
-import { useSheetFilterStore } from '../stores/sheetFilterStore'
 
 import type { ExcelFile } from '../types'
 
@@ -83,22 +82,12 @@ const ExcelViewer = () => {
   /**
    * 只在「文件或筛选条件变了」时重算预览。
    *
-   * generateSheetDate 由内联函数组合而成，每次渲染身份都会变；直接把它
-   * 放进依赖会让 effect 每轮都跑，而它内部又会 setSheet，形成无限更新。
-   * 这里用 ref 持有最新实现，依赖只保留真正影响结果的数据。
+   * generateSheetDate 现在由 useCallback 记忆化，身份稳定；依赖可以直接
+   * 用回调本身，不再需要用 ref 绕开每次渲染新建的内联函数。
    */
-  const selectedLines = useSheetFilterStore((state) => state.selectedLines)
-  const selectedDefects = useSheetFilterStore((state) => state.selectedDefects)
-  const lineCount = useSheetFilterStore((state) => state.lines.size)
-  const defectCount = useSheetFilterStore((state) => state.defects.size)
-  const generateRef = useRef(generateSheetDate)
   useEffect(() => {
-    generateRef.current = generateSheetDate
-  })
-
-  useEffect(() => {
-    generateRef.current()
-  }, [file, lineCount, defectCount, selectedLines, selectedDefects])
+    generateSheetDate()
+  }, [generateSheetDate])
 
   if (!file) return null
 

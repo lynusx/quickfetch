@@ -73,7 +73,19 @@ import {
   deriveCopyReadModel,
   previewSizeLabel,
 } from '../src/renderer/features/copy/copyReadModel'
-import { copyStoreOf } from '../src/renderer/features/copy/copyStore'
+import {
+  buildPreview,
+  counterWith,
+  filterWith,
+  generateHeaders,
+  generateSheetData,
+  groupArray,
+  sheet2json,
+} from '../src/renderer/features/excel/pipeline'
+import type {
+  ExcelFile,
+  ExcelSheet,
+} from '../src/renderer/features/excel/types'
 import { createTaskTable } from '../src/main/utils/taskTable'
 import { createTaskLifecycle } from '../src/main/utils/taskLifecycle'
 import { createTaskArchive } from '../src/main/services/scanner/archive'
@@ -3729,6 +3741,149 @@ const scanReadModelTests = async () => {
   })
 }
 
+const excelPipelineTests = async () => {
+  const sheet = (): ExcelSheet => ({
+    name: 'S1',
+    data: [
+      ['WaferID', '线别', '不良项', '制绒', '', '碱抛', ''],
+      ['', '', '', '设备ID', '数量', '设备ID', '数量'],
+      ['W1', 'L1', 'D1', 'EQ1', 5, 'EQ2', 3],
+      ['W2', 'L2', 'D1', 'EQ1', 2, 'EQ2', 1],
+    ],
+    rowCount: 4,
+    colCount: 7,
+  })
+
+  const excelFile = (sheets: ExcelSheet[]): ExcelFile =>
+    ({
+      id: 'f1',
+      name: 'x.xlsx',
+      size: '1 KB',
+      uploadTime: '',
+      status: 'completed',
+      sheets,
+    }) as unknown as ExcelFile
+
+  await test('excel: 解析制程、线别与不良项', async () => {
+    const parsed = sheet2json(sheet())
+
+    assert.deepEqual([...parsed.lines], ['L1', 'L2'])
+    assert.deepEqual([...parsed.defects], ['D1'])
+    assert.deepEqual(Object.keys(parsed.jsonSheet), ['制绒', '碱抛'])
+    assert.equal(parsed.jsonSheet['制绒'][0].设备ID, 'EQ1')
+    assert.equal(parsed.jsonSheet['制绒'][0].数量, 5)
+    assert.equal(parsed.jsonSheet['碱抛'][1].数量, 1)
+
+    const small = sheet2json({ ...sheet(), rowCount: 2 })
+    assert.deepEqual(Object.keys(small.jsonSheet), [])
+    assert.equal(small.lines.size, 0)
+  })
+
+  await test('excel: 空选择表示不过滤', async () => {
+    const parsed = sheet2json(sheet())
+    const all = filterWith({ jsonSheet: parsed.jsonSheet })
+    const onlyL1 = filterWith({
+      jsonSheet: parsed.jsonSheet,
+      targetLines: ['L1'],
+    })
+
+    assert.equal(all['制绒'].length, 2)
+    assert.equal(onlyL1['制绒'].length, 1)
+    assert.equal(onlyL1['制绒'][0].WaferID, 'W1')
+    assert.deepEqual(filterWith({ jsonSheet: {} }), {})
+  })
+
+  await test('excel: 计数、表头与 9 工序分组', async () => {
+    const parsed = sheet2json(sheet())
+
+    assert.deepEqual(counterWith(parsed.jsonSheet), [{ EQ1: 2 }, { EQ2: 2 }])
+    assert.deepEqual(counterWith({}), [])
+    assert.deepEqual(generateHeaders(5), [
+      '设备ID',
+      '数量',
+      '',
+      '设备ID',
+      '数量',
+    ])
+
+    const nine = Array.from(
+      { length: 9 },
+      (_, index) => [[`g${index}`, index]] as (string | number)[][],
+    )
+    const grouped = groupArray(nine)
+
+    assert.equal(grouped.length, 4)
+    assert.deepEqual(
+      grouped.map((group) => group.length),
+      [4, 4, 7, 4],
+    )
+
+    const table = generateSheetData(counterWith(parsed.jsonSheet), 'S1')
+
+    assert.deepEqual(table.data[0], ['设备ID', '数量', '', '设备ID', '数量'])
+    assert.equal(table.rowCount, 2)
+    assert.equal(table.colCount, 5)
+    assert.deepEqual(generateSheetData([], 'S1'), {
+      name: 'S1',
+      data: [],
+      rowCount: 0,
+      colCount: 0,
+    })
+  })
+
+  await test('excel: 首次加载全选、清空后不过滤', async () => {
+    const none = buildPreview({
+      file: null,
+      lines: new Set(),
+      defects: new Set(),
+      selectedLines: [],
+      selectedDefects: [],
+    })
+
+    assert.deepEqual(none.sheet, {
+      name: '',
+      data: [],
+      rowCount: 0,
+      colCount: 0,
+    })
+
+    const first = buildPreview({
+      file: excelFile([sheet()]),
+      lines: new Set(),
+      defects: new Set(),
+      selectedLines: [],
+      selectedDefects: [],
+    })
+
+    assert.deepEqual(first.nextSelectedLines, ['L1', 'L2'])
+    assert.deepEqual(first.nextSelectedDefects, ['D1'])
+    assert.deepEqual(first.allLines, new Set(['L1', 'L2']))
+    assert.equal(first.sheet.rowCount, 2)
+
+    const cleared = buildPreview({
+      file: excelFile([sheet()]),
+      lines: new Set(['L1', 'L2']),
+      defects: new Set(['D1']),
+      selectedLines: [],
+      selectedDefects: [],
+    })
+
+    assert.equal(cleared.nextSelectedLines, undefined)
+    assert.equal(cleared.nextSelectedDefects, undefined)
+    assert.equal(cleared.sheet.colCount, 5)
+
+    const picked = buildPreview({
+      file: excelFile([sheet()]),
+      lines: new Set(['L1', 'L2']),
+      defects: new Set(['D1']),
+      selectedLines: ['L1'],
+      selectedDefects: ['D1'],
+    })
+
+    assert.deepEqual(picked.sheet.data[1], ['EQ1', 1, '', 'EQ2', 1])
+  })
+}
+
 /* ---------------------------------------------------------------- 主流程 */
 
 const main = async () => {
@@ -3782,6 +3937,8 @@ const main = async () => {
   await settingsStoreTests()
   console.log('\n[25] 扫描展示模型')
   await scanReadModelTests()
+  console.log('\n[26] Excel 预览管线')
+  await excelPipelineTests()
 
   const failed = results.filter((r) => !r.ok)
   console.log(`\n共 ${results.length} 项，失败 ${failed.length} 项`)
