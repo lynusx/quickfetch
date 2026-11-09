@@ -4161,6 +4161,54 @@ const resolverSeamTests = async () => {
 
     assert.equal(pl, 'pl-03c')
   })
+
+  await test('resolver: LXT 两边网络不可达时保留旧缓存', async () => {
+    const persisted: Array<string | null> = []
+
+    const resolver = createLxtResolver({
+      hosts: new Map([['东区/7A', '\\\\10.0.0.1']]),
+      shares: new Map<string, ShareState<LxtShare>>([['东区/7A', 'el']]),
+      date: '20261104',
+      onShare: (_machine, share) => persisted.push(share),
+      read: async () => result('unreachable'),
+    })
+
+    const resolved = await resolver.resolve('东区/7A')
+
+    assert.equal(resolved.ok, false)
+    assert.equal(resolved.unreachable, 'network')
+    assert.deepEqual(persisted, [], '断网时不能把缓存清成空串或 null')
+  })
+
+  await test('resolver: PL 无缓存时按候选顺序与日期挑选', async () => {
+    const host = '\\\\10.0.0.5'
+
+    const resolver = createPlResolver({
+      hosts: new Map([['东区/10B', host]]),
+      shares: new Map<string, ShareState>([['东区/10B', null]]),
+      date: '20261104',
+      onShare: () => undefined,
+      read: async (path) => {
+        if (path.includes('东区pl-10b') && path.endsWith('Matting')) {
+          return result('ok', ['2026.11.04'])
+        }
+        if (path.endsWith('pl-10b\\Matting')) {
+          return result('ok', ['2026.10.01'])
+        }
+
+        return result('ok')
+      },
+    })
+
+    const resolved = await resolver.resolve('东区/10B')
+
+    assert.equal(resolved.ok, true)
+    assert.match(
+      resolved.base,
+      /东区pl-10b\\Matting$/,
+      '只有带厂区前缀的候选包含本次日期',
+    )
+  })
 }
 
 /* ---------------------------------------------------------------- 主流程 */
