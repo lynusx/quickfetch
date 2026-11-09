@@ -7,7 +7,6 @@ import {
   Callout,
   Code,
   Flex,
-  Heading,
   RadioCards,
   Slider,
   Switch,
@@ -15,7 +14,8 @@ import {
 } from '@radix-ui/themes'
 
 import { PageHeader } from '@/components/page-header/page-header'
-import { Panel, PanelBody } from '@/components/panel'
+import { SettingsGroup } from './components/settings-group'
+import { SettingsRow } from './components/settings-row'
 import { useToast } from '@/hooks/useToast'
 import { UpdateSettingsSection } from '@/features/update'
 import { toErrorMessage } from '@/utils/error'
@@ -105,43 +105,38 @@ const SliderRow = ({
   }
 
   return (
-    <Flex className="setting-row setting-row-slider" direction="column">
-      <Flex align="start" justify="between" gap="4">
-        <Box className="setting-row-main">
-          <Text as="p" size="2" weight="medium" className="setting-row-label">
-            {label}
-          </Text>
-          <Text as="p" size="1" color="gray" className="setting-row-hint">
-            {overridden ? (
-              <>
-                已由环境变量 <Code size="1">{envName}</Code> 接管，此处不生效
-              </>
-            ) : (
-              hint
-            )}
-          </Text>
-        </Box>
-        <Text
-          as="span"
-          size="2"
-          weight="medium"
-          className="setting-slider-value"
-        >
-          {draft} {unit}
+    <div className="settings-row settings-row-slider">
+      <div className="settings-row-main">
+        <Text as="p" size="2" weight="medium" className="settings-row-label">
+          {label}
         </Text>
-      </Flex>
+        <Text as="p" size="1" color="gray" className="settings-row-hint">
+          {overridden ? (
+            <>
+              已由环境变量 <Code size="1">{envName}</Code> 接管，此处不生效
+            </>
+          ) : (
+            hint
+          )}
+        </Text>
+      </div>
 
       <Flex
-        className="setting-slider-wrap"
+        className="settings-row-slider-control"
         align="center"
-        gap="3"
+        gap="2"
         role="group"
         aria-label={label}
       >
-        <Text as="span" size="1" color="gray" className="setting-slider-bound">
+        <Text
+          as="span"
+          size="1"
+          color="gray"
+          className="settings-row-slider-bound"
+        >
           {range.min}
         </Text>
-        <Box className="setting-slider-track">
+        <Box className="settings-row-slider-track">
           <Slider
             value={[draft]}
             min={range.min}
@@ -161,11 +156,20 @@ const SliderRow = ({
             }}
           />
         </Box>
-        <Text as="span" size="1" color="gray" className="setting-slider-bound">
+        <Text
+          as="span"
+          size="1"
+          color="gray"
+          className="settings-row-slider-bound"
+        >
           {range.max}
         </Text>
       </Flex>
-    </Flex>
+
+      <Text as="span" size="2" weight="medium" className="settings-row-value">
+        {draft} {unit}
+      </Text>
+    </div>
   )
 }
 
@@ -249,405 +253,215 @@ const SettingsPage = () => {
     envOverrides.includes(key) ? PREFERENCE_ENV[key] : undefined
 
   return (
-    <Box>
-      <PageHeader
-        eyebrow="应用"
-        title="设置"
-        description="复制策略、扫描与复制并发档位、历史保留条数、调试日志；设置保存在本机。"
-      />
+    <Box className="settings-page">
+      <Box className="settings-page-inner">
+        <PageHeader eyebrow="应用" title="设置" />
 
-      <Box className="settings-content">
-        {error ? (
-          <Callout.Root color="red" role="alert" mb="4">
-            <Callout.Icon>
-              <ExclamationTriangleIcon width={16} height={16} />
-            </Callout.Icon>
-            <Callout.Text>
-              <Text weight="medium">保存失败</Text>：{error}
-            </Callout.Text>
-          </Callout.Root>
-        ) : null}
+        <Box className="settings-content">
+          {error ? (
+            <Callout.Root color="red" role="alert" mb="4">
+              <Callout.Icon>
+                <ExclamationTriangleIcon width={16} height={16} />
+              </Callout.Icon>
+              <Callout.Text>
+                <Text weight="medium">保存失败</Text>：{error}
+              </Callout.Text>
+            </Callout.Root>
+          ) : null}
 
-        {/* 复制到本地 */}
-        <Box id="copy" className="settings-section">
-          <Box className="settings-section-head">
-            <Heading as="h2" size="3" className="settings-section-title">
-              复制到本地
-            </Heading>
-            <Text
-              as="p"
-              size="1"
-              color="gray"
-              className="settings-section-desc"
-            >
-              决定目标目录下建几层文件夹，以及遇到同名文件时怎么处理。
-            </Text>
-          </Box>
-
-          <Flex direction="column" gap="4">
-            <Panel>
-              <PanelBody>
-                <Box className="setting-row-main" mb="3">
-                  <Text
-                    as="p"
-                    size="2"
-                    weight="medium"
-                    className="setting-row-label"
-                  >
-                    分组方式
-                  </Text>
-                  <Text
-                    as="p"
-                    size="1"
-                    color="gray"
-                    className="setting-row-hint"
-                  >
-                    目标目录下建几层文件夹
-                  </Text>
-                </Box>
-
-                <RadioCards.Root
-                  columns={{ initial: '1', sm: '2' }}
-                  value={preferences.copyLayout}
-                  onValueChange={(value) =>
-                    value && patch({ copyLayout: value as CopyLayout })
-                  }
-                >
-                  {LAYOUTS.map((value) => (
-                    <RadioCards.Item key={value} value={value}>
-                      <Flex
-                        direction="column"
-                        gap="1"
-                        className="setting-option-card"
+          <SettingsGroup id="copy" title="复制到本地">
+            <SettingsRow label="分组方式" hint="目标目录下建几层文件夹" stacked>
+              <RadioCards.Root
+                columns={{ initial: '1', sm: '2' }}
+                value={preferences.copyLayout}
+                onValueChange={(value) =>
+                  value && patch({ copyLayout: value as CopyLayout })
+                }
+              >
+                {LAYOUTS.map((value) => (
+                  <RadioCards.Item key={value} value={value}>
+                    <Flex
+                      direction="column"
+                      gap="1"
+                      className="setting-option-card"
+                    >
+                      <Text
+                        as="span"
+                        size="2"
+                        weight="medium"
+                        className="setting-option-title"
                       >
-                        <Text
-                          as="span"
-                          size="2"
-                          weight="medium"
-                          className="setting-option-title"
-                        >
-                          {COPY_LAYOUT_LABEL[value]}
-                        </Text>
-                        <Text
-                          as="span"
-                          size="1"
-                          color="gray"
-                          className="setting-option-sample"
-                        >
-                          {LAYOUT_SAMPLE[value]}
-                        </Text>
-                      </Flex>
-                    </RadioCards.Item>
-                  ))}
-                </RadioCards.Root>
-              </PanelBody>
-            </Panel>
-
-            <Panel>
-              <PanelBody>
-                <Box className="setting-row-main" mb="3">
-                  <Text
-                    as="p"
-                    size="2"
-                    weight="medium"
-                    className="setting-row-label"
-                  >
-                    重名文件
-                  </Text>
-                  <Text
-                    as="p"
-                    size="1"
-                    color="gray"
-                    className="setting-row-hint"
-                  >
-                    目标里已有同名文件时（覆盖无法撤销，会二次确认）
-                  </Text>
-                </Box>
-
-                <RadioCards.Root
-                  columns={{ initial: '1', sm: '3' }}
-                  value={preferences.copyConflict}
-                  onValueChange={(value) =>
-                    value &&
-                    patch({ copyConflict: value as CopyConflictPolicy })
-                  }
-                >
-                  {CONFLICTS.map((value) => (
-                    <RadioCards.Item key={value} value={value}>
-                      <Flex
-                        direction="column"
-                        gap="1"
-                        className="setting-option-card"
+                        {COPY_LAYOUT_LABEL[value]}
+                      </Text>
+                      <Text
+                        as="span"
+                        size="1"
+                        color="gray"
+                        className="setting-option-sample"
                       >
-                        <Text
-                          as="span"
-                          size="2"
-                          weight="medium"
-                          color={value === 'overwrite' ? 'red' : undefined}
-                          className="setting-option-title"
-                        >
-                          {COPY_CONFLICT_LABEL[value]}
-                        </Text>
-                        <Text
-                          as="span"
-                          size="1"
-                          color="gray"
-                          className="setting-option-sample"
-                        >
-                          {CONFLICT_HINT[value]}
-                        </Text>
-                      </Flex>
-                    </RadioCards.Item>
-                  ))}
-                </RadioCards.Root>
-              </PanelBody>
-            </Panel>
-          </Flex>
-        </Box>
+                        {LAYOUT_SAMPLE[value]}
+                      </Text>
+                    </Flex>
+                  </RadioCards.Item>
+                ))}
+              </RadioCards.Root>
+            </SettingsRow>
 
-        {/* 历史记录 */}
-        <Box id="history" className="settings-section">
-          <Box className="settings-section-head">
-            <Heading as="h2" size="3" className="settings-section-title">
-              历史记录
-            </Heading>
-            <Text
-              as="p"
-              size="1"
-              color="gray"
-              className="settings-section-desc"
+            <SettingsRow
+              label="重名文件"
+              hint="目标里已有同名文件时（覆盖无法撤销，会二次确认）"
+              stacked
             >
-              扫描结果保存在本机，超出条数后自动删除最旧的记录；所有扫描页面共享。
-            </Text>
-          </Box>
-
-          <Panel>
-            <PanelBody>
-              <SliderRow
-                label="保留条数"
-                hint="超出后自动删除最旧的记录"
-                unit="条"
-                value={historyLimit}
-                range={HISTORY_LIMIT_RANGE}
-                onChange={(next) => void saveHistoryLimit(next)}
-              />
-            </PanelBody>
-          </Panel>
-        </Box>
-
-        {/* 性能 */}
-        <Box id="performance" className="settings-section">
-          <Box className="settings-section-head">
-            <Heading as="h2" size="3" className="settings-section-title">
-              性能
-            </Heading>
-            <Text
-              as="p"
-              size="1"
-              color="gray"
-              className="settings-section-desc"
-            >
-              数值越大越快，网络盘不稳时反而更容易超时。失败率过高时扫描会自动降档。
-            </Text>
-          </Box>
-
-          <Panel>
-            <PanelBody>
-              <SliderRow
-                label="同时读取目录"
-                hint="失败率过高会自动降档"
-                unit="个"
-                value={preferences.scanConcurrency}
-                range={PREFERENCE_RANGE.scanConcurrency}
-                envName={envName('scanConcurrency')}
-                onChange={(next) => patch({ scanConcurrency: next })}
-              />
-              <SliderRow
-                label="每批扫描机台"
-                hint="一批跑完再开下一批"
-                unit="台"
-                value={preferences.scanBatchSize}
-                range={PREFERENCE_RANGE.scanBatchSize}
-                envName={envName('scanBatchSize')}
-                onChange={(next) => patch({ scanBatchSize: next })}
-              />
-              <SliderRow
-                label="同时复制文件"
-                hint="共享盘冲突时调低"
-                unit="个"
-                value={preferences.copyConcurrency}
-                range={PREFERENCE_RANGE.copyConcurrency}
-                envName={envName('copyConcurrency')}
-                onChange={(next) => patch({ copyConcurrency: next })}
-              />
-              <SliderRow
-                label="每批复制文件"
-                hint="批与批之间让出一次界面刷新"
-                unit="张"
-                value={preferences.copyBatchSize}
-                range={PREFERENCE_RANGE.copyBatchSize}
-                envName={envName('copyBatchSize')}
-                onChange={(next) => patch({ copyBatchSize: next })}
-              />
-            </PanelBody>
-          </Panel>
-        </Box>
-
-        {/* 自动更新 */}
-        <UpdateSettingsSection />
-
-        {/* 调试日志 */}
-        <Box id="logging" className="settings-section">
-          <Box className="settings-section-head">
-            <Heading as="h2" size="3" className="settings-section-title">
-              调试日志
-            </Heading>
-            <Text
-              as="p"
-              size="1"
-              color="gray"
-              className="settings-section-desc"
-            >
-              记录扫描、复制、网络探测、IPC 与渲染层异常；按天写入，保留最近 7
-              天。
-            </Text>
-          </Box>
-
-          <Panel>
-            <PanelBody>
-              <Flex
-                className="setting-row"
-                align="center"
-                justify="between"
-                gap="5"
+              <RadioCards.Root
+                columns={{ initial: '1', sm: '3' }}
+                value={preferences.copyConflict}
+                onValueChange={(value) =>
+                  value && patch({ copyConflict: value as CopyConflictPolicy })
+                }
               >
-                <Box className="setting-row-main">
-                  <Text
-                    as="p"
-                    size="2"
-                    weight="medium"
-                    className="setting-row-label"
-                  >
-                    启用调试日志
-                  </Text>
-                  <Text
-                    as="p"
-                    size="1"
-                    color="gray"
-                    className="setting-row-hint"
-                  >
-                    默认关闭；开启后立即生效，不必重启或重新开始任务。
-                  </Text>
-                </Box>
-                <Switch
-                  checked={preferences.debugLogEnabled}
-                  aria-label="启用调试日志"
-                  onCheckedChange={(checked) =>
-                    patch({ debugLogEnabled: checked })
-                  }
-                />
-              </Flex>
+                {CONFLICTS.map((value) => (
+                  <RadioCards.Item key={value} value={value}>
+                    <Flex
+                      direction="column"
+                      gap="1"
+                      className="setting-option-card"
+                    >
+                      <Text
+                        as="span"
+                        size="2"
+                        weight="medium"
+                        color={value === 'overwrite' ? 'red' : undefined}
+                        className="setting-option-title"
+                      >
+                        {COPY_CONFLICT_LABEL[value]}
+                      </Text>
+                      <Text
+                        as="span"
+                        size="1"
+                        color="gray"
+                        className="setting-option-sample"
+                      >
+                        {CONFLICT_HINT[value]}
+                      </Text>
+                    </Flex>
+                  </RadioCards.Item>
+                ))}
+              </RadioCards.Root>
+            </SettingsRow>
+          </SettingsGroup>
 
-              <Flex
-                className="setting-row"
-                align="center"
-                justify="between"
-                gap="5"
-              >
-                <Box className="setting-row-main">
-                  <Text
-                    as="p"
-                    size="2"
-                    weight="medium"
-                    className="setting-row-label"
-                  >
-                    日志目录
-                  </Text>
-                  <Text
-                    as="p"
-                    size="1"
-                    color="gray"
-                    className="setting-row-hint setting-log-path"
-                  >
-                    {logInfo ? (
-                      <Code size="1">{logInfo.dir}</Code>
-                    ) : logInfoFailed ? (
-                      '读取日志目录失败'
-                    ) : (
-                      '读取中…'
-                    )}
-                  </Text>
-                </Box>
-                <Button
-                  variant="soft"
-                  color="gray"
-                  size="2"
-                  onClick={() => void openLogDir()}
-                >
-                  打开日志目录
-                </Button>
-              </Flex>
-            </PanelBody>
-          </Panel>
-        </Box>
+          <SettingsGroup id="history" title="历史记录">
+            <SliderRow
+              label="保留条数"
+              hint="超出后自动删除最旧的记录"
+              unit="条"
+              value={historyLimit}
+              range={HISTORY_LIMIT_RANGE}
+              onChange={(next) => void saveHistoryLimit(next)}
+            />
+          </SettingsGroup>
 
-        {/* 其他 */}
-        <Box id="other" className="settings-section">
-          <Box className="settings-section-head">
-            <Heading as="h2" size="3" className="settings-section-title">
-              其他
-            </Heading>
-            <Text
-              as="p"
-              size="1"
-              color="gray"
-              className="settings-section-desc"
+          <SettingsGroup id="performance" title="性能">
+            <SliderRow
+              label="同时读取目录"
+              hint="失败率过高会自动降档"
+              unit="个"
+              value={preferences.scanConcurrency}
+              range={PREFERENCE_RANGE.scanConcurrency}
+              envName={envName('scanConcurrency')}
+              onChange={(next) => patch({ scanConcurrency: next })}
+            />
+            <SliderRow
+              label="每批扫描机台"
+              hint="一批跑完再开下一批"
+              unit="台"
+              value={preferences.scanBatchSize}
+              range={PREFERENCE_RANGE.scanBatchSize}
+              envName={envName('scanBatchSize')}
+              onChange={(next) => patch({ scanBatchSize: next })}
+            />
+            <SliderRow
+              label="同时复制文件"
+              hint="共享盘冲突时调低"
+              unit="个"
+              value={preferences.copyConcurrency}
+              range={PREFERENCE_RANGE.copyConcurrency}
+              envName={envName('copyConcurrency')}
+              onChange={(next) => patch({ copyConcurrency: next })}
+            />
+            <SliderRow
+              label="每批复制文件"
+              hint="批与批之间让出一次界面刷新"
+              unit="张"
+              value={preferences.copyBatchSize}
+              range={PREFERENCE_RANGE.copyBatchSize}
+              envName={envName('copyBatchSize')}
+              onChange={(next) => patch({ copyBatchSize: next })}
+            />
+          </SettingsGroup>
+
+          <UpdateSettingsSection />
+
+          <SettingsGroup id="logging" title="调试日志">
+            <SettingsRow
+              label="启用调试日志"
+              hint="默认关闭；开启后立即生效"
+              tooltip="日志按天写入 userData/logs，保留最近 7 天。"
             >
-              设置保存在
-              <Code size="1" mx="1">
-                %APPDATA%\QuickFetch\settings.json
-              </Code>
-              ，换台电脑需要重新设置。
-            </Text>
-          </Box>
+              <Switch
+                checked={preferences.debugLogEnabled}
+                aria-label="启用调试日志"
+                onCheckedChange={(checked) =>
+                  patch({ debugLogEnabled: checked })
+                }
+              />
+            </SettingsRow>
 
-          <Panel>
-            <PanelBody>
-              <Flex
-                className="setting-row"
-                align="center"
-                justify="between"
-                gap="5"
+            <SettingsRow
+              label="日志目录"
+              hint={
+                logInfo ? (
+                  <Code size="1">{logInfo.dir}</Code>
+                ) : logInfoFailed ? (
+                  '读取日志目录失败'
+                ) : (
+                  '读取中…'
+                )
+              }
+              className="settings-row-log"
+            >
+              <Button
+                variant="soft"
+                color="gray"
+                size="2"
+                onClick={() => void openLogDir()}
               >
-                <Box className="setting-row-main">
-                  <Text
-                    as="p"
-                    size="2"
-                    weight="medium"
-                    className="setting-row-label"
-                  >
-                    恢复默认设置
-                  </Text>
-                  <Text
-                    as="p"
-                    size="1"
-                    color="gray"
-                    className="setting-row-hint"
-                  >
-                    复制策略与所有并发档位回到出厂值，扫描历史与调试日志不受影响。
-                  </Text>
-                </Box>
-                <Button
-                  variant="soft"
-                  color="gray"
-                  size="2"
-                  onClick={restoreCopyDefaults}
-                >
-                  恢复默认
-                </Button>
-              </Flex>
-            </PanelBody>
-          </Panel>
+                打开日志目录
+              </Button>
+            </SettingsRow>
+          </SettingsGroup>
+
+          <SettingsGroup id="other" title="其他">
+            <SettingsRow
+              label="恢复默认设置"
+              hint="复制策略与所有并发档位回到出厂值"
+              tooltip="扫描历史与调试日志不受影响。"
+            >
+              <Button
+                variant="soft"
+                color="gray"
+                size="2"
+                onClick={restoreCopyDefaults}
+              >
+                恢复默认
+              </Button>
+            </SettingsRow>
+          </SettingsGroup>
+
+          <Text as="p" size="1" color="gray" className="settings-footnote">
+            设置保存在 <Code size="1">%APPDATA%\QuickFetch\settings.json</Code>
+            ，换台电脑需要重新设置。
+          </Text>
         </Box>
       </Box>
     </Box>

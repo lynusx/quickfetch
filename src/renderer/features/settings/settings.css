@@ -1,102 +1,72 @@
 /* 设置页样式。 */
 
+/*
+ * 设置页内部在白色 app 卡片上再铺一层浅灰画布：
+ * 分组卡保持白色，才有参考图那种浮起感。用 :has 只影响设置路由。
+ */
+.app-main:has(.settings-page) {
+  background: var(--gray-2);
+}
+
+.settings-page-inner {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
 .settings-content {
   min-width: 0;
 }
 
-.settings-section {
-  scroll-margin-top: 16px;
-}
-
-.settings-section + .settings-section {
-  margin-top: 28px;
-}
-
-.settings-section-head {
-  margin-bottom: 12px;
-}
-
-.settings-section-title {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  color: var(--gray-12);
-}
-
-.settings-section-desc {
-  margin: 4px 0 0;
+.settings-footnote {
+  margin: 18px 2px 0;
   font-size: 11.5px;
-  line-height: 1.55;
-  color: var(--gray-10);
-}
-
-.setting-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 13px 0;
-}
-
-.setting-row + .setting-row {
-  border-top: 1px solid var(--app-border);
-}
-
-.setting-row-main {
-  min-width: 0;
-  flex: 1;
-}
-
-.setting-row-label {
-  margin: 0;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--gray-12);
-}
-
-.setting-row-hint {
-  margin: 3px 0 0;
-  font-size: 11px;
-  line-height: 1.55;
+  line-height: 1.6;
   color: var(--gray-10);
 }
 
 /* 日志目录可能很长，允许在任意字符处换行，避免 1080 宽下撑出横向滚动 */
-.setting-log-path {
+.settings-row-log .settings-row-hint {
   word-break: break-all;
 }
 
-/* 滑杆行：标签在上、控件占满整行，数值与刻度用等宽数字避免跳动 */
-.setting-row-slider {
-  align-items: stretch;
-  justify-content: flex-start;
-  gap: 10px;
+/* 滑杆行：左标签/说明、中滑杆、右当前值 */
+.settings-row-slider {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(200px, 1.1fr) auto;
+  align-items: center;
+  gap: 16px;
 }
 
-.setting-slider-value {
-  flex-shrink: 0;
-  min-width: 56px;
+.settings-row-slider .settings-row-main {
+  grid-column: 1;
+}
+
+.settings-row-value {
+  grid-column: 3;
+  min-width: 52px;
   text-align: right;
+  font-size: 12.5px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--gray-12);
 }
 
-.setting-slider-wrap {
-  width: 100%;
-  padding-top: 2px;
+.settings-row-slider-control {
+  grid-column: 2;
+  min-width: 0;
 }
 
-.setting-slider-track {
+.settings-row-slider-track {
   flex: 1;
   min-width: 0;
 }
 
-.setting-slider-bound {
+.settings-row-slider-bound {
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
 
+/* 复制策略的选项卡片 */
 .setting-option-card {
   display: flex;
   flex-direction: column;

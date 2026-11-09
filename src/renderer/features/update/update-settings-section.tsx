@@ -2,11 +2,9 @@ import { useEffect, useState } from 'react'
 import { ExclamationTriangleIcon, InfoCircledIcon } from '@radix-ui/react-icons'
 import {
   Badge,
-  Box,
   Button,
   Callout,
   Flex,
-  Heading,
   Progress,
   Spinner,
   Switch,
@@ -14,7 +12,8 @@ import {
 } from '@radix-ui/themes'
 
 import type { AppPreferences, UpdatePhase } from '@shared/ipc'
-import { Panel, PanelBody } from '@/components/panel'
+import { SettingsGroup } from '@/features/settings/components/settings-group'
+import { SettingsRow } from '@/features/settings/components/settings-row'
 import { useToast } from '@/hooks/useToast'
 import { formatClockTime, formatFileSize } from '@/utils/common'
 import {
@@ -145,106 +144,48 @@ export const UpdateSettingsSection = () => {
     (portable && (phase === 'available' || phase === 'downloaded'))
 
   return (
-    <Box id="update" className="settings-section">
-      <Box className="settings-section-head">
-        <Heading as="h2" size="3" className="settings-section-title">
-          更新
-        </Heading>
-        <Text as="p" size="1" color="gray" className="settings-section-desc">
-          安装版自动检查并安装；免安装版只提示下载 zip 手动替换。
-        </Text>
-      </Box>
+    <SettingsGroup id="update" title="更新">
+      <SettingsRow
+        label="当前版本"
+        hint={`v${state?.currentVersion ?? '…'} · ${
+          installed
+            ? '安装版，可自动更新'
+            : portable
+              ? '免安装版，需手动替换'
+              : '正在识别安装方式'
+        }`}
+      >
+        <Badge color={PHASE_COLOR[phase]} variant="soft">
+          {PHASE_LABEL[phase]}
+        </Badge>
+      </SettingsRow>
 
-      <Panel>
-        <PanelBody>
-          <Flex
-            className="setting-row"
-            align="center"
-            justify="between"
-            gap="5"
-          >
-            <Box className="setting-row-main">
-              <Text
-                as="p"
-                size="2"
-                weight="medium"
-                className="setting-row-label"
-              >
-                当前版本
-              </Text>
-              <Text as="p" size="1" color="gray" className="setting-row-hint">
-                v{state?.currentVersion ?? '…'} ·{' '}
-                {installed
-                  ? '安装版，可自动更新'
-                  : portable
-                    ? '免安装版，需手动替换'
-                    : '正在识别安装方式'}
-              </Text>
-            </Box>
-            <Badge color={PHASE_COLOR[phase]} variant="soft">
-              {PHASE_LABEL[phase]}
-            </Badge>
+      <SettingsRow
+        label="启动时自动检查更新"
+        tooltip="启动约 10 秒后检查一次，不轮询；失败只写日志。"
+      >
+        <Switch
+          checked={preferences.updateAutoCheckEnabled}
+          aria-label="启动时自动检查更新"
+          onCheckedChange={(checked) =>
+            patch({ updateAutoCheckEnabled: checked })
+          }
+        />
+      </SettingsRow>
+
+      <div className="settings-card-footer update-state" aria-live="polite">
+        <Flex align="start" justify="between" gap="3" wrap="wrap">
+          <Flex align="center" gap="2" className="update-status">
+            {busy ? <Spinner size="1" /> : null}
+            <Text
+              as="p"
+              size="2"
+              weight="medium"
+              className="settings-row-label"
+            >
+              {statusText}
+            </Text>
           </Flex>
-
-          <Flex
-            className="setting-row"
-            align="center"
-            justify="between"
-            gap="5"
-          >
-            <Box className="setting-row-main">
-              <Text
-                as="p"
-                size="2"
-                weight="medium"
-                className="setting-row-label"
-              >
-                启动时自动检查更新
-              </Text>
-              <Text as="p" size="1" color="gray" className="setting-row-hint">
-                启动约 10 秒后检查一次，不轮询；失败只写日志。
-              </Text>
-            </Box>
-            <Switch
-              checked={preferences.updateAutoCheckEnabled}
-              aria-label="启动时自动检查更新"
-              onCheckedChange={(checked) =>
-                patch({ updateAutoCheckEnabled: checked })
-              }
-            />
-          </Flex>
-
-          <Box className="update-state" aria-live="polite">
-            <Flex align="center" gap="2">
-              {busy ? <Spinner size="1" /> : null}
-              <Text
-                as="p"
-                size="2"
-                weight="medium"
-                className="setting-row-label"
-              >
-                {statusText}
-              </Text>
-            </Flex>
-
-            {phase === 'downloading' ? (
-              <>
-                <Progress value={state?.percent ?? 0} />
-                <Text as="p" size="1" color="gray" className="tabular">
-                  {state?.percent ?? 0}% ·{' '}
-                  {formatFileSize(state?.transferred ?? 0)} /{' '}
-                  {formatFileSize(state?.total ?? 0)} ·{' '}
-                  {formatFileSize(state?.bytesPerSecond ?? 0)}/s
-                </Text>
-              </>
-            ) : null}
-
-            {state?.lastCheckedAt ? (
-              <Text as="p" size="1" color="gray">
-                上次检查：{formatClockTime(state.lastCheckedAt)}
-              </Text>
-            ) : null}
-          </Box>
 
           <Flex className="update-actions" gap="2" wrap="wrap">
             <Button
@@ -284,63 +225,80 @@ export const UpdateSettingsSection = () => {
               </Button>
             ) : null}
           </Flex>
+        </Flex>
 
-          {portable && phase === 'available' ? (
-            <Callout.Root color="amber" className="update-callout">
-              <Callout.Icon>
-                <InfoCircledIcon width={16} height={16} />
-              </Callout.Icon>
-              <Callout.Text>
-                当前为免安装版，无法自动安装。请下载 zip，关闭应用后覆盖原目录；
-                数据保存在 %APPDATA%\QuickFetch，不会丢失。
-              </Callout.Text>
-            </Callout.Root>
-          ) : null}
+        {phase === 'downloading' ? (
+          <>
+            <Progress value={state?.percent ?? 0} />
+            <Text as="p" size="1" color="gray" className="tabular">
+              {state?.percent ?? 0}% · {formatFileSize(state?.transferred ?? 0)}{' '}
+              / {formatFileSize(state?.total ?? 0)} ·{' '}
+              {formatFileSize(state?.bytesPerSecond ?? 0)}/s
+            </Text>
+          </>
+        ) : null}
 
-          {installed && phase === 'downloaded' && !postponed ? (
-            <Callout.Root color="green" className="update-callout">
-              <Callout.Icon>
-                <InfoCircledIcon width={16} height={16} />
-              </Callout.Icon>
-              <Callout.Text>
-                <Flex align="center" justify="between" gap="3" wrap="wrap">
-                  <Text>
-                    更新 v{state?.availableVersion ?? ''} 已下载，重启后生效。
-                  </Text>
-                  <Button
-                    variant="soft"
-                    color="gray"
-                    size="1"
-                    onClick={() =>
-                      setPostponedVersion(state?.availableVersion ?? null)
-                    }
-                  >
-                    稍后
-                  </Button>
-                </Flex>
-              </Callout.Text>
-            </Callout.Root>
-          ) : null}
+        {state?.lastCheckedAt ? (
+          <Text as="p" size="1" color="gray">
+            上次检查：{formatClockTime(state.lastCheckedAt)}
+          </Text>
+        ) : null}
 
-          {state?.blockedByTasks && state.blockedReason ? (
-            <Callout.Root color="amber" className="update-callout">
-              <Callout.Icon>
-                <ExclamationTriangleIcon width={16} height={16} />
-              </Callout.Icon>
-              <Callout.Text>{state.blockedReason}</Callout.Text>
-            </Callout.Root>
-          ) : null}
+        {portable && phase === 'available' ? (
+          <Callout.Root color="amber" className="update-callout">
+            <Callout.Icon>
+              <InfoCircledIcon width={16} height={16} />
+            </Callout.Icon>
+            <Callout.Text>
+              当前为免安装版，无法自动安装。请下载 zip，关闭应用后覆盖原目录；
+              数据保存在 %APPDATA%\QuickFetch，不会丢失。
+            </Callout.Text>
+          </Callout.Root>
+        ) : null}
 
-          {phase === 'error' && state?.error ? (
-            <Callout.Root color="red" role="alert" className="update-callout">
-              <Callout.Icon>
-                <ExclamationTriangleIcon width={16} height={16} />
-              </Callout.Icon>
-              <Callout.Text>{state.error}</Callout.Text>
-            </Callout.Root>
-          ) : null}
-        </PanelBody>
-      </Panel>
-    </Box>
+        {installed && phase === 'downloaded' && !postponed ? (
+          <Callout.Root color="green" className="update-callout">
+            <Callout.Icon>
+              <InfoCircledIcon width={16} height={16} />
+            </Callout.Icon>
+            <Callout.Text>
+              <Flex align="center" justify="between" gap="3" wrap="wrap">
+                <Text>
+                  更新 v{state?.availableVersion ?? ''} 已下载，重启后生效。
+                </Text>
+                <Button
+                  variant="soft"
+                  color="gray"
+                  size="1"
+                  onClick={() =>
+                    setPostponedVersion(state?.availableVersion ?? null)
+                  }
+                >
+                  稍后
+                </Button>
+              </Flex>
+            </Callout.Text>
+          </Callout.Root>
+        ) : null}
+
+        {state?.blockedByTasks && state.blockedReason ? (
+          <Callout.Root color="amber" className="update-callout">
+            <Callout.Icon>
+              <ExclamationTriangleIcon width={16} height={16} />
+            </Callout.Icon>
+            <Callout.Text>{state.blockedReason}</Callout.Text>
+          </Callout.Root>
+        ) : null}
+
+        {phase === 'error' && state?.error ? (
+          <Callout.Root color="red" role="alert" className="update-callout">
+            <Callout.Icon>
+              <ExclamationTriangleIcon width={16} height={16} />
+            </Callout.Icon>
+            <Callout.Text>{state.error}</Callout.Text>
+          </Callout.Root>
+        ) : null}
+      </div>
+    </SettingsGroup>
   )
 }

@@ -1,0 +1,34 @@
+/* 设置分区：标题 + 白卡。 */
+
+.settings-group {
+  scroll-margin-top: 16px;
+}
+
+.settings-group + .settings-group {
+  margin-top: 30px;
+}
+
+.settings-group-title {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--gray-12);
+}
+
+.settings-card {
+  overflow: hidden;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px var(--gray-a2);
+}
+
+/* 卡片底部区域：状态、进度与操作，不强行塞进右侧控件位 */
+.settings-card-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--app-border);
+}

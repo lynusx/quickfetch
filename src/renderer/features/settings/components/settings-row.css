@@ -1,0 +1,67 @@
+/* 设置行：左侧标签与说明，右侧控件。 */
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 52px;
+  padding: 10px 16px;
+}
+
+.settings-row + .settings-row {
+  border-top: 1px solid var(--app-border);
+}
+
+.settings-row-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.settings-row-label-line {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.settings-row-label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--gray-12);
+}
+
+.settings-row-info {
+  flex-shrink: 0;
+  color: var(--gray-9);
+}
+
+.settings-row-hint {
+  margin: 3px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--gray-10);
+}
+
+.settings-row-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 整行展开：RadioCards 等需要宽度的控件 */
+.settings-row-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.settings-row-stacked .settings-row-control {
+  width: 100%;
+}
+
+.settings-row-stacked .settings-row-control > * {
+  width: 100%;
+}

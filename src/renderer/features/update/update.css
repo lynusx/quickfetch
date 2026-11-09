@@ -1,14 +1,18 @@
 .update-state {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  min-width: 0;
+}
+
+.update-status {
   min-width: 0;
 }
 
 .update-actions {
-  margin-top: 4px;
+  margin-top: 0;
 }
 
 .update-callout {
-  margin-top: 12px;
+  margin-top: 2px;
 }
