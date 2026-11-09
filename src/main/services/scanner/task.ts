@@ -788,15 +788,14 @@ export class ScanTaskRunner {
 
     if (!matchedTypes.length) {
       branch.status = 'empty'
+      branch.emptyReason = 'types-missing'
       branch.brokenAt = '类型'
       branch.message = typeSeen.size
         ? `所选时段下没有所选类型，实际存在：${summarize([...typeSeen])}`
         : '所选时段下没有类型目录'
-    } else {
-      // 类型目录确实找到了，只是还没读文件明细；先占位，
-      // 由 collectDetails 决定是“目录在但没图”还是命中。
-      branch.brokenAt = '未命中'
     }
+    // 类型目录找到了、只是还没读文件明细：不写占位状态，
+    // 等 collectDetails 根据是否读到图片定性为 hit / no-images。
 
     this.touch(shiftDir, true)
   }
@@ -832,17 +831,13 @@ export class ScanTaskRunner {
 
     if (!matched) {
       branch.status = 'empty'
+      branch.emptyReason = 'types-missing'
       branch.brokenAt = '类型'
       branch.message = seen.size
         ? `该班次下没有所选类型，实际存在：${summarize(typeDirs)}`
         : '该班次下没有类型目录'
-    } else {
-      // 类型目录确实找到了，只是还没读文件明细。
-      // 这里必须把 brokenAt 标成「未命中」，否则下面 collectDetails 的兜底
-      // 会把这一格留在「类型」上，界面显示成"没有所选类型"——
-      // 现场看到的"明明有色斑B- 却说没有这个类型"就是这么来的。
-      branch.brokenAt = '未命中'
     }
+    // 类型目录找到了、只是还没读文件明细：交给 collectDetails 定性。
 
     this.touch(shiftDir, true)
   }
@@ -905,15 +900,13 @@ export class ScanTaskRunner {
 
       // 探测阶段已经定性的「没有所选类型 / 该班次下没有类型」不要动：
       // 这类分支压根没排进待读队列，一张图都没有是必然的，
-      // 硬改成「未命中」会把正确的诊断文案覆盖成"目录在、只是没图"，
+      // 硬改成 no-images 会把正确的诊断文案覆盖成"目录在、只是没图"，
       // 用户照着去查那个类型目录，结果那里根本不存在。
-      if (branch.brokenAt === '类型') continue
+      if (branch.emptyReason === 'types-missing') continue
 
       // 走到这里说明类型目录找到了、但逐目录读下来一张图都没有。
-      // 必须改写而不是沿用旧状态：探测阶段留下的「未命中」只是占位，
-      // 在这一步才能确定是"目录在、没图"。
       branch.status = 'empty'
-      branch.brokenAt = '未命中'
+      branch.emptyReason = 'no-images'
     }
 
     // 兜底文案统一在最后写，而不是塞在上面的循环里：
@@ -927,7 +920,7 @@ export class ScanTaskRunner {
       if (branch.status !== 'empty') continue
       // 「类型目录不存在」「该班次下没有类型」这两类结论在探测阶段就定了，
       // 与"目录在但没图"不是一回事，保持原样
-      if (branch.brokenAt !== '未命中') continue
+      if (branch.emptyReason !== 'no-images') continue
 
       branch.message = noImageMessage(
         this.params.types.filter((type) =>
@@ -983,6 +976,7 @@ export class ScanTaskRunner {
     branch.matchedDirs += 1
     branch.images += images.length
     branch.status = 'hit'
+    branch.emptyReason = undefined
     this.progress.dirsHit += 1
 
     const segments = this.context.resolver.segments(item.machine, item.dir)

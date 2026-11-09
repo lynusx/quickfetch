@@ -365,6 +365,14 @@ export interface ScanBranch {
   /** 机台标识。EL 是机台目录名；力禧特、利珀、森标 AOI 是「厂区/机台」复合键 */
   machine: string
   status: 'hit' | 'empty' | 'missing' | 'unreachable' | 'skipped'
+  /**
+   * empty 的具体原因：
+   * - types-missing：所选类型一个都不存在（探测阶段就能定性）
+   * - no-images：类型目录找到了，但逐目录读下来没有图片
+   *
+   * 新记录写这里；旧历史没有该字段时由渲染层按 brokenAt 兼容。
+   */
+  emptyReason?: 'types-missing' | 'no-images'
   /** 断链发生在哪一层，用于精确提示 */
   brokenAt?:
     | 'EL'
@@ -376,7 +384,7 @@ export interface ScanBranch {
     | '时段'
     | '等级'
     | '类型'
-    /** 类型目录都找到了，但里面没图片文件 */
+    /** @deprecated 旧记录用它表示「目录在但没图」，新记录改读 emptyReason */
     | '未命中'
   /**
    * 不可达的具体原因。仅 unreachable 时有值，界面按它给出不同提示：

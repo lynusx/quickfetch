@@ -949,7 +949,8 @@ const scanTests = async () => {
 
     const branch = snap.branches[0]
     assert.equal(branch.status, 'empty')
-    assert.equal(branch.brokenAt, '未命中', `实际 ${branch.brokenAt}`)
+    assert.equal(branch.emptyReason, 'no-images')
+    assert.equal(branch.brokenAt, undefined, '新结果不再写「未命中」哨兵')
     assert.match(branch.message ?? '', /没有图片文件/)
     // 文案必须给出可读信息：说清"检查了几个目录"并列出实际存在的类型，
     // 不能只丢一串全 0 的数字（现场第一版就是「已匹配 0 个目录，共 0 张」）
@@ -1068,7 +1069,7 @@ const scanTests = async () => {
   })
 
   await test('状态文案: 短文案与图片列映射', async () => {
-    const { branchSummary } =
+    const { branchSummary, emptyReasonOf } =
       await import('../src/renderer/features/scan/components/scanStatus')
 
     const make = (patch: Record<string, unknown>) =>
@@ -1122,6 +1123,31 @@ const scanTests = async () => {
       branchSummary(make({ status: 'empty', brokenAt: '类型' }), undefined),
       { statusText: '没有所选类型', imagesText: '0 张' },
     )
+
+    assert.deepEqual(
+      branchSummary(
+        make({ status: 'empty', emptyReason: 'no-images' }),
+        undefined,
+      ),
+      { statusText: '目录内无图片', imagesText: '0 张' },
+    )
+
+    assert.deepEqual(
+      branchSummary(
+        make({ status: 'empty', emptyReason: 'types-missing' }),
+        undefined,
+      ),
+      { statusText: '没有所选类型', imagesText: '0 张' },
+    )
+
+    assert.equal(emptyReasonOf({ emptyReason: 'no-images' }), 'no-images')
+    assert.equal(
+      emptyReasonOf({ emptyReason: 'types-missing' }),
+      'types-missing',
+    )
+    assert.equal(emptyReasonOf({ brokenAt: '未命中' }), 'no-images')
+    assert.equal(emptyReasonOf({ brokenAt: '类型' }), 'types-missing')
+    assert.equal(emptyReasonOf({}), null)
 
     assert.deepEqual(
       branchSummary(

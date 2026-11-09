@@ -116,6 +116,22 @@ export interface BranchSummary {
 }
 
 /**
+ * empty 分支的原因：新记录读 emptyReason；旧记录按 brokenAt 兼容。
+ *
+ * 旧记录用 brokenAt='类型' 表示「类型都不存在」，用 '未命中' 表示
+ * 「目录在但没图」；这两种字符串不再作为新任务的控制信号。
+ */
+export const emptyReasonOf = (
+  branch: Pick<ScanBranch, 'emptyReason' | 'brokenAt'>,
+): 'types-missing' | 'no-images' | null => {
+  if (branch.emptyReason) return branch.emptyReason
+  if (branch.brokenAt === '类型') return 'types-missing'
+  if (branch.brokenAt === '未命中') return 'no-images'
+
+  return null
+}
+
+/**
  * 机台结果行的展示文案。
  *
  * 状态列只回答「这行是什么情况」，不再把完整路径与「实际存在：…」铺出来；
@@ -146,11 +162,13 @@ export const branchSummary = (
   }
 
   if (branch.status === 'empty') {
+    const emptyReason = emptyReasonOf(branch)
+
     return {
       statusText:
-        branch.brokenAt === '类型'
+        emptyReason === 'types-missing'
           ? '没有所选类型'
-          : branch.brokenAt === '未命中'
+          : emptyReason === 'no-images'
             ? '目录内无图片'
             : '无图片',
       imagesText: '0 张',
