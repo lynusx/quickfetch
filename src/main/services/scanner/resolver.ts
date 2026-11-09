@@ -17,6 +17,7 @@ import { splitMachine } from '../discovery/shortcuts'
 import { readDirSafe } from './fsx'
 import { classifyFailureStatuses, describePrefixFailure } from './diagnosis'
 import { readShareCandidate } from './shareProbe'
+import type { DirectoryReader } from './shareProbe'
 import type { DirReadResult } from './fsx'
 import { logger } from '../log'
 
@@ -158,6 +159,8 @@ export interface LxtResolverOptions {
   date: string
   /** 共享名发生变化（包括清空）时回写配置 */
   onShare: (machine: string, share: ShareState<LxtShare>, host: string) => void
+  /** 目录读取注入；缺省走真实 fs，测试用它锁定探测路径与调用次数 */
+  read?: DirectoryReader
 }
 
 /** 力禧特：每台机器一个 IP，第二层的共享名逐台探测 */
@@ -209,6 +212,7 @@ const readLxtCandidate = async (
   host: string,
   share: LxtShare,
   taskDate: string,
+  read?: DirectoryReader,
 ): Promise<LxtCandidate> => {
   return readShareCandidate({
     host,
@@ -216,6 +220,7 @@ const readLxtCandidate = async (
     child: LXT_FIXED_DIR,
     taskDate,
     parseDate: parseLxtDate,
+    read,
   })
 }
 
@@ -252,9 +257,10 @@ const pickLxtShare = (candidates: LxtCandidate[]): LxtShare | null => {
 export const probeLxtShare = async (
   host: string,
   date: string,
+  read?: DirectoryReader,
 ): Promise<ShareState<LxtShare>> => {
   const candidates = await Promise.all(
-    LXT_SHARES.map((share) => readLxtCandidate(host, share, date)),
+    LXT_SHARES.map((share) => readLxtCandidate(host, share, date, read)),
   )
 
   const picked = pickLxtShare(candidates)
@@ -293,10 +299,11 @@ export const probePlShare = async (
   machineName: string,
   plant: string,
   date: string,
+  read?: DirectoryReader,
 ): Promise<ShareState> => {
   const names = plShareCandidates(machineName, plant)
   const probed = await Promise.all(
-    names.map((name, index) => readPlCandidate(host, name, date, index)),
+    names.map((name, index) => readPlCandidate(host, name, date, index, read)),
   )
 
   const picked = pickPlCandidate(probed)
@@ -413,7 +420,7 @@ export const createLxtResolver = (
       if (!cached) {
         const candidates = await Promise.all(
           LXT_SHARES.map((share) =>
-            readLxtCandidate(host, share, options.date),
+            readLxtCandidate(host, share, options.date, options.read),
           ),
         )
         const picked = pickLxtShare(candidates)
@@ -445,7 +452,12 @@ export const createLxtResolver = (
         return ok(host, picked)
       }
 
-      const current = await readLxtCandidate(host, cached, options.date)
+      const current = await readLxtCandidate(
+        host,
+        cached,
+        options.date,
+        options.read,
+      )
 
       // 缓存可用且包含本次日期：固定使用，不再为另一边多付一次探测
       if (current.status === 'ok' && current.hasTaskDate) {
@@ -453,7 +465,12 @@ export const createLxtResolver = (
       }
 
       const otherShare: LxtShare = cached === 'el' ? 'SaveImages' : 'el'
-      const other = await readLxtCandidate(host, otherShare, options.date)
+      const other = await readLxtCandidate(
+        host,
+        otherShare,
+        options.date,
+        options.read,
+      )
 
       if (current.status === 'ok') {
         if (other.status === 'ok') {
@@ -514,6 +531,8 @@ export interface PlResolverOptions {
   date: string
   /** 标识目录发生变化（包括清空）时回写配置 */
   onShare: (machine: string, share: ShareState, host: string) => void
+  /** 目录读取注入；缺省走真实 fs，测试用它锁定探测路径与调用次数 */
+  read?: DirectoryReader
 }
 
 /**
@@ -578,6 +597,7 @@ const readPlCandidate = (
   share: string,
   taskDate: string,
   order: number,
+  read?: DirectoryReader,
 ): Promise<PlCandidate> =>
   readShareCandidate({
     host,
@@ -586,6 +606,7 @@ const readPlCandidate = (
     taskDate,
     parseDate: parsePlDate,
     order,
+    read,
   })
 
 /** 多个候选可用时：本次日期优先 → 近30天 → 候选顺序（缓存/首选名靠前） */
@@ -624,12 +645,13 @@ const probePlCandidates = async (
   plant: string,
   taskDate: string,
   cached: string | null,
+  read?: DirectoryReader,
 ): Promise<PlProbeResult> => {
   const candidates: PlCandidate[] = []
   const tried: string[] = []
 
   if (cached) {
-    const current = await readPlCandidate(host, cached, taskDate, 0)
+    const current = await readPlCandidate(host, cached, taskDate, 0, read)
     candidates.push(current)
     tried.push(cached)
 
@@ -646,7 +668,7 @@ const probePlCandidates = async (
   )
   const probed = await Promise.all(
     names.map((name, index) =>
-      readPlCandidate(host, name, taskDate, index + 1),
+      readPlCandidate(host, name, taskDate, index + 1, read),
     ),
   )
   candidates.push(...probed)
@@ -752,6 +774,7 @@ export const createPlResolver = (
         plant,
         options.date,
         cached,
+        options.read,
       )
       const picked = pickPlCandidate(probe.candidates)
       const cachedResult = cached

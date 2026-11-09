@@ -33,6 +33,9 @@ import {
 import {
   createAoiResolver,
   createLxtResolver,
+  createPlResolver,
+  probeLxtShare,
+  probePlShare,
 } from '../src/main/services/scanner/resolver'
 import { createBreaker } from '../src/main/services/scanner/breaker'
 import {
@@ -110,6 +113,7 @@ import {
 import { formatEta } from '../src/renderer/utils/common'
 import type { CopyTask } from '../src/shared/ipc'
 import type { ScanTask } from '../src/shared/ipc'
+import type { LxtShare, ShareState } from '../src/shared/ipc'
 import { canCopyScanStatus } from '../src/shared/ipc'
 import { summarizeIpcArgs } from '../src/main/ipc/log-summary'
 import {
@@ -3991,6 +3995,174 @@ const discoveryTests = async () => {
   })
 }
 
+const resolverSeamTests = async () => {
+  const result = (
+    status: DirReadResult['status'],
+    dirs: string[] = [],
+  ): DirReadResult => ({
+    status,
+    dirs,
+    files: [],
+    elapsedMs: 0,
+  })
+
+  await test('resolver: LXT 缓存命中本次日期时只读缓存候选', async () => {
+    const calls: string[] = []
+    const persisted: Array<string | null> = []
+    const host = '\\\\10.0.0.1'
+
+    const resolver = createLxtResolver({
+      hosts: new Map([['东区/7A', host]]),
+      shares: new Map<string, ShareState<LxtShare>>([['东区/7A', 'el']]),
+      date: '20261104',
+      onShare: (_machine, share) => persisted.push(share),
+      read: async (path) => {
+        calls.push(path)
+        return path.endsWith('A-01-B')
+          ? result('ok', ['20261104'])
+          : result('ok')
+      },
+    })
+
+    const resolved = await resolver.resolve('东区/7A')
+
+    assert.equal(resolved.ok, true)
+    assert.match(resolved.base, /\\el\\A-01-B$/)
+    assert.equal(calls.length, 2, '只读缓存候选的共享根与固定层')
+    assert.equal(persisted.length, 0, '命中缓存不应回写')
+  })
+
+  await test('resolver: LXT 空串缓存直接给结论，零读取', async () => {
+    const calls: string[] = []
+
+    const resolver = createLxtResolver({
+      hosts: new Map([['东区/7A', '\\\\10.0.0.1']]),
+      shares: new Map<string, ShareState<LxtShare>>([['东区/7A', '']]),
+      date: '20261104',
+      onShare: () => undefined,
+      read: async (path) => {
+        calls.push(path)
+        return result('ok')
+      },
+    })
+
+    const resolved = await resolver.resolve('东区/7A')
+
+    assert.equal(resolved.ok, false)
+    assert.equal(resolved.unreachable, 'share')
+    assert.equal(calls.length, 0)
+  })
+
+  await test('resolver: LXT 缓存不可达时切到另一边并回写', async () => {
+    const persisted: Array<string | null> = []
+
+    const resolver = createLxtResolver({
+      hosts: new Map([['东区/7A', '\\\\10.0.0.1']]),
+      shares: new Map<string, ShareState<LxtShare>>([['东区/7A', 'el']]),
+      date: '20261104',
+      onShare: (_machine, share) => persisted.push(share),
+      read: async (path) => {
+        if (path.includes('\\el')) return result('unreachable')
+        return path.endsWith('A-01-B')
+          ? result('ok', ['20261104'])
+          : result('ok')
+      },
+    })
+
+    const resolved = await resolver.resolve('东区/7A')
+
+    assert.equal(resolved.ok, true)
+    assert.match(resolved.base, /SaveImages/)
+    assert.deepEqual(persisted, ['SaveImages'])
+  })
+
+  await test('resolver: LXT 两边都没有固定层时落盘空串', async () => {
+    const persisted: Array<string | null> = []
+
+    const resolver = createLxtResolver({
+      hosts: new Map([['东区/7A', '\\\\10.0.0.1']]),
+      shares: new Map<string, ShareState<LxtShare>>([['东区/7A', null]]),
+      date: '20261104',
+      onShare: (_machine, share) => persisted.push(share),
+      read: async (path) => result(path.endsWith('A-01-B') ? 'missing' : 'ok'),
+    })
+
+    const resolved = await resolver.resolve('东区/7A')
+
+    assert.equal(resolved.ok, false)
+    assert.equal(resolved.unreachable, 'share')
+    assert.deepEqual(persisted, [''])
+  })
+
+  await test('resolver: PL 缓存命中本次日期时提前返回', async () => {
+    const calls: string[] = []
+
+    const resolver = createPlResolver({
+      hosts: new Map([['东区/3C', '\\\\10.0.0.2']]),
+      shares: new Map<string, ShareState>([['东区/3C', 'pl-3c']]),
+      date: '20261104',
+      onShare: () => undefined,
+      read: async (path) => {
+        calls.push(path)
+        return path.endsWith('Matting')
+          ? result('ok', ['2026.11.04'])
+          : result('ok')
+      },
+    })
+
+    const resolved = await resolver.resolve('东区/3C')
+
+    assert.equal(resolved.ok, true)
+    assert.match(resolved.base, /pl-3c\\Matting$/)
+    assert.equal(calls.length, 2)
+  })
+
+  await test('resolver: PL 缓存名 missing 且其它候选认证失败时回退 null', async () => {
+    const host = '\\\\10.0.0.2'
+    const persisted: Array<string | null> = []
+
+    const resolver = createPlResolver({
+      hosts: new Map([['东区/3C', host]]),
+      shares: new Map<string, ShareState>([['东区/3C', 'pl-3c']]),
+      date: '20261104',
+      onShare: (_machine, share) => persisted.push(share),
+      read: async (path) => {
+        if (path.includes(`${host}\\pl-3c`)) return result('missing')
+        return result('unreadable')
+      },
+    })
+
+    const resolved = await resolver.resolve('东区/3C')
+
+    assert.equal(resolved.ok, false)
+    assert.equal(resolved.unreachable, 'auth')
+    assert.deepEqual(persisted, [null], '缓存名失效后回退为未探测')
+  })
+
+  await test('resolver: probe 函数同样接受注入 reader', async () => {
+    const lxt = await probeLxtShare('\\\\10.0.0.3', '20261104', async (path) =>
+      path.endsWith('SaveImages\\A-01-B')
+        ? result('ok', ['20261104'])
+        : result('ok'),
+    )
+
+    assert.equal(lxt, 'SaveImages')
+
+    const pl = await probePlShare(
+      '\\\\10.0.0.4',
+      '3C',
+      '东区',
+      '20261104',
+      async (path) =>
+        path.endsWith('pl-03c\\Matting')
+          ? result('ok', ['2026.11.04'])
+          : result('ok'),
+    )
+
+    assert.equal(pl, 'pl-03c')
+  })
+}
+
 /* ---------------------------------------------------------------- 主流程 */
 
 const main = async () => {
@@ -4048,6 +4220,8 @@ const main = async () => {
   await excelPipelineTests()
   console.log('\n[27] 入口类别装配')
   await discoveryTests()
+  console.log('\n[28] resolver read seam')
+  await resolverSeamTests()
 
   const failed = results.filter((r) => !r.ok)
   console.log(`\n共 ${results.length} 项，失败 ${failed.length} 项`)
