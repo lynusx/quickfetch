@@ -2,23 +2,18 @@ import { BrowserWindow, app, dialog } from 'electron'
 import { basename } from 'node:path'
 
 import type {
-  AoiSetupResult,
   AppPreferences,
   AppSettings,
   CategoryConfig,
   DirectoryInfo,
+  EntrySetupResult,
+  LxtShare,
   LxtSetupResult,
-  PlSetupResult,
   ScanCategory,
+  ShareState,
 } from '../../shared/ipc'
-import {
-  discoverAoi,
-  discoverLxt,
-  discoverPl,
-  mergeAoiMachines,
-  mergeLxtMachines,
-  mergePlMachines,
-} from '../services/discovery'
+import { ENTRY_DESCRIPTORS } from '../services/discovery/categories'
+import type { EntryCategory } from '../services/discovery/categories'
 import type {
   DiscoveredLink,
   Discovery,
@@ -33,9 +28,6 @@ import {
   savePreferences,
   saveRootPath,
   saveTypeCatalog,
-  updateAoi,
-  updateLxt,
-  updatePl,
 } from '../services/settings'
 import { applyUpdatePreferences } from '../services/update'
 import { splitMachine } from '../services/discovery/shortcuts'
@@ -92,26 +84,64 @@ const setupEntry = async <TMachine, TSettings extends CategoryConfig<TMachine>>(
   return { settings, added, removed, relocated }
 }
 
-const setupLxt = (entryRoot: string): Promise<LxtSetupResult> =>
-  setupEntry(entryRoot, {
-    discover: discoverLxt,
-    merge: mergeLxtMachines,
-    update: updateLxt,
-  })
+const setupByCategory = (
+  category: EntryCategory,
+  entryRoot: string,
+): Promise<EntrySetupResult> => {
+  switch (category) {
+    case 'lxt':
+      return setupEntry(entryRoot, ENTRY_DESCRIPTORS.lxt)
+    case 'pl':
+      return setupEntry(entryRoot, ENTRY_DESCRIPTORS.pl)
+    case 'aoi':
+      return setupEntry(entryRoot, ENTRY_DESCRIPTORS.aoi)
+  }
+}
 
-const setupPl = (entryRoot: string): Promise<PlSetupResult> =>
-  setupEntry(entryRoot, {
-    discover: discoverPl,
-    merge: mergePlMachines,
-    update: updatePl,
-  })
+const refreshByCategory = async (
+  category: EntryCategory,
+): Promise<EntrySetupResult> => {
+  const current = await readSettings()
+  const config = current.categories[category]
 
-const setupAoi = (entryRoot: string): Promise<AoiSetupResult> =>
-  setupEntry(entryRoot, {
-    discover: discoverAoi,
-    merge: mergeAoiMachines,
-    update: updateAoi,
-  })
+  if (!config.entryRoot) {
+    throw new Error(
+      `尚未配置${ENTRY_DESCRIPTORS[category].label}入口目录，请先选择入口`,
+    )
+  }
+
+  return setupByCategory(category, config.entryRoot)
+}
+
+interface ReprobeTarget {
+  key: string
+  host: string
+  stale: boolean
+}
+
+interface ReprobeStrategy {
+  machines: (settings: AppSettings) => ReprobeTarget[]
+  probe: (machine: ReprobeTarget, date: string) => Promise<ShareState>
+  remember: (key: string, share: ShareState, host: string) => Promise<void>
+}
+
+/** 重新探测共享的类别差异：力禧特固定候选，利珀要从复合键拆厂区与线别名 */
+const REPROBE_STRATEGIES: Record<'lxt' | 'pl', ReprobeStrategy> = {
+  lxt: {
+    machines: (settings) => settings.categories.lxt.machines,
+    probe: (machine, date) => probeLxtShare(machine.host, date),
+    remember: (key, share, host) =>
+      rememberLxtShare(key, share as ShareState<LxtShare>, host),
+  },
+  pl: {
+    machines: (settings) => settings.categories.pl.machines,
+    probe: (machine, date) => {
+      const [plant, name] = splitMachine(machine.key)
+      return probePlShare(machine.host, name, plant, date)
+    },
+    remember: rememberPlShare,
+  },
+}
 
 export const registerSettingsIpc = (): void => {
   handle('getVersion', () => app.getVersion())
@@ -161,46 +191,22 @@ export const registerSettingsIpc = (): void => {
   )
 
   handle('setupLxtRoot', (_event, entryRoot: string) =>
-    setupLxt(entryRoot.trim()),
+    setupByCategory('lxt', entryRoot.trim()),
   )
 
-  handle('refreshLxtMachines', async () => {
-    const current = await readSettings()
-
-    if (!current.categories.lxt.entryRoot) {
-      throw new Error('尚未配置力禧特EL入口目录，请先选择入口')
-    }
-
-    return setupLxt(current.categories.lxt.entryRoot)
-  })
+  handle('refreshLxtMachines', () => refreshByCategory('lxt'))
 
   handle('setupPlRoot', (_event, entryRoot: string) =>
-    setupPl(entryRoot.trim()),
+    setupByCategory('pl', entryRoot.trim()),
   )
 
-  handle('refreshPlMachines', async () => {
-    const current = await readSettings()
-
-    if (!current.categories.pl.entryRoot) {
-      throw new Error('尚未配置利珀PL入口目录，请先选择入口')
-    }
-
-    return setupPl(current.categories.pl.entryRoot)
-  })
+  handle('refreshPlMachines', () => refreshByCategory('pl'))
 
   handle('setupAoiRoot', (_event, entryRoot: string) =>
-    setupAoi(entryRoot.trim()),
+    setupByCategory('aoi', entryRoot.trim()),
   )
 
-  handle('refreshAoiMachines', async () => {
-    const current = await readSettings()
-
-    if (!current.categories.aoi.entryRoot) {
-      throw new Error('尚未配置森标 AOI 入口目录，请先选择入口')
-    }
-
-    return setupAoi(current.categories.aoi.entryRoot)
-  })
+  handle('refreshAoiMachines', () => refreshByCategory('aoi'))
 
   /**
    * 强制重新探测共享目录并写回配置。
@@ -225,34 +231,20 @@ export const registerSettingsIpc = (): void => {
         String(today.getDate()).padStart(2, '0'),
       ].join('')
 
-      if (category === 'lxt') {
-        const targets = settings.categories.lxt.machines.filter(
+      const strategy = REPROBE_STRATEGIES[category]
+      const targets = strategy
+        .machines(settings)
+        .filter(
           (item) => !item.stale && (keys ? keys.includes(item.key) : true),
         )
 
-        for (const machine of targets) {
-          const share = await probeLxtShare(machine.host, date)
-
-          // null 表示读不通、结论不确定，保留旧缓存下次再试；
-          // '' 才表示「探过了，两边都没有」，正常落盘
-          if (share !== null) {
-            await rememberLxtShare(machine.key, share, machine.host)
-          }
-        }
-
-        return readSettings()
-      }
-
-      const targets = settings.categories.pl.machines.filter(
-        (item) => !item.stale && (keys ? keys.includes(item.key) : true),
-      )
-
       for (const machine of targets) {
-        const [plant, name] = splitMachine(machine.key)
-        const share = await probePlShare(machine.host, name, plant, date)
+        const share = await strategy.probe(machine, date)
 
+        // null 表示读不通、结论不确定，保留旧缓存下次再试；
+        // '' 才表示「探过了，两边都没有」，正常落盘
         if (share !== null) {
-          await rememberPlShare(machine.key, share, machine.host)
+          await strategy.remember(machine.key, share, machine.host)
         }
       }
 

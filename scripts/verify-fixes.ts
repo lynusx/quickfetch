@@ -62,6 +62,11 @@ import {
 } from '../src/main/services/scanner/history'
 import { deriveScanParams } from '../src/renderer/features/scan/scanParams'
 import { elPickableMachines } from '../src/renderer/features/scan/components/el-machine-model'
+import {
+  ENTRY_CATEGORIES,
+  ENTRY_DESCRIPTORS,
+} from '../src/main/services/discovery/categories'
+import { mergeLxtMachines } from '../src/main/services/discovery/lxt'
 import { decideSignatureChange } from '../src/renderer/features/scan/sessionTransitions'
 import { pruneMachinesToSide } from '../src/renderer/features/scan/stores/plantFilterStore'
 import {
@@ -3906,6 +3911,60 @@ const excelPipelineTests = async () => {
   })
 }
 
+const discoveryTests = async () => {
+  await test('入口类别: 描述表覆盖 lxt / pl / aoi', async () => {
+    assert.deepEqual([...ENTRY_CATEGORIES].sort(), ['aoi', 'lxt', 'pl'])
+
+    for (const category of ENTRY_CATEGORIES) {
+      const descriptor = ENTRY_DESCRIPTORS[category]
+
+      assert.ok(descriptor.label, category)
+      assert.equal(typeof descriptor.discover, 'function', category)
+      assert.equal(typeof descriptor.merge, 'function', category)
+      assert.equal(typeof descriptor.update, 'function', category)
+    }
+  })
+
+  await test('入口识别: 合并统计新增 / 移除 / 地址变化', async () => {
+    const previous = [
+      {
+        plant: '东区',
+        name: '7A',
+        key: '东区/7A',
+        host: '\\\\10.0.0.1',
+        share: 'el' as const,
+        stale: false,
+      },
+      {
+        plant: '东区',
+        name: '7B',
+        key: '东区/7B',
+        host: '\\\\10.0.0.2',
+        share: null,
+        stale: false,
+      },
+    ]
+
+    const merged = mergeLxtMachines(previous, [
+      { plant: '东区', name: '7A', host: '\\\\10.0.0.9' },
+      { plant: '东区', name: '7C', host: '\\\\10.0.0.3' },
+    ])
+
+    assert.equal(merged.added, 1)
+    assert.equal(merged.removed, 1)
+    assert.equal(merged.relocated, 1)
+
+    const byKey = new Map(
+      merged.machines.map((machine) => [machine.key, machine]),
+    )
+
+    assert.equal(byKey.get('东区/7A')?.host, '\\\\10.0.0.9')
+    assert.equal(byKey.get('东区/7A')?.share, null, '地址变化必须清掉共享缓存')
+    assert.equal(byKey.get('东区/7B')?.stale, true)
+    assert.equal(byKey.get('东区/7C')?.stale, false)
+  })
+}
+
 /* ---------------------------------------------------------------- 主流程 */
 
 const main = async () => {
@@ -3961,6 +4020,8 @@ const main = async () => {
   await scanReadModelTests()
   console.log('\n[26] Excel 预览管线')
   await excelPipelineTests()
+  console.log('\n[27] 入口类别装配')
+  await discoveryTests()
 
   const failed = results.filter((r) => !r.ok)
   console.log(`\n共 ${results.length} 项，失败 ${failed.length} 项`)

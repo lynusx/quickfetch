@@ -212,3 +212,23 @@ export const splitMachine = (machine: string): [string, string] => {
     ? ['', machine]
     : [machine.slice(0, slash), machine.slice(slash + 1)]
 }
+
+export interface ShortcutEntry<T extends MergeableMachine> {
+  discover: (entryRoot: string) => Promise<Discovery>
+  merge: (previous: T[], discovered: DiscoveredLink[]) => MergeResult<T>
+}
+
+/**
+ * 入口类类别的 adapter 工厂。
+ *
+ * 三个类别的识别/合并只差入口名与机台构造，状态机与跳过规则都留在
+ * discoverShortcutEntry / mergeDiscovered 里。
+ */
+export const createShortcutEntry = <T extends MergeableMachine>(
+  entryName: string,
+  createMachine: (link: DiscoveredLink, key: string) => T,
+): ShortcutEntry<T> => ({
+  discover: (entryRoot) => discoverShortcutEntry(entryRoot, entryName),
+  merge: (previous, discovered) =>
+    mergeDiscovered(previous, discovered, createMachine),
+})

@@ -1,7 +1,6 @@
 import type { PlMachine } from '../../../shared/ipc'
 
-import { discoverShortcutEntry, machineKey, mergeDiscovered } from './shortcuts'
-import type { DiscoveredLink, Discovery, MergeResult } from './shortcuts'
+import { createShortcutEntry, machineKey } from './shortcuts'
 
 /**
  * 利珀机台识别。
@@ -17,18 +16,14 @@ export const PL_ENTRY_NAME = '利珀PL'
 export const plKey = (plant: string, name: string): string =>
   machineKey(plant, name)
 
-export const discoverPl = (entryRoot: string): Promise<Discovery> =>
-  discoverShortcutEntry(entryRoot, PL_ENTRY_NAME)
+const entry = createShortcutEntry<PlMachine>(PL_ENTRY_NAME, (link, key) => ({
+  plant: link.plant,
+  name: link.name,
+  key,
+  host: link.host,
+  share: null,
+  stale: false,
+}))
 
-export const mergePlMachines = (
-  previous: PlMachine[],
-  discovered: DiscoveredLink[],
-): MergeResult<PlMachine> =>
-  mergeDiscovered<PlMachine>(previous, discovered, (link, key) => ({
-    plant: link.plant,
-    name: link.name,
-    key,
-    host: link.host,
-    share: null,
-    stale: false,
-  }))
+export const discoverPl = entry.discover
+export const mergePlMachines = entry.merge

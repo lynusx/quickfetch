@@ -1,7 +1,6 @@
 import type { AoiMachine } from '../../../shared/ipc'
 
-import { discoverShortcutEntry, machineKey, mergeDiscovered } from './shortcuts'
-import type { DiscoveredLink, Discovery, MergeResult } from './shortcuts'
+import { createShortcutEntry, machineKey } from './shortcuts'
 
 /**
  * 森标 AOI 机台识别。
@@ -17,18 +16,14 @@ export const AOI_ENTRY_NAME = '森标 AOI'
 export const aoiKey = (plant: string, name: string): string =>
   machineKey(plant, name)
 
-export const discoverAoi = (entryRoot: string): Promise<Discovery> =>
-  discoverShortcutEntry(entryRoot, AOI_ENTRY_NAME)
+const entry = createShortcutEntry<AoiMachine>(AOI_ENTRY_NAME, (link, key) => ({
+  plant: link.plant,
+  name: link.name,
+  key,
+  host: link.host,
+  share: null,
+  stale: false,
+}))
 
-export const mergeAoiMachines = (
-  previous: AoiMachine[],
-  discovered: DiscoveredLink[],
-): MergeResult<AoiMachine> =>
-  mergeDiscovered<AoiMachine>(previous, discovered, (link, key) => ({
-    plant: link.plant,
-    name: link.name,
-    key,
-    host: link.host,
-    share: null,
-    stale: false,
-  }))
+export const discoverAoi = entry.discover
+export const mergeAoiMachines = entry.merge

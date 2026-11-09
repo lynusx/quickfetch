@@ -1,7 +1,6 @@
 import type { LxtMachine } from '../../../shared/ipc'
 
-import { discoverShortcutEntry, machineKey, mergeDiscovered } from './shortcuts'
-import type { DiscoveredLink, Discovery, MergeResult } from './shortcuts'
+import { createShortcutEntry, machineKey } from './shortcuts'
 
 /**
  * 力禧特机台识别。
@@ -16,18 +15,14 @@ export const LXT_ENTRY_NAME = '力禧特EL'
 export const lxtKey = (plant: string, name: string): string =>
   machineKey(plant, name)
 
-export const discoverLxt = (entryRoot: string): Promise<Discovery> =>
-  discoverShortcutEntry(entryRoot, LXT_ENTRY_NAME)
+const entry = createShortcutEntry<LxtMachine>(LXT_ENTRY_NAME, (link, key) => ({
+  plant: link.plant,
+  name: link.name,
+  key,
+  host: link.host,
+  share: null,
+  stale: false,
+}))
 
-export const mergeLxtMachines = (
-  previous: LxtMachine[],
-  discovered: DiscoveredLink[],
-): MergeResult<LxtMachine> =>
-  mergeDiscovered<LxtMachine>(previous, discovered, (link, key) => ({
-    plant: link.plant,
-    name: link.name,
-    key,
-    host: link.host,
-    share: null,
-    stale: false,
-  }))
+export const discoverLxt = entry.discover
+export const mergeLxtMachines = entry.merge
