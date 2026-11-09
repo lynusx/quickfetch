@@ -158,19 +158,17 @@ export const FilterLevels = ({ filter, options }: FilterLevelsProps) => {
   )
 }
 
-interface FilterSlotsProps {
+interface FilterSlotsFieldProps {
   filter: PlantFilterStore
-  index: number
   /** 利珀的时段补零 */
   padded?: boolean
 }
 
-/** 时段：力禧特 / 利珀有这一层，切换班次时同步重置 */
-export const FilterSlots = ({
+/** 时段字段本体；EL 把它并入日期/班次 Step，入口类页面再包一层 Step */
+export const FilterSlotsField = ({
   filter,
-  index,
   padded = false,
-}: FilterSlotsProps) => {
+}: FilterSlotsFieldProps) => {
   const shift = filter((state) => state.shift)
   const slots = filter((state) => state.slots)
   const setSlots = filter((state) => state.setSlots)
@@ -193,46 +191,63 @@ export const FilterSlots = ({
   }, [shift, padded, setSlots])
 
   return (
+    <Field
+      label="时段"
+      icon={<ClockIcon width={13} height={13} />}
+      count={`${slots.length}/${availableSlots.length}`}
+      actions={
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            color="gray"
+            size="1"
+            disabled={slots.length === 0}
+            onClick={() => setSlots([])}
+          >
+            清空
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            color="gray"
+            size="1"
+            onClick={() => setSlots(availableSlots)}
+          >
+            <CheckIcon width={13} height={13} />
+            全选
+          </Button>
+        </>
+      }
+    >
+      <ChoiceList
+        columns={3}
+        value={slots}
+        onValueChange={setSlots}
+        options={availableSlots.map((slot) => ({
+          value: slot,
+          label: slot,
+        }))}
+      />
+    </Field>
+  )
+}
+
+interface FilterSlotsProps extends FilterSlotsFieldProps {
+  index: number
+}
+
+/** 时段：力禧特 / 利珀有独立 Step，EL 用 FilterSlotsField 并入日期 Step */
+export const FilterSlots = ({
+  filter,
+  index,
+  padded = false,
+}: FilterSlotsProps) => {
+  const slots = filter((state) => state.slots)
+
+  return (
     <Step index={index} done={slots.length > 0}>
-      <Field
-        label="时段"
-        icon={<ClockIcon width={13} height={13} />}
-        count={`${slots.length}/${availableSlots.length}`}
-        actions={
-          <>
-            <Button
-              type="button"
-              variant="ghost"
-              color="gray"
-              size="1"
-              disabled={slots.length === 0}
-              onClick={() => setSlots([])}
-            >
-              清空
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              color="gray"
-              size="1"
-              onClick={() => setSlots(availableSlots)}
-            >
-              <CheckIcon width={13} height={13} />
-              全选
-            </Button>
-          </>
-        }
-      >
-        <ChoiceList
-          columns={3}
-          value={slots}
-          onValueChange={setSlots}
-          options={availableSlots.map((slot) => ({
-            value: slot,
-            label: slot,
-          }))}
-        />
-      </Field>
+      <FilterSlotsField filter={filter} padded={padded} />
     </Step>
   )
 }
