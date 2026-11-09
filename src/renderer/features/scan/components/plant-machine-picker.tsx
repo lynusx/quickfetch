@@ -93,11 +93,18 @@ interface PlantMachinePickerProps {
   machineListActions?: ReactNode
   /** 机台列表的额外过滤（森标 AOI 的检测面） */
   machineFilter?: MachineListFilter
-  /** 只有文案不同，结构与交互两类完全一致 */
+  /** 只有文案不同，结构与交互完全一致；缺省值保持入口类页面的现有文案 */
   labels: {
     rootPlaceholder: string
     rootHint: string
     searchPlaceholder: string
+    rootLabel?: string
+    pickTitle?: string
+    refreshLabel?: string
+    emptyText?: string
+    unconfiguredText?: string
+    /** EL 在输入路径但尚未保存时显示「正在识别」；不传则保持入口类文案 */
+    recognizingText?: string
   }
   onChanged?: () => void
 }
@@ -196,7 +203,7 @@ const PlantMachinePicker = ({
 
   const pickRoot = async () => {
     const picked = await window.electronAPI.pickDirectory({
-      title: '选择快捷方式入口目录',
+      title: labels.pickTitle ?? '选择快捷方式入口目录',
     })
     if (!picked) return
 
@@ -228,7 +235,7 @@ const PlantMachinePicker = ({
   return (
     <Flex direction="column" gap="5">
       <Step index={1} done={configured}>
-        <Field label="入口目录" hint={labels.rootHint}>
+        <Field label={labels.rootLabel ?? '入口目录'} hint={labels.rootHint}>
           <TextField.Root
             size="2"
             value={draft}
@@ -337,10 +344,10 @@ const PlantMachinePicker = ({
                     variant="ghost"
                     color="gray"
                     size="1"
-                    aria-label="重新识别入口"
+                    aria-label={labels.refreshLabel ?? '重新识别入口'}
                     disabled={saving}
                     onClick={async () => announce(await onRefresh())}
-                    title="重新识别"
+                    title={labels.refreshLabel ?? '重新识别入口'}
                   >
                     <ReloadIcon width={13} height={13} />
                   </IconButton>
@@ -410,8 +417,10 @@ const PlantMachinePicker = ({
         ) : (
           <Text size="1" color="gray">
             {configured
-              ? '入口里没有可用机台，请检查快捷方式'
-              : '选择入口目录后会识别其中的机台'}
+              ? (labels.emptyText ?? '入口里没有可用机台，请检查快捷方式')
+              : labels.recognizingText && draft.trim()
+                ? labels.recognizingText
+                : (labels.unconfiguredText ?? '选择入口目录后会识别其中的机台')}
           </Text>
         )}
       </Step>

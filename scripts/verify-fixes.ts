@@ -61,6 +61,7 @@ import {
   toTask,
 } from '../src/main/services/scanner/history'
 import { deriveScanParams } from '../src/renderer/features/scan/scanParams'
+import { elPickableMachines } from '../src/renderer/features/scan/components/el-machine-model'
 import { decideSignatureChange } from '../src/renderer/features/scan/sessionTransitions'
 import { pruneMachinesToSide } from '../src/renderer/features/scan/stores/plantFilterStore'
 import {
@@ -2167,6 +2168,27 @@ const scanParamsTests = async () => {
 
     assert.equal(derived.ready, false)
     assert.ok(derived.missing.includes('类型（点「编辑」添加）'))
+  })
+
+  await test('EL picker: 机台映射保持纯机台名', async () => {
+    const mapped = elPickableMachines([
+      { name: 'A02-A', plant: 'east' },
+      { name: 'B01', plant: 'west' },
+    ])
+
+    assert.deepEqual(mapped[0], {
+      plant: 'east',
+      name: 'A02-A',
+      key: 'A02-A',
+      host: '',
+      share: null,
+      stale: false,
+    })
+    assert.ok(
+      mapped.every((item) => !item.key.includes('/')),
+      'key 带斜杠会让 elPlantOf 失配并清空选中',
+    )
+    assert.equal(mapped[1].plant, 'west')
   })
 }
 
