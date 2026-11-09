@@ -45,6 +45,17 @@ export const DEFAULT_COPY_CONCURRENCY = 6
 export const DEFAULT_COPY_BATCH_SIZE = 50
 
 /**
+ * 同一扫描任务是否已有未结束的复制。
+ *
+ * 复制只按 scanTaskId 互斥，不做全局互斥：不同扫描任务可以并行，
+ * 同一任务重试时也不会被自己挡住（重试复用同一个 runner）。
+ */
+export const isActiveCopyFor = (
+  scanTaskId: string,
+  task: Pick<CopyTask, 'scanTaskId' | 'status'>,
+): boolean => task.scanTaskId === scanTaskId && !isFinalCopyStatus(task.status)
+
+/**
  * 文件之间没有进度事件时，也按秒推一次快照。
  *
  * 一个几百 MB 的文件 copyFile 期间不会回调，如果只在文件完成时 touch，

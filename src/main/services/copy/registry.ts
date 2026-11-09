@@ -3,7 +3,7 @@ import { BrowserWindow } from 'electron'
 import type { CopyTask } from '../../../shared/ipc'
 import { IPC_EVENTS } from '../../../shared/ipc'
 
-import { CopyTaskRunner } from './copy'
+import { CopyTaskRunner, isActiveCopyFor } from './copy'
 import type { CopyRunnerOptions } from './copy'
 import { logger } from '../log'
 import { createTaskTable } from '../../utils/taskTable'
@@ -50,6 +50,13 @@ export const getCopyRunner = (id: string): CopyTaskRunner | null =>
 
 export const getCopyTask = (id: string): CopyTask | null =>
   runners.get(id)?.snapshot() ?? null
+
+/** 同一扫描任务正在进行/待开始的复制；主进程启动前用它做互斥 */
+export const getActiveCopyForScan = (scanTaskId: string): CopyTask | null =>
+  runners
+    .values()
+    .map((runner) => runner.snapshot())
+    .find((task) => isActiveCopyFor(scanTaskId, task)) ?? null
 
 /**
  * 运行中的复制任务。复制没有退出落盘逻辑，安装会直接打断写文件，

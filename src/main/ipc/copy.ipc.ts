@@ -6,8 +6,10 @@ import type {
   CopyTask,
   CopyTaskParams,
 } from '../../shared/ipc'
+import { canCopyScanStatus, isFinalScanStatus } from '../../shared/ipc'
 import {
   planPreview,
+  getActiveCopyForScan,
   getCopyRunner,
   selectCopyImages,
   startCopy,
@@ -67,6 +69,25 @@ export const registerCopyIpc = (): void => {
         throw new Error('请至少勾选一个机台')
       }
 
+      const scanTask = await getArchive().load(taskId)
+
+      if (!scanTask) {
+        throw new Error('扫描任务不存在或已过期，请重新扫描')
+      }
+
+      // 主进程是复制资格的最终口径：渲染层的按钮禁用可以被覆盖确认弹窗等入口绕过
+      if (!canCopyScanStatus(scanTask.status)) {
+        throw new Error(
+          isFinalScanStatus(scanTask.status)
+            ? '该扫描任务未正常完成，无法复制'
+            : '扫描任务尚未结束，请完成或取消后再复制',
+        )
+      }
+
+      if (getActiveCopyForScan(taskId)) {
+        throw new Error('该扫描任务已有复制任务在进行，请等待完成或取消')
+      }
+
       const images = await getArchive().images(taskId)
 
       if (!images.length) {
@@ -81,7 +102,6 @@ export const registerCopyIpc = (): void => {
       }
 
       const profile = loadFrom((await readSettings()).preferences)
-      const scanTask = await getArchive().load(taskId)
 
       return startCopy({
         scanTaskId: taskId,
@@ -89,7 +109,7 @@ export const registerCopyIpc = (): void => {
         params,
         images,
         // 类别从主进程的扫描快照派生，不信任渲染层传值
-        category: normalizeScanCategory(scanTask?.params.category),
+        category: normalizeScanCategory(scanTask.params.category),
         load: {
           concurrency: profile.copyConcurrency,
           batchSize: profile.copyBatchSize,

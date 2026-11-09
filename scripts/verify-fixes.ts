@@ -110,6 +110,7 @@ import {
   SpeedMeter,
   buildCopyPlan,
   filterByMachines,
+  isActiveCopyFor,
   planPreview,
 } from '../src/main/services/copy/copy'
 import {
@@ -811,6 +812,28 @@ const copyTests = async () => {
     assert.equal(
       new CopyTaskRunner({ ...base, category: 'lxt' }).snapshot().category,
       'lxt',
+    )
+  })
+
+  await test('复制互斥: 只按同一扫描任务挡未结束的复制', async () => {
+    for (const status of ['pending', 'running', 'paused'] as const) {
+      assert.equal(
+        isActiveCopyFor('scan-1', { scanTaskId: 'scan-1', status }),
+        true,
+        `${status} 应挡住同一扫描任务的再次复制`,
+      )
+    }
+    for (const status of ['completed', 'canceled', 'failed'] as const) {
+      assert.equal(
+        isActiveCopyFor('scan-1', { scanTaskId: 'scan-1', status }),
+        false,
+        `${status} 允许重新复制`,
+      )
+    }
+    assert.equal(
+      isActiveCopyFor('scan-2', { scanTaskId: 'scan-1', status: 'running' }),
+      false,
+      '不同扫描任务可以并行复制',
     )
   })
 }

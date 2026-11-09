@@ -2,7 +2,7 @@
   "name": "quickfetch",
   "productName": "QuickFetch",
   "private": true,
-  "version": "3.4.2",
+  "version": "3.4.3",
   "description": "RCA EL、力禧特EL、利珀PL、森标 AOI 图片拷贝与 Excel 解析桌面工具",
   "author": "lynusx",
   "type": "module",
