@@ -28,6 +28,7 @@ import {
   savePreferences,
   saveRootPath,
   saveTypeCatalog,
+  settingsFilePath,
 } from '../services/settings'
 import { applyUpdatePreferences } from '../services/update'
 import { splitMachine } from '../services/discovery/shortcuts'
@@ -171,6 +172,8 @@ export const registerSettingsIpc = (): void => {
   )
 
   handle('readSettings', () => readSettings())
+
+  handle('getSettingsPath', () => settingsFilePath())
 
   handle('saveRootPath', (_event, rootPath: string) => saveRootPath(rootPath))
 

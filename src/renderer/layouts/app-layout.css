@@ -11,12 +11,13 @@
 
 /*
  * 窗口顶部带：只承载系统窗口控件（macOS 红绿灯 / Windows 右上角按钮），
- * 不显示标题，整条白色并兼作窗口拖拽区。
- * 高度必须与主进程的 WINDOW_CHROME_HEIGHT 保持一致。
+ * 不显示标题，与画布同色并兼作窗口拖拽区。
+ * 高度必须与主进程的 WINDOW_CHROME_HEIGHT 保持一致；
+ * Windows 的窗口按钮覆盖层颜色在 src/main/index.ts 里同步为同一灰度。
  */
 .app-topbar {
   flex: 0 0 40px;
-  background: var(--app-surface);
+  background: var(--app-canvas);
   -webkit-app-region: drag;
   user-select: none;
 }
@@ -30,8 +31,8 @@
 }
 
 /*
- * 内容卡片：固定浮在应用底色上，页面在卡片内部滚动。
- * 四周 12px 间隙同时充当与侧边栏的分隔，不再需要竖线。
+ * 内容区：与画布同色，靠 12px 间隙、边框与圆角同侧边栏分隔；
+ * 页面在卡片内部滚动，层级交给页面里的白色面板承担。
  */
 .app-main {
   flex: 1;
@@ -41,21 +42,23 @@
   margin: 12px;
   overflow-y: auto;
   overflow-x: hidden;
-  background: var(--app-surface);
+  background: var(--app-canvas);
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-panel);
   box-shadow: var(--app-shadow-panel);
 }
 
 .app-content {
+  --app-content-padding-x: 34px;
   width: 100%;
   max-width: var(--app-content-max);
   margin: 0 auto;
-  padding: 24px 34px 56px;
+  padding: 24px var(--app-content-padding-x) 56px;
 }
 
 @media (max-width: 1240px) {
   .app-content {
-    padding: 20px 24px 48px;
+    --app-content-padding-x: 24px;
+    padding: 20px var(--app-content-padding-x) 48px;
   }
 }

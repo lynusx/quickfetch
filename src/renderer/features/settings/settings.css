@@ -1,59 +1,72 @@
 /* 设置页样式。 */
 
-/*
- * 设置页内部在白色 app 卡片上再铺一层浅灰画布：
- * 分组卡保持白色，才有参考图那种浮起感。用 :has 只影响设置路由。
- */
-.app-main:has(.settings-page) {
-  background: var(--gray-2);
-}
-
+/* 应用外壳已经是灰底白卡，设置页不再单独覆盖背景色。 */
 .settings-page-inner {
   max-width: 760px;
   margin: 0 auto;
+}
+
+/* 设置页改成「固定标题区 + 独立滚动正文」，分割线可以横贯整张卡片 */
+.app-main:has(.settings-page) {
+  overflow: hidden;
+}
+
+.app-content:has(.settings-page) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.settings-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* 固定标题区：在滚动容器外，底部分割线横贯整张卡片 */
+.settings-header {
+  display: flex;
+  align-items: center;
+  flex: 0 0 64px;
+  padding: 0 var(--app-content-padding-x);
+  background: var(--app-canvas);
+  border-bottom: 1px solid var(--app-border);
+}
+
+/* 页头在固定区里不需要原本的段后距 */
+.settings-header .page-header {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+/* 正文独立滚动；滚动条只出现在这一层，标题与分割线不受影响 */
+.settings-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px var(--app-content-padding-x) 56px;
 }
 
 .settings-content {
   min-width: 0;
 }
 
-.settings-footnote {
-  margin: 18px 2px 0;
-  font-size: 11.5px;
-  line-height: 1.6;
-  color: var(--gray-10);
+/*
+ * 分段控件统一收窄内边距（16px → 12px），
+ * 让右侧控件能落在「每栏最多半行」的限制内。
+ */
+.settings-segmented .rt-SegmentedControlItemLabel {
+  padding-left: var(--space-3);
+  padding-right: var(--space-3);
 }
 
-/* 日志目录可能很长，允许在任意字符处换行，避免 1080 宽下撑出横向滚动 */
-.settings-row-log .settings-row-hint {
-  word-break: break-all;
-}
-
-/* 滑杆行：左标签/说明、中滑杆、右当前值 */
-.settings-row-slider {
-  display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(200px, 1.1fr) auto;
-  align-items: center;
-  gap: 16px;
-}
-
-.settings-row-slider .settings-row-main {
-  grid-column: 1;
-}
-
-.settings-row-value {
-  grid-column: 3;
-  min-width: 52px;
-  text-align: right;
-  font-size: 12.5px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--gray-12);
-}
-
-.settings-row-slider-control {
-  grid-column: 2;
-  min-width: 0;
+/* 滑杆行：名称在左，滑杆与数字占右半；可调范围收在 ? 说明卡里 */
+.settings-row-slider .settings-row-control {
+  flex: 1 1 0;
 }
 
 .settings-row-slider-track {
@@ -61,31 +74,12 @@
   min-width: 0;
 }
 
-.settings-row-slider-bound {
+.settings-row-value {
   flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-/* 复制策略的选项卡片 */
-.setting-option-card {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  width: 100%;
-  min-width: 0;
-}
-
-.setting-option-title {
+  min-width: 32px;
+  text-align: right;
   font-size: 12.5px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   color: var(--gray-12);
-}
-
-.setting-option-sample {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--code-font-family);
-  font-size: 10.5px;
-  color: var(--gray-10);
 }

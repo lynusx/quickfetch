@@ -147,7 +147,7 @@ export const UpdateSettingsSection = () => {
     <SettingsGroup id="update" title="更新">
       <SettingsRow
         label="当前版本"
-        hint={`v${state?.currentVersion ?? '…'} · ${
+        description={`v${state?.currentVersion ?? '…'} · ${
           installed
             ? '安装版，可自动更新'
             : portable
@@ -162,7 +162,7 @@ export const UpdateSettingsSection = () => {
 
       <SettingsRow
         label="启动时自动检查更新"
-        tooltip="启动约 10 秒后检查一次，不轮询；失败只写日志。"
+        help="启动约 10 秒后检查一次，不轮询；失败只写日志。"
       >
         <Switch
           checked={preferences.updateAutoCheckEnabled}

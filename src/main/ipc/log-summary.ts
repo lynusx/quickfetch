@@ -81,6 +81,7 @@ const buildSummary = (
     case 'listScanHistory':
     case 'clearScanHistory':
     case 'readSettings':
+    case 'getSettingsPath':
     case 'refreshMachines':
     case 'getVersion':
     case 'getLogInfo':

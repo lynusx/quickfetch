@@ -1,65 +1,58 @@
 import type { ReactNode } from 'react'
-import { InfoCircledIcon } from '@radix-ui/react-icons'
-import { IconButton, Text, Tooltip } from '@radix-ui/themes'
+import { Box, Flex, Text } from '@radix-ui/themes'
 
+import { HelpTip } from '@/components/help-tip/help-tip'
 import { cn } from '@/lib/utils'
 import './settings-row.css'
 
 interface SettingsRowProps {
   label: string
-  /** 一行必要说明；长解释改用 tooltip */
-  hint?: ReactNode
-  /** 长解释；有值时在标签后显示可聚焦的 ⓘ */
-  tooltip?: string
+  /** 名称下只放真实数据（路径、版本、时间），解释性文字走 help */
+  description?: ReactNode
+  /** 规则与原因；有值时在名称后显示 `?` 说明卡 */
+  help?: ReactNode
   children?: ReactNode
-  /** 控件放到标签下方并占满整行（RadioCards 等） */
-  stacked?: boolean
   className?: string
 }
 
+interface SettingsLabelProps {
+  label: string
+  /** 规则与原因；有值时在名称后显示 `?` 说明卡 */
+  help?: ReactNode
+}
+
+/** 设置项名称 + 说明卡入口；滑杆行等自定义行也复用它 */
+export const SettingsLabel = ({ label, help }: SettingsLabelProps) => (
+  <Flex className="settings-row-label-line" align="center">
+    <Text as="p" size="2" weight="medium" className="settings-row-label">
+      {label}
+    </Text>
+    {help ? <HelpTip title={label}>{help}</HelpTip> : null}
+  </Flex>
+)
+
 /**
- * 设置行：左侧标签与说明，右侧控件。
+ * 设置行：左侧标签（+ 说明卡入口），右侧控件。
  *
- * 行高统一为 52px（滑杆行会自然更高）；分隔线只在行与行之间，
- * 卡片本身由 SettingsGroup 负责。
+ * 行高统一为 52px；分隔线只在行与行之间，卡片本身由 SettingsGroup 负责。
+ * 名称下只放真实数据，规则、术语与原因收进 `?`，避免每行拖一行灰色小字。
  */
 export const SettingsRow = ({
   label,
-  hint,
-  tooltip,
+  description,
+  help,
   children,
-  stacked,
   className,
 }: SettingsRowProps) => (
-  <div
-    className={cn('settings-row', stacked && 'settings-row-stacked', className)}
-  >
-    <div className="settings-row-main">
-      <div className="settings-row-label-line">
-        <Text as="p" size="2" weight="medium" className="settings-row-label">
-          {label}
-        </Text>
-        {tooltip ? (
-          <Tooltip content={tooltip}>
-            <IconButton
-              type="button"
-              variant="ghost"
-              color="gray"
-              size="1"
-              className="settings-row-info"
-              aria-label={`${label}说明`}
-            >
-              <InfoCircledIcon width={13} height={13} />
-            </IconButton>
-          </Tooltip>
-        ) : null}
-      </div>
-      {hint ? (
-        <Text as="p" size="1" color="gray" className="settings-row-hint">
-          {hint}
+  <Flex className={cn('settings-row', className)}>
+    <Box className="settings-row-main">
+      <SettingsLabel label={label} help={help} />
+      {description ? (
+        <Text as="p" size="1" color="gray" className="settings-row-description">
+          {description}
         </Text>
       ) : null}
-    </div>
-    {children ? <div className="settings-row-control">{children}</div> : null}
-  </div>
+    </Box>
+    {children ? <Box className="settings-row-control">{children}</Box> : null}
+  </Flex>
 )

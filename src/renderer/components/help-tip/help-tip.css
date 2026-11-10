@@ -1,0 +1,30 @@
+/* 说明卡：HelpTip。 */
+
+.help-tip-trigger {
+  flex-shrink: 0;
+  color: var(--gray-9);
+  transition: color var(--app-transition);
+}
+
+.help-tip-trigger:hover,
+.help-tip-trigger[data-state='open'] {
+  color: var(--gray-12);
+}
+
+/* 长说明换行并在可用高度内滚动，不把弹出层撑出窗口 */
+.help-tip-content {
+  max-width: 300px;
+  max-height: var(--radix-popover-content-available-height);
+  overflow-y: auto;
+}
+
+.help-tip-title {
+  margin: 0 0 4px;
+  color: var(--gray-12);
+}
+
+.help-tip-text {
+  margin: 0;
+  line-height: 1.6;
+  color: var(--gray-11);
+}

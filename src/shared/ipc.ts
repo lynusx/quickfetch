@@ -862,6 +862,8 @@ export interface ElectronAPI {
 
   /** 读取持久化配置；文件不存在时返回默认值 */
   readSettings: () => Promise<AppSettings>
+  /** 设置文件的绝对路径；设置页用来展示备份位置 */
+  getSettingsPath: () => Promise<string>
   /** 保存根目录并重新识别机台；路径非法时抛出可读错误 */
   saveRootPath: (rootPath: string) => Promise<AppSettings>
   /** 按当前根目录重新识别机台列表 */
@@ -1019,6 +1021,7 @@ export const IPC_INVOKE = {
   pickDirectory: 'fs:pick-directory',
 
   readSettings: 'settings:read',
+  getSettingsPath: 'settings:path',
   saveRootPath: 'settings:save-root',
   refreshMachines: 'settings:refresh',
   savePreferences: 'settings:save-preferences',

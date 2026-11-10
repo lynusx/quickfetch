@@ -44,7 +44,7 @@ const WINDOW_CHROME_HEIGHT = 40
  *
  * - macOS：hiddenInset 保留原生红绿灯，去掉系统标题
  * - Windows：hidden + titleBarOverlay 只画右上角按钮，去掉图标与标题。
- *   覆盖层颜色对应浅色主题的 --color-panel-solid（白）与 --gray-12；
+ *   覆盖层颜色对应浅色主题的 --app-canvas（slate gray-2，见 index.css）与 --gray-12；
  *   主进程读不到 CSS 变量，这里用字面量。
  */
 const windowChrome: BrowserWindowConstructorOptions =
@@ -53,7 +53,7 @@ const windowChrome: BrowserWindowConstructorOptions =
     : {
         titleBarStyle: 'hidden',
         titleBarOverlay: {
-          color: '#ffffff',
+          color: '#f9f9fb',
           symbolColor: '#1c2024',
           height: WINDOW_CHROME_HEIGHT,
         },
@@ -91,7 +91,8 @@ const createWindow = (): BrowserWindow => {
     center: true,
     show: false,
     autoHideMenuBar: true,
-    backgroundColor: '#ffffff',
+    // 与画布同色，避免首屏渲染前闪一下白底
+    backgroundColor: '#f9f9fb',
     title: '秒取',
     icon: appIconPath,
     ...windowChrome,

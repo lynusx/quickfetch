@@ -44,7 +44,8 @@ const SETTINGS_VERSION = 2 as const
 /** EL 的工序层目录名，协议固定值；不再作为配置字段落盘 */
 export const ENTRY = 'EL'
 
-const settingsFile = (): string =>
+/** `settings.json` 的绝对路径；主进程与设置页说明卡共用同一份 */
+export const settingsFilePath = (): string =>
   join(app.getPath('userData'), 'settings.json')
 
 const emptyCategory = <M>(): CategoryConfig<M> => ({
@@ -436,7 +437,7 @@ let store: SettingsStore<AppSettings> | null = null
 /** 延迟到第一次访问才解析 userData，测试与启动早期都不需要 Electron 路径 */
 const settingsStore = (): SettingsStore<AppSettings> =>
   (store ??= createSettingsStore({
-    file: settingsFile(),
+    file: settingsFilePath(),
     fallback: fallbackSettings,
     isSupported: isAppSettings,
     normalize: normalizeSettings,

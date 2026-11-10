@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
 import { ExclamationTriangleIcon } from '@radix-ui/react-icons'
 import {
@@ -6,14 +7,14 @@ import {
   Button,
   Callout,
   Code,
-  Flex,
-  RadioCards,
+  SegmentedControl,
   Slider,
   Switch,
   Text,
 } from '@radix-ui/themes'
 
 import { PageHeader } from '@/components/page-header/page-header'
+import { HelpTip } from '@/components/help-tip/help-tip'
 import { SettingsGroup } from './components/settings-group'
 import { SettingsRow } from './components/settings-row'
 import { useToast } from '@/hooks/useToast'
@@ -55,22 +56,56 @@ const LAYOUT_SAMPLE: Record<CopyLayout, string> = {
 const CONFLICT_HINT: Record<CopyConflictPolicy, string> = {
   rename: '目标占用的名字自动编号，一张不少',
   skip: '只有同名的那一张跳过，其余照常复制',
-  overwrite: '顶掉目标文件，无法撤销',
+  overwrite: '顶掉目标文件，无法撤销；复制前会二次确认',
 }
 
 const LAYOUTS: CopyLayout[] = ['flat', 'machine', 'type', 'machine-type']
 const CONFLICTS: CopyConflictPolicy[] = ['rename', 'skip', 'overwrite']
 
+/** 分段控件窄，标签用短说法；复制面板仍显示完整标签 */
+const LAYOUT_SHORT_LABEL: Record<CopyLayout, string> = {
+  flat: '平铺',
+  machine: '按机台',
+  type: '按类型',
+  'machine-type': '机台+类型',
+}
+
+/** SegmentedControl 只显示标签，逐项差异放进名称旁的 `?` 说明卡 */
+const LAYOUT_HELP = LAYOUTS.map((value, index) => (
+  <Fragment key={value}>
+    {index > 0 ? <br /> : null}
+    {COPY_LAYOUT_LABEL[value]} → {LAYOUT_SAMPLE[value]}
+  </Fragment>
+))
+
+const CONFLICT_HELP = CONFLICTS.map((value, index) => (
+  <Fragment key={value}>
+    {index > 0 ? <br /> : null}
+    {value === 'overwrite' ? (
+      <Text as="span" color="red">
+        {COPY_CONFLICT_LABEL[value]} → {CONFLICT_HINT[value]}
+      </Text>
+    ) : (
+      `${COPY_CONFLICT_LABEL[value]} → ${CONFLICT_HINT[value]}`
+    )}
+  </Fragment>
+))
+
 interface SliderRowProps {
   label: string
-  hint: string
-  unit: string
+  help: ReactNode
   value: number
   range: { min: number; max: number; step: number }
   /** 被环境变量接管时禁用滑杆并说明原因，不然用户会以为没保存上 */
   envName?: string
   onChange: (next: number) => void
 }
+
+/** 行内不再写两端数值，可调范围收进说明卡 */
+const formatRange = (range: SliderRowProps['range']): string =>
+  `可调范围 ${range.min}–${range.max}${
+    range.step > 1 ? `，步长 ${range.step}` : ''
+  }。`
 
 /**
  * 数值设置：拖动时只更新本地显示，松手或键盘操作结束才落盘。
@@ -80,8 +115,7 @@ interface SliderRowProps {
  */
 const SliderRow = ({
   label,
-  hint,
-  unit,
+  help,
   value,
   range,
   envName,
@@ -105,71 +139,48 @@ const SliderRow = ({
   }
 
   return (
-    <div className="settings-row settings-row-slider">
-      <div className="settings-row-main">
-        <Text as="p" size="2" weight="medium" className="settings-row-label">
-          {label}
-        </Text>
-        <Text as="p" size="1" color="gray" className="settings-row-hint">
-          {overridden ? (
-            <>
-              已由环境变量 <Code size="1">{envName}</Code> 接管，此处不生效
-            </>
-          ) : (
-            hint
-          )}
-        </Text>
-      </div>
+    <SettingsRow
+      label={label}
+      help={
+        <>
+          {help}
+          <br />
+          {formatRange(range)}
+        </>
+      }
+      description={
+        overridden ? (
+          <>
+            已由环境变量 <Code size="1">{envName}</Code> 接管，此处不生效
+          </>
+        ) : undefined
+      }
+      className="settings-row-slider"
+    >
+      <Box className="settings-row-slider-track">
+        <Slider
+          value={[draft]}
+          min={range.min}
+          max={range.max}
+          step={range.step}
+          disabled={overridden}
+          aria-label={label}
+          onValueChange={(values) => {
+            const next = values[0]
 
-      <Flex
-        className="settings-row-slider-control"
-        align="center"
-        gap="2"
-        role="group"
-        aria-label={label}
-      >
-        <Text
-          as="span"
-          size="1"
-          color="gray"
-          className="settings-row-slider-bound"
-        >
-          {range.min}
-        </Text>
-        <Box className="settings-row-slider-track">
-          <Slider
-            value={[draft]}
-            min={range.min}
-            max={range.max}
-            step={range.step}
-            disabled={overridden}
-            aria-label={label}
-            onValueChange={(values) => {
-              const next = values[0]
+            if (next !== undefined) setDraft(next)
+          }}
+          onValueCommit={(values) => {
+            const next = values[0]
 
-              if (next !== undefined) setDraft(next)
-            }}
-            onValueCommit={(values) => {
-              const next = values[0]
-
-              if (next !== undefined) commit(next)
-            }}
-          />
-        </Box>
-        <Text
-          as="span"
-          size="1"
-          color="gray"
-          className="settings-row-slider-bound"
-        >
-          {range.max}
-        </Text>
-      </Flex>
-
+            if (next !== undefined) commit(next)
+          }}
+        />
+      </Box>
       <Text as="span" size="2" weight="medium" className="settings-row-value">
-        {draft} {unit}
+        {draft}
       </Text>
-    </div>
+    </SettingsRow>
   )
 }
 
@@ -186,6 +197,7 @@ const SettingsPage = () => {
   const { showToast } = useToast()
   const [logInfo, setLogInfo] = useState<LogInfo | null>(null)
   const [logInfoFailed, setLogInfoFailed] = useState(false)
+  const [settingsPath, setSettingsPath] = useState<string | null>(null)
   const [searchParams] = useSearchParams()
   const updateRequested = searchParams.get('section') === 'update'
 
@@ -211,6 +223,15 @@ const SettingsPage = () => {
       })
       .catch(() => {
         if (!cancelled) setLogInfoFailed(true)
+      })
+
+    window.electronAPI
+      .getSettingsPath()
+      .then((path) => {
+        if (!cancelled) setSettingsPath(path)
+      })
+      .catch(() => {
+        // 读不到时说明卡退回 %APPDATA% 文案，不影响其它设置
       })
 
     return () => {
@@ -254,214 +275,170 @@ const SettingsPage = () => {
 
   return (
     <Box className="settings-page">
-      <Box className="settings-page-inner">
-        <PageHeader eyebrow="应用" title="设置" />
+      <Box className="settings-header">
+        <PageHeader
+          title="设置"
+          help={
+            <HelpTip title="设置保存位置">
+              设置保存在{' '}
+              <Code size="1">
+                {settingsPath ?? '%APPDATA%\\QuickFetch\\settings.json'}
+              </Code>
+              {'，换台电脑需要重新设置。'}
+            </HelpTip>
+          }
+        />
+      </Box>
 
-        <Box className="settings-content">
-          {error ? (
-            <Callout.Root color="red" role="alert" mb="4">
-              <Callout.Icon>
-                <ExclamationTriangleIcon width={16} height={16} />
-              </Callout.Icon>
-              <Callout.Text>
-                <Text weight="medium">保存失败</Text>：{error}
-              </Callout.Text>
-            </Callout.Root>
-          ) : null}
+      <Box className="settings-body">
+        <Box className="settings-page-inner">
+          <Box className="settings-content">
+            {error ? (
+              <Callout.Root color="red" role="alert" mb="4">
+                <Callout.Icon>
+                  <ExclamationTriangleIcon width={16} height={16} />
+                </Callout.Icon>
+                <Callout.Text>
+                  <Text weight="medium">保存失败</Text>：{error}
+                </Callout.Text>
+              </Callout.Root>
+            ) : null}
 
-          <SettingsGroup id="copy" title="复制到本地">
-            <SettingsRow label="分组方式" hint="目标目录下建几层文件夹" stacked>
-              <RadioCards.Root
-                columns={{ initial: '1', sm: '2' }}
-                value={preferences.copyLayout}
-                onValueChange={(value) =>
-                  value && patch({ copyLayout: value as CopyLayout })
-                }
-              >
-                {LAYOUTS.map((value) => (
-                  <RadioCards.Item key={value} value={value}>
-                    <Flex
-                      direction="column"
-                      gap="1"
-                      className="setting-option-card"
-                    >
-                      <Text
-                        as="span"
-                        size="2"
-                        weight="medium"
-                        className="setting-option-title"
-                      >
-                        {COPY_LAYOUT_LABEL[value]}
-                      </Text>
-                      <Text
-                        as="span"
-                        size="1"
-                        color="gray"
-                        className="setting-option-sample"
-                      >
-                        {LAYOUT_SAMPLE[value]}
-                      </Text>
-                    </Flex>
-                  </RadioCards.Item>
-                ))}
-              </RadioCards.Root>
-            </SettingsRow>
+            <SettingsGroup id="scan-copy" title="扫描与复制">
+              <SettingsRow label="分组方式" help={LAYOUT_HELP}>
+                <SegmentedControl.Root
+                  className="settings-segmented"
+                  aria-label="分组方式"
+                  value={preferences.copyLayout}
+                  onValueChange={(value) =>
+                    patch({ copyLayout: value as CopyLayout })
+                  }
+                >
+                  {LAYOUTS.map((value) => (
+                    <SegmentedControl.Item key={value} value={value}>
+                      {LAYOUT_SHORT_LABEL[value]}
+                    </SegmentedControl.Item>
+                  ))}
+                </SegmentedControl.Root>
+              </SettingsRow>
 
-            <SettingsRow
-              label="重名文件"
-              hint="目标里已有同名文件时（覆盖无法撤销，会二次确认）"
-              stacked
-            >
-              <RadioCards.Root
-                columns={{ initial: '1', sm: '3' }}
-                value={preferences.copyConflict}
-                onValueChange={(value) =>
-                  value && patch({ copyConflict: value as CopyConflictPolicy })
-                }
-              >
-                {CONFLICTS.map((value) => (
-                  <RadioCards.Item key={value} value={value}>
-                    <Flex
-                      direction="column"
-                      gap="1"
-                      className="setting-option-card"
-                    >
-                      <Text
-                        as="span"
-                        size="2"
-                        weight="medium"
-                        color={value === 'overwrite' ? 'red' : undefined}
-                        className="setting-option-title"
-                      >
-                        {COPY_CONFLICT_LABEL[value]}
-                      </Text>
-                      <Text
-                        as="span"
-                        size="1"
-                        color="gray"
-                        className="setting-option-sample"
-                      >
-                        {CONFLICT_HINT[value]}
-                      </Text>
-                    </Flex>
-                  </RadioCards.Item>
-                ))}
-              </RadioCards.Root>
-            </SettingsRow>
-          </SettingsGroup>
+              <SettingsRow label="同名文件" help={CONFLICT_HELP}>
+                <SegmentedControl.Root
+                  className="settings-segmented"
+                  aria-label="同名文件"
+                  value={preferences.copyConflict}
+                  onValueChange={(value) =>
+                    patch({ copyConflict: value as CopyConflictPolicy })
+                  }
+                >
+                  {CONFLICTS.map((value) => (
+                    <SegmentedControl.Item key={value} value={value}>
+                      {COPY_CONFLICT_LABEL[value]}
+                    </SegmentedControl.Item>
+                  ))}
+                </SegmentedControl.Root>
+              </SettingsRow>
 
-          <SettingsGroup id="history" title="历史记录">
-            <SliderRow
-              label="保留条数"
-              hint="超出后自动删除最旧的记录"
-              unit="条"
-              value={historyLimit}
-              range={HISTORY_LIMIT_RANGE}
-              onChange={(next) => void saveHistoryLimit(next)}
-            />
-          </SettingsGroup>
-
-          <SettingsGroup id="performance" title="性能">
-            <SliderRow
-              label="同时读取目录"
-              hint="失败率过高会自动降档"
-              unit="个"
-              value={preferences.scanConcurrency}
-              range={PREFERENCE_RANGE.scanConcurrency}
-              envName={envName('scanConcurrency')}
-              onChange={(next) => patch({ scanConcurrency: next })}
-            />
-            <SliderRow
-              label="每批扫描机台"
-              hint="一批跑完再开下一批"
-              unit="台"
-              value={preferences.scanBatchSize}
-              range={PREFERENCE_RANGE.scanBatchSize}
-              envName={envName('scanBatchSize')}
-              onChange={(next) => patch({ scanBatchSize: next })}
-            />
-            <SliderRow
-              label="同时复制文件"
-              hint="共享盘冲突时调低"
-              unit="个"
-              value={preferences.copyConcurrency}
-              range={PREFERENCE_RANGE.copyConcurrency}
-              envName={envName('copyConcurrency')}
-              onChange={(next) => patch({ copyConcurrency: next })}
-            />
-            <SliderRow
-              label="每批复制文件"
-              hint="批与批之间让出一次界面刷新"
-              unit="张"
-              value={preferences.copyBatchSize}
-              range={PREFERENCE_RANGE.copyBatchSize}
-              envName={envName('copyBatchSize')}
-              onChange={(next) => patch({ copyBatchSize: next })}
-            />
-          </SettingsGroup>
-
-          <UpdateSettingsSection />
-
-          <SettingsGroup id="logging" title="调试日志">
-            <SettingsRow
-              label="启用调试日志"
-              hint="默认关闭；开启后立即生效"
-              tooltip="日志按天写入 userData/logs，保留最近 7 天。"
-            >
-              <Switch
-                checked={preferences.debugLogEnabled}
-                aria-label="启用调试日志"
-                onCheckedChange={(checked) =>
-                  patch({ debugLogEnabled: checked })
-                }
+              <SliderRow
+                label="历史记录保留条数"
+                help="超出后自动删除最旧的记录。"
+                value={historyLimit}
+                range={HISTORY_LIMIT_RANGE}
+                onChange={(next) => void saveHistoryLimit(next)}
               />
-            </SettingsRow>
+            </SettingsGroup>
 
-            <SettingsRow
-              label="日志目录"
-              hint={
-                logInfo ? (
-                  <Code size="1">{logInfo.dir}</Code>
-                ) : logInfoFailed ? (
-                  '读取日志目录失败'
-                ) : (
-                  '读取中…'
-                )
-              }
-              className="settings-row-log"
-            >
-              <Button
-                variant="soft"
-                color="gray"
-                size="2"
-                onClick={() => void openLogDir()}
+            <SettingsGroup id="performance" title="性能">
+              <SliderRow
+                label="同时读取目录"
+                help="读取共享盘时同时发出的目录请求数；失败率过高会自动降一档。"
+                value={preferences.scanConcurrency}
+                range={PREFERENCE_RANGE.scanConcurrency}
+                envName={envName('scanConcurrency')}
+                onChange={(next) => patch({ scanConcurrency: next })}
+              />
+              <SliderRow
+                label="每批扫描机台"
+                help="一批机台扫完再开下一批，内存峰值只与单批相关。"
+                value={preferences.scanBatchSize}
+                range={PREFERENCE_RANGE.scanBatchSize}
+                envName={envName('scanBatchSize')}
+                onChange={(next) => patch({ scanBatchSize: next })}
+              />
+              <SliderRow
+                label="同时复制文件"
+                help="同时写入目标目录的文件数；共享盘冲突频繁时调低。"
+                value={preferences.copyConcurrency}
+                range={PREFERENCE_RANGE.copyConcurrency}
+                envName={envName('copyConcurrency')}
+                onChange={(next) => patch({ copyConcurrency: next })}
+              />
+              <SliderRow
+                label="每批复制文件"
+                help="每批复制完让出一次界面刷新，进度更新更及时。"
+                value={preferences.copyBatchSize}
+                range={PREFERENCE_RANGE.copyBatchSize}
+                envName={envName('copyBatchSize')}
+                onChange={(next) => patch({ copyBatchSize: next })}
+              />
+            </SettingsGroup>
+
+            <UpdateSettingsSection />
+
+            <SettingsGroup id="logging" title="调试日志">
+              <SettingsRow
+                label="启用调试日志"
+                help={
+                  <>
+                    默认关闭，开启后立即生效。日志按天写入{' '}
+                    {logInfo ? (
+                      <Code size="1">{logInfo.dir}</Code>
+                    ) : logInfoFailed ? (
+                      'userData/logs（读取目录失败）'
+                    ) : (
+                      'userData/logs'
+                    )}
+                    {'，保留最近 7 天。'}
+                  </>
+                }
               >
-                打开日志目录
-              </Button>
-            </SettingsRow>
-          </SettingsGroup>
+                <Switch
+                  checked={preferences.debugLogEnabled}
+                  aria-label="启用调试日志"
+                  onCheckedChange={(checked) =>
+                    patch({ debugLogEnabled: checked })
+                  }
+                />
+              </SettingsRow>
 
-          <SettingsGroup id="other" title="其他">
-            <SettingsRow
-              label="恢复默认设置"
-              hint="复制策略与所有并发档位回到出厂值"
-              tooltip="扫描历史与调试日志不受影响。"
-            >
-              <Button
-                variant="soft"
-                color="gray"
-                size="2"
-                onClick={restoreCopyDefaults}
+              <SettingsRow label="日志目录">
+                <Button
+                  variant="soft"
+                  color="gray"
+                  size="2"
+                  onClick={() => void openLogDir()}
+                >
+                  打开日志目录
+                </Button>
+              </SettingsRow>
+            </SettingsGroup>
+
+            <SettingsGroup id="reset" title="重置">
+              <SettingsRow
+                label="复制与性能设置"
+                help="分组方式、同名文件策略与四个并发档位回到出厂值；扫描历史与调试日志不受影响。"
               >
-                恢复默认
-              </Button>
-            </SettingsRow>
-          </SettingsGroup>
-
-          <Text as="p" size="1" color="gray" className="settings-footnote">
-            设置保存在 <Code size="1">%APPDATA%\QuickFetch\settings.json</Code>
-            ，换台电脑需要重新设置。
-          </Text>
+                <Button
+                  variant="soft"
+                  color="gray"
+                  size="2"
+                  onClick={restoreCopyDefaults}
+                >
+                  恢复默认
+                </Button>
+              </SettingsRow>
+            </SettingsGroup>
+          </Box>
         </Box>
       </Box>
     </Box>

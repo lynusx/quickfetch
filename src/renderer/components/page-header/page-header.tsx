@@ -8,6 +8,8 @@ interface PageHeaderProps {
   eyebrow?: string
   title: ReactNode
   description?: ReactNode
+  /** 标题旁的帮助入口，通常是 HelpTip */
+  help?: ReactNode
   /** 跟在标题后面的状态徽标 */
   badge?: ReactNode
   actions?: ReactNode
@@ -23,6 +25,7 @@ export const PageHeader = ({
   eyebrow,
   title,
   description,
+  help,
   badge,
   actions,
 }: PageHeaderProps) => (
@@ -43,6 +46,7 @@ export const PageHeader = ({
         <Heading as="h1" className="page-title">
           {title}
         </Heading>
+        {help}
         {badge}
       </Flex>
       {description ? (
