@@ -24,6 +24,9 @@
 3. **界面只用 Radix Themes 组件。** 布局用 `Box` / `Flex` / `Grid` / `Section` / `Container`，排版用 `Text` / `Heading` / `Strong` / `Em` / `Code` / `Link` / `Blockquote`；不要在 JSX 里手写裸 `div` / `span` / `p` / `h1`–`h6` 做布局或排版。Radix 组件上的 `as="span"` / `as="div"` 是正常用法。
    - 原生 `button` / `label` / `input` / `details` / `summary` 只在语义必需时使用（现有：历史摘要行、Excel 上传区、快捷方式折叠区），并保证可访问名称；图标按钮必须有 `aria-label`。
    - 不引入 shadcn/ui、Tailwind、其它组件库或第三方全局 reset；自定义样式只用 Radix 令牌。
+   - **能用 props 表达就别写 CSS。** 间距、尺寸、flex 比例、overflow、对齐优先用 `p` / `gap` / `minHeight` / `maxWidth` / `flexGrow` / `align` / `justify`；值等于 Radix 尺度用数字（`gap="2"` = 8px），否则写原值（`gap="20px"`、`p="10px 16px"`、`px="var(--app-content-padding-x)"`）。`Box` / `Flex` 才有宽高、flex 比例与 overflow，`Text` / `Heading` 只有 margin 类。
+   - **同一属性只写一处。** props 生成的 `.rt-r-*` 与自定义 class 同级、后加载者胜；项目 CSS 在 Radix 之后加载，CSS 会静默吃掉同名 prop。
+   - **必须留在 CSS 的**：`font-size` / `line-height` / `letter-spacing`、`border` / `background` / `box-shadow` / `transition`、伪类与 `[data-state]`、`:has()`、后代/子/兄弟选择器、`.rt-*` 内部类覆盖、`Popover.Content` 的 `overflow`、`IconButton` 的 `flex-shrink`。看起来被 CSS 覆盖的 `Text size` 也不要删——它还带着 `--line-height` / `--letter-spacing`。
 
 4. **样式跟着组件走。** 共享组件每个组件一个目录；渲染层的组件目录名、组件文件与样式文件统一 kebab-case（如 `components/panel/panel.tsx` + `components/panel/panel.css`、`layouts/app-layout.tsx` + `layouts/app-layout.css`），样式在组件文件里 `import`；`index.ts` 只做多组件导出，不放组件实现。业务 feature 的 CSS 与组件同目录（如 `features/scan/scan.css`）。不要新建 `styles/app.css` 之类的汇总文件，也不要把所有样式聚在一个文件里。只有全局令牌、reset、共享工具类和跨组件/跨 feature 共享类放 `src/renderer/index.css`；新增组件时一并创建同名 CSS，没有样式就不建空文件。
 

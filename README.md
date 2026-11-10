@@ -226,6 +226,7 @@ src/
 - 样式：`@radix-ui/themes/styles.css`，使用 Radix 设计令牌
 - 字体：拉丁使用 `Public Sans Variable`，中文回退到系统字体（Windows 微软雅黑、macOS PingFang SC、Linux Noto Sans CJK）；不打包 CJK 字体。字体变量需同时覆盖 `:root` 与 `.radix-themes`，否则 Radix 组件会使用自己的默认栈
 - 布局与文本优先使用 `Box` / `Flex` / `Grid` / `Text` / `Heading`；原生标签只保留语义必需的 `button`、`label`、`input`、`details` 等
+- 样式优先用 props：能由 Radix props 表达的间距、尺寸与布局不要写进 CSS；可迁移边界与写法见 [`AGENTS.md`](AGENTS.md) 原则 3
 - 设计层：全局令牌、reset、共享工具类与 sonner 覆盖在 `src/renderer/index.css`；组件 CSS 与组件同目录（渲染层组件目录、组件文件与样式统一 kebab-case），业务 feature CSS 在各自 feature 目录（如 `features/scan/scan.css`）。不引入 reset / 其它组件库
 - 页面标题统一由 `components/page-header/page-header` 渲染，`AppLayout` 不再重复标题栏；扫描页的任务进度、统计与控制按钮统一放在 `features/scan/components/scan-task-panel`
 - 设置项说明统一放在名称旁的 `?`（`components/help-tip`）：悬停或点击打开说明卡，行内只保留真实数据（路径、版本、时间）；会丢数据或不可撤销的后果仍写在按钮、选项卡或确认框里

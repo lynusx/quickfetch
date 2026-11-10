@@ -7,6 +7,8 @@ description: 使用 Radix Themes（@radix-ui/themes）构建 React UI 的项目�
 
 本项目的 UI 组件库统一使用 **Radix Themes**（`@radix-ui/themes` v3.x）。生成任何 UI 代码前必须遵守本规范。
 
+> 样式归属（哪些写 props、哪些必须留 CSS）以仓库根目录 `AGENTS.md` 原则 3 为准，本文件不重复。
+
 ## 核心红线（生成代码时不得出现）
 
 1. ❌ 引入 shadcn/ui、MUI、Ant Design、Mantine 等其他组件库
