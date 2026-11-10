@@ -1,5 +1,6 @@
 /* 说明卡：HelpTip。 */
 
+/* flex-shrink 与交互态在 IconButton 上没有对应 prop，留在 CSS。 */
 .help-tip-trigger {
   flex-shrink: 0;
   color: var(--gray-9);
@@ -11,20 +12,17 @@
   color: var(--gray-12);
 }
 
-/* 长说明换行并在可用高度内滚动，不把弹出层撑出窗口 */
+/* Popover.Content 没有 overflow prop，长说明在这里滚动。 */
 .help-tip-content {
-  max-width: 300px;
   max-height: var(--radix-popover-content-available-height);
   overflow-y: auto;
 }
 
 .help-tip-title {
-  margin: 0 0 4px;
   color: var(--gray-12);
 }
 
 .help-tip-text {
-  margin: 0;
   line-height: 1.6;
   color: var(--gray-11);
 }

@@ -1,15 +1,8 @@
-/* 页面标题：PageHeader。 */
+/* 页面标题：PageHeader。布局由 Flex props 表达，这里只留排版。 */
 
+/* 底部间距留在 CSS：设置页的固定标题区要把它覆盖为 0。 */
 .page-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
   margin-bottom: 26px;
-}
-
-.page-header-main {
-  min-width: 0;
 }
 
 .page-eyebrow {
@@ -19,13 +12,6 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--gray-9);
-}
-
-.page-title-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
 }
 
 .page-title {
@@ -39,15 +25,7 @@
 
 .page-description {
   max-width: 760px;
-  margin: 8px 0 0;
   font-size: 13px;
   line-height: 1.65;
   color: var(--gray-10);
-}
-
-.page-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
 }

@@ -18,7 +18,7 @@ interface SettingsGroupProps {
  */
 export const SettingsGroup = ({ id, title, children }: SettingsGroupProps) => (
   <section id={id} className="settings-group">
-    <Heading as="h2" className="settings-group-title">
+    <Heading as="h2" className="settings-group-title" mb="10px">
       {title}
     </Heading>
     <div className="settings-card">{children}</div>

@@ -29,8 +29,8 @@ export const PageHeader = ({
   badge,
   actions,
 }: PageHeaderProps) => (
-  <Flex className="page-header">
-    <Box className="page-header-main">
+  <Flex className="page-header" align="start" justify="between" gap="24px">
+    <Box minWidth="0">
       {eyebrow ? (
         <Text
           as="div"
@@ -42,7 +42,7 @@ export const PageHeader = ({
           {eyebrow}
         </Text>
       ) : null}
-      <Flex className="page-title-row" align="center" gap="2" wrap="wrap">
+      <Flex align="center" gap="10px" wrap="wrap">
         <Heading as="h1" className="page-title">
           {title}
         </Heading>
@@ -50,13 +50,19 @@ export const PageHeader = ({
         {badge}
       </Flex>
       {description ? (
-        <Text as="p" size="1" color="gray" className="page-description">
+        <Text
+          as="p"
+          size="1"
+          color="gray"
+          className="page-description"
+          mt="8px"
+        >
           {description}
         </Text>
       ) : null}
     </Box>
     {actions ? (
-      <Flex className="page-actions" align="center" gap="2">
+      <Flex align="center" gap="2" flexShrink="0">
         {actions}
       </Flex>
     ) : null}

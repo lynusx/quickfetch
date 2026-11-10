@@ -7,6 +7,7 @@ import {
   Button,
   Callout,
   Code,
+  Flex,
   SegmentedControl,
   Slider,
   Switch,
@@ -157,7 +158,7 @@ const SliderRow = ({
       }
       className="settings-row-slider"
     >
-      <Box className="settings-row-slider-track">
+      <Box flexGrow="1" flexShrink="1" flexBasis="0" minWidth="0">
         <Slider
           value={[draft]}
           min={range.min}
@@ -274,8 +275,22 @@ const SettingsPage = () => {
     envOverrides.includes(key) ? PREFERENCE_ENV[key] : undefined
 
   return (
-    <Box className="settings-page">
-      <Box className="settings-header">
+    <Flex
+      className="settings-page"
+      direction="column"
+      flexGrow="1"
+      flexShrink="1"
+      flexBasis="0"
+      minHeight="0"
+    >
+      <Flex
+        className="settings-header"
+        align="center"
+        flexGrow="0"
+        flexShrink="0"
+        flexBasis="64px"
+        px="var(--app-content-padding-x)"
+      >
         <PageHeader
           title="设置"
           help={
@@ -288,11 +303,20 @@ const SettingsPage = () => {
             </HelpTip>
           }
         />
-      </Box>
+      </Flex>
 
-      <Box className="settings-body">
-        <Box className="settings-page-inner">
-          <Box className="settings-content">
+      <Box
+        flexGrow="1"
+        flexShrink="1"
+        flexBasis="0"
+        minHeight="0"
+        overflowY="auto"
+        pt="20px"
+        px="var(--app-content-padding-x)"
+        pb="56px"
+      >
+        <Box maxWidth="760px" mx="auto">
+          <Box minWidth="0">
             {error ? (
               <Callout.Root color="red" role="alert" mb="4">
                 <Callout.Icon>
@@ -441,7 +465,7 @@ const SettingsPage = () => {
           </Box>
         </Box>
       </Box>
-    </Box>
+    </Flex>
   )
 }
 

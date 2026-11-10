@@ -1,10 +1,4 @@
-/* 设置页样式。 */
-
-/* 应用外壳已经是灰底白卡，设置页不再单独覆盖背景色。 */
-.settings-page-inner {
-  max-width: 760px;
-  margin: 0 auto;
-}
+/* 设置页样式。布局交给 Radix props，这里只留 props 表达不了的部分。 */
 
 /* 设置页改成「固定标题区 + 独立滚动正文」，分割线可以横贯整张卡片 */
 .app-main:has(.settings-page) {
@@ -20,19 +14,8 @@
   padding: 0;
 }
 
-.settings-page {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-}
-
-/* 固定标题区：在滚动容器外，底部分割线横贯整张卡片 */
+/* 固定标题区：背景与底部分割线没有对应 prop */
 .settings-header {
-  display: flex;
-  align-items: center;
-  flex: 0 0 64px;
-  padding: 0 var(--app-content-padding-x);
   background: var(--app-canvas);
   border-bottom: 1px solid var(--app-border);
 }
@@ -41,18 +24,6 @@
 .settings-header .page-header {
   width: 100%;
   margin-bottom: 0;
-}
-
-/* 正文独立滚动；滚动条只出现在这一层，标题与分割线不受影响 */
-.settings-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 20px var(--app-content-padding-x) 56px;
-}
-
-.settings-content {
-  min-width: 0;
 }
 
 /*
@@ -64,14 +35,9 @@
   padding-right: var(--space-3);
 }
 
-/* 滑杆行：名称在左，滑杆与数字占右半；可调范围收在 ? 说明卡里 */
+/* 滑杆行的控件位吃掉右半整栏；其余行由 props 管 flex 比例 */
 .settings-row-slider .settings-row-control {
   flex: 1 1 0;
-}
-
-.settings-row-slider-track {
-  flex: 1;
-  min-width: 0;
 }
 
 .settings-row-value {

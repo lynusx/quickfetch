@@ -123,6 +123,7 @@ export const HelpTip = ({ title, children }: HelpTipProps) => {
         align="start"
         sideOffset={6}
         collisionPadding={8}
+        maxWidth="300px"
         aria-labelledby={titleId}
         className="help-tip-content"
         onOpenAutoFocus={(event) => event.preventDefault()}
@@ -135,6 +136,7 @@ export const HelpTip = ({ title, children }: HelpTipProps) => {
           size="2"
           weight="bold"
           id={titleId}
+          mb="4px"
           className="help-tip-title"
         >
           {title}
