@@ -1,4 +1,4 @@
-import { BrowserWindow, app, screen, shell } from 'electron'
+import { BrowserWindow, app, nativeImage, screen, shell } from 'electron'
 import type { BrowserWindowConstructorOptions } from 'electron'
 import { join } from 'node:path'
 
@@ -20,9 +20,18 @@ const rendererDevUrl = process.env['ELECTRON_RENDERER_URL']
  *
  * 打包时 Windows 用的是 electron-builder 嵌进 exe 的 build/icon.ico，
  * 但开发态和 macOS Dock 不读 exe 资源，会退回 Electron 默认图标；
- * 这里显式指一张同源的 PNG（随 public 目录进 out/renderer/img）。
+ * 这里显式指一张同源的 PNG。
+ *
+ * 构建产物里读 out/renderer/img（vite 会把 public 目录拷进去），
+ * dev server 模式不生成 out/renderer，要直接读源码里的 public 目录，
+ * 否则 setIcon 会因为找不到文件抛错，整个启动流程停在这一步。
  */
-const appIconPath = join(__dirname, '../renderer/img/icon.png')
+const appIconPath = rendererDevUrl
+  ? join(__dirname, '../../src/renderer/public/img/icon.png')
+  : join(__dirname, '../renderer/img/icon.png')
+
+// 图标只影响外观，读不到时不要让它拖垮启动
+const appIcon = nativeImage.createFromPath(appIconPath)
 
 const DEFAULT_WINDOW_WIDTH = 1280
 const DEFAULT_WINDOW_HEIGHT = 800
@@ -94,7 +103,7 @@ const createWindow = (): BrowserWindow => {
     // 与画布同色，避免首屏渲染前闪一下白底
     backgroundColor: '#f9f9fb',
     title: '秒取',
-    icon: appIconPath,
+    icon: appIcon.isEmpty() ? undefined : appIcon,
     ...windowChrome,
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
@@ -193,7 +202,9 @@ if (!hasSingleInstanceLock) {
     app.setAppUserModelId('com.lynusx.quickfetch')
 
     // macOS 的 Dock 图标不跟着窗口走，开发态默认是 Electron 的图标，这里显式覆盖
-    if (process.platform === 'darwin') app.dock?.setIcon(appIconPath)
+    if (process.platform === 'darwin' && !appIcon.isEmpty()) {
+      app.dock?.setIcon(appIcon)
+    }
 
     // 先按已落盘的开关初始化日志，后续启动步骤与现场操作都能被记录
     const settings = await readSettings().catch(() => null)
