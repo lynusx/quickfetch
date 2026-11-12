@@ -32,33 +32,28 @@
 
 /*
  * 内容区：与画布同色，靠 12px 间隙、边框与圆角同侧边栏分隔；
- * 页面在卡片内部滚动，层级交给页面里的白色面板承担。
+ * 外壳不再滚动，页面用 PageShell 在卡片内部固定标题、滚动正文。
  */
 .app-main {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-width: 0;
   min-height: 0;
   height: auto;
   margin: 12px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   background: var(--app-canvas);
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-panel);
   box-shadow: var(--app-shadow-panel);
 }
 
+/* 页面骨架自己管内边距与最大宽度，这里只负责撑满卡片 */
 .app-content {
-  --app-content-padding-x: 34px;
-  width: 100%;
-  max-width: var(--app-content-max);
-  margin: 0 auto;
-  padding: 24px var(--app-content-padding-x) 56px;
-}
-
-@media (max-width: 1240px) {
-  .app-content {
-    --app-content-padding-x: 24px;
-    padding: 20px var(--app-content-padding-x) 48px;
-  }
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 0;
 }

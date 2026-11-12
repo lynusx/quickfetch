@@ -7,7 +7,7 @@ import {
   UploadIcon,
 } from '@radix-ui/react-icons'
 
-import { PageHeader } from '@/components/page-header/page-header'
+import { PageShell } from '@/components/page-shell/page-shell'
 import { Panel, PanelBody, PanelHeader } from '@/components/panel'
 import { Step } from '@/components/field'
 import ExcelUploadZone from './components/excel-upload-zone'
@@ -43,18 +43,15 @@ const ExcelParsePage = () => {
   const { file } = useExcelStore()
 
   return (
-    <Box>
-      <PageHeader
-        eyebrow="数据 · Excel"
-        title="Excel 解析"
-        badge={
-          <Badge variant="outline" color="gray">
-            Beta
-          </Badge>
-        }
-        description="解析单个 Excel 文件，按设备 ID 分组后，支持按线别与不良项筛选，并导出为 xlsx。"
-      />
-
+    <PageShell
+      title="Excel 解析"
+      badge={
+        <Badge variant="outline" color="gray">
+          Beta
+        </Badge>
+      }
+      description="解析单个 Excel 文件，按设备 ID 分组后，支持按线别与不良项筛选，并导出为 xlsx。"
+    >
       <ExcelUploadZone />
 
       {file ? (
@@ -89,7 +86,7 @@ const ExcelParsePage = () => {
           </PanelBody>
         </Panel>
       )}
-    </Box>
+    </PageShell>
   )
 }
 

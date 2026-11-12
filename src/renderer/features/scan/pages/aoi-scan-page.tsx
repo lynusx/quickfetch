@@ -38,7 +38,6 @@ const AoiScanPage = () => {
   return (
     <PlantScanPage
       category="aoi"
-      title="森标 AOI 图片批量拷贝"
       notices={
         !configured ? (
           <UnconfiguredNotice

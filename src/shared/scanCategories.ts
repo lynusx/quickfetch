@@ -36,8 +36,6 @@ export const normalizeScanCategory = (value: unknown): ScanCategory =>
 export interface ScanCategoryMeta {
   /** 导航与提示里的名字 */
   label: string
-  /** 页面左上角的眉标 */
-  eyebrow: string
   /** 断网自动暂停时的 toast：网名统一来自 NETWORK_HINT，这里只补上下文 */
   networkHint: string
   /** 路径里有没有时段层 */
@@ -51,7 +49,6 @@ export interface ScanCategoryMeta {
 export const SCAN_CATEGORY_META = {
   el: {
     label: 'EL',
-    eyebrow: '找图 · EL',
     networkHint: `共享盘连接中断，任务已暂停。${NETWORK_HINT}`,
     hasSlots: true,
     requiresLevels: false,
@@ -59,7 +56,6 @@ export const SCAN_CATEGORY_META = {
   },
   lxt: {
     label: '力禧特EL',
-    eyebrow: '找图 · 力禧特EL',
     networkHint: `连不上力禧特机台，任务已暂停。${NETWORK_HINT}`,
     hasSlots: true,
     requiresLevels: false,
@@ -67,7 +63,6 @@ export const SCAN_CATEGORY_META = {
   },
   pl: {
     label: '利珀PL',
-    eyebrow: '找图 · 利珀PL',
     networkHint: `连不上利珀机台，任务已暂停。${NETWORK_HINT}`,
     hasSlots: true,
     requiresLevels: true,
@@ -75,7 +70,6 @@ export const SCAN_CATEGORY_META = {
   },
   aoi: {
     label: '森标 AOI',
-    eyebrow: '找图 · 森标 AOI',
     networkHint: `连不上森标 AOI 机台，任务已暂停。${NETWORK_HINT}`,
     hasSlots: false,
     requiresLevels: false,

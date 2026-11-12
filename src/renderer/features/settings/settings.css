@@ -1,30 +1,4 @@
-/* 设置页样式。布局交给 Radix props，这里只留 props 表达不了的部分。 */
-
-/* 设置页改成「固定标题区 + 独立滚动正文」，分割线可以横贯整张卡片 */
-.app-main:has(.settings-page) {
-  overflow: hidden;
-}
-
-.app-content:has(.settings-page) {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-}
-
-/* 固定标题区：背景与底部分割线没有对应 prop */
-.settings-header {
-  background: var(--app-canvas);
-  border-bottom: 1px solid var(--app-border);
-}
-
-/* 页头在固定区里不需要原本的段后距 */
-.settings-header .page-header {
-  width: 100%;
-  margin-bottom: 0;
-}
+/* 设置页样式。布局交给 Radix props 与 PageShell，这里只留 props 表达不了的部分。 */
 
 /*
  * 分段控件统一收窄内边距（16px → 12px），

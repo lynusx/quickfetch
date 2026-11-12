@@ -57,6 +57,10 @@ body {
 .radix-themes {
   --app-sidebar-width: 242px;
   --app-content-max: 1480px;
+  /* 页面标题区高度：PageShell 吸顶标题与滚动偏移共用 */
+  --app-page-header-height: 64px;
+  /* 竖向滚动条宽度：全局原生滚动条使用（页面骨架已改用 ScrollArea 的 overlay 条） */
+  --app-scrollbar-width: 10px;
   --app-canvas: var(--gray-2);
   --app-surface: var(--color-panel-solid);
   --app-border: var(--gray-5);
@@ -78,7 +82,7 @@ body {
 }
 
 .app-shell ::-webkit-scrollbar {
-  width: 10px;
+  width: var(--app-scrollbar-width);
   height: 10px;
 }
 

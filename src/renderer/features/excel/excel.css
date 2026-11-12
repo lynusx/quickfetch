@@ -114,17 +114,6 @@
   color: var(--gray-10);
 }
 
-.sticky-panel {
-  position: sticky;
-  top: 8px;
-}
-
-@media (max-width: 1180px) {
-  .sticky-panel {
-    position: static;
-  }
-}
-
 .file-meta {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -163,17 +152,6 @@
 }
 
 .table-shell .rt-TableRootTable {
-  background: var(--app-surface);
-}
-
-.sheet-scroll {
-  max-height: 420px;
-}
-
-.sheet-table-head {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   background: var(--app-surface);
 }
 

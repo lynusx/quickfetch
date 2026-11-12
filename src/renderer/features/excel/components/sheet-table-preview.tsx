@@ -52,9 +52,9 @@ const SheetTablePreview = ({ sheet, mode }: SheetTablePreviewProps) => {
   const dataRows = displayData.slice(1)
 
   return (
-    <ScrollArea type="auto" scrollbars="both" className="sheet-scroll">
+    <ScrollArea type="auto" scrollbars="both">
       <Table.Root size="1" variant="surface">
-        <Table.Header className="sheet-table-head">
+        <Table.Header>
           <Table.Row>
             {headerRow.map((cell, index) => (
               <Table.ColumnHeaderCell key={index} className="sheet-cell-nowrap">

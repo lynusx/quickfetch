@@ -8,6 +8,7 @@ import {
   TargetIcon,
 } from '@radix-ui/react-icons'
 import { Box, Flex, Text } from '@radix-ui/themes'
+import { SCAN_CATEGORY_LABEL } from '@shared/scanCategories'
 
 import { BrandMark } from '@/components/brand-mark/brand-mark'
 import { UpdateBadge } from '@/features/update'
@@ -20,22 +21,22 @@ const NAV_GROUPS = [
     label: '找图',
     items: [
       {
-        label: 'EL',
+        label: SCAN_CATEGORY_LABEL.el,
         to: ROUTES.EL,
         icon: CopyIcon,
       },
       {
-        label: '森标 AOI',
+        label: SCAN_CATEGORY_LABEL.aoi,
         to: ROUTES.AOI,
         icon: CameraIcon,
       },
       {
-        label: '力禧特EL',
+        label: SCAN_CATEGORY_LABEL.lxt,
         to: ROUTES.LXT_EL,
         icon: MagnifyingGlassIcon,
       },
       {
-        label: '利珀PL',
+        label: SCAN_CATEGORY_LABEL.pl,
         to: ROUTES.LP_PL,
         icon: TargetIcon,
       },

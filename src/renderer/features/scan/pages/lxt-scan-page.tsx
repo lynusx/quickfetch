@@ -37,7 +37,6 @@ const LxtScanPage = () => {
   return (
     <PlantScanPage
       category="lxt"
-      title="力禧特EL图片批量拷贝"
       notices={
         !configured ? (
           <UnconfiguredNotice

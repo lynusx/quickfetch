@@ -7,14 +7,13 @@ import {
   Button,
   Callout,
   Code,
-  Flex,
   SegmentedControl,
   Slider,
   Switch,
   Text,
 } from '@radix-ui/themes'
 
-import { PageHeader } from '@/components/page-header/page-header'
+import { PageShell } from '@/components/page-shell/page-shell'
 import { HelpTip } from '@/components/help-tip/help-tip'
 import { SettingsGroup } from './components/settings-group'
 import { SettingsRow } from './components/settings-row'
@@ -275,197 +274,163 @@ const SettingsPage = () => {
     envOverrides.includes(key) ? PREFERENCE_ENV[key] : undefined
 
   return (
-    <Flex
-      className="settings-page"
-      direction="column"
-      flexGrow="1"
-      flexShrink="1"
-      flexBasis="0"
-      minHeight="0"
+    <PageShell
+      title="设置"
+      contentMaxWidth="760px"
+      help={
+        <HelpTip title="设置保存位置">
+          设置保存在{' '}
+          <Code size="1">
+            {settingsPath ?? '%APPDATA%\\QuickFetch\\settings.json'}
+          </Code>
+          ，换台电脑需要重新设置。
+        </HelpTip>
+      }
     >
-      <Flex
-        className="settings-header"
-        align="center"
-        flexGrow="0"
-        flexShrink="0"
-        flexBasis="64px"
-        px="var(--app-content-padding-x)"
-      >
-        <PageHeader
-          title="设置"
-          help={
-            <HelpTip title="设置保存位置">
-              设置保存在{' '}
-              <Code size="1">
-                {settingsPath ?? '%APPDATA%\\QuickFetch\\settings.json'}
-              </Code>
-              {'，换台电脑需要重新设置。'}
-            </HelpTip>
-          }
+      {error ? (
+        <Callout.Root color="red" role="alert" mb="4">
+          <Callout.Icon>
+            <ExclamationTriangleIcon width={16} height={16} />
+          </Callout.Icon>
+          <Callout.Text>
+            <Text weight="medium">保存失败</Text>：{error}
+          </Callout.Text>
+        </Callout.Root>
+      ) : null}
+
+      <SettingsGroup id="scan-copy" title="扫描与复制">
+        <SettingsRow label="分组方式" help={LAYOUT_HELP}>
+          <SegmentedControl.Root
+            className="settings-segmented"
+            aria-label="分组方式"
+            value={preferences.copyLayout}
+            onValueChange={(value) =>
+              patch({ copyLayout: value as CopyLayout })
+            }
+          >
+            {LAYOUTS.map((value) => (
+              <SegmentedControl.Item key={value} value={value}>
+                {LAYOUT_SHORT_LABEL[value]}
+              </SegmentedControl.Item>
+            ))}
+          </SegmentedControl.Root>
+        </SettingsRow>
+
+        <SettingsRow label="同名文件" help={CONFLICT_HELP}>
+          <SegmentedControl.Root
+            className="settings-segmented"
+            aria-label="同名文件"
+            value={preferences.copyConflict}
+            onValueChange={(value) =>
+              patch({ copyConflict: value as CopyConflictPolicy })
+            }
+          >
+            {CONFLICTS.map((value) => (
+              <SegmentedControl.Item key={value} value={value}>
+                {COPY_CONFLICT_LABEL[value]}
+              </SegmentedControl.Item>
+            ))}
+          </SegmentedControl.Root>
+        </SettingsRow>
+
+        <SliderRow
+          label="历史记录保留条数"
+          help="超出后自动删除最旧的记录。"
+          value={historyLimit}
+          range={HISTORY_LIMIT_RANGE}
+          onChange={(next) => void saveHistoryLimit(next)}
         />
-      </Flex>
+      </SettingsGroup>
 
-      <Box
-        flexGrow="1"
-        flexShrink="1"
-        flexBasis="0"
-        minHeight="0"
-        overflowY="auto"
-        pt="20px"
-        px="var(--app-content-padding-x)"
-        pb="56px"
-      >
-        <Box maxWidth="760px" mx="auto">
-          <Box minWidth="0">
-            {error ? (
-              <Callout.Root color="red" role="alert" mb="4">
-                <Callout.Icon>
-                  <ExclamationTriangleIcon width={16} height={16} />
-                </Callout.Icon>
-                <Callout.Text>
-                  <Text weight="medium">保存失败</Text>：{error}
-                </Callout.Text>
-              </Callout.Root>
-            ) : null}
+      <SettingsGroup id="performance" title="性能">
+        <SliderRow
+          label="同时读取目录"
+          help="读取共享盘时同时发出的目录请求数；失败率过高会自动降一档。"
+          value={preferences.scanConcurrency}
+          range={PREFERENCE_RANGE.scanConcurrency}
+          envName={envName('scanConcurrency')}
+          onChange={(next) => patch({ scanConcurrency: next })}
+        />
+        <SliderRow
+          label="每批扫描机台"
+          help="一批机台扫完再开下一批，内存峰值只与单批相关。"
+          value={preferences.scanBatchSize}
+          range={PREFERENCE_RANGE.scanBatchSize}
+          envName={envName('scanBatchSize')}
+          onChange={(next) => patch({ scanBatchSize: next })}
+        />
+        <SliderRow
+          label="同时复制文件"
+          help="同时写入目标目录的文件数；共享盘冲突频繁时调低。"
+          value={preferences.copyConcurrency}
+          range={PREFERENCE_RANGE.copyConcurrency}
+          envName={envName('copyConcurrency')}
+          onChange={(next) => patch({ copyConcurrency: next })}
+        />
+        <SliderRow
+          label="每批复制文件"
+          help="每批复制完让出一次界面刷新，进度更新更及时。"
+          value={preferences.copyBatchSize}
+          range={PREFERENCE_RANGE.copyBatchSize}
+          envName={envName('copyBatchSize')}
+          onChange={(next) => patch({ copyBatchSize: next })}
+        />
+      </SettingsGroup>
 
-            <SettingsGroup id="scan-copy" title="扫描与复制">
-              <SettingsRow label="分组方式" help={LAYOUT_HELP}>
-                <SegmentedControl.Root
-                  className="settings-segmented"
-                  aria-label="分组方式"
-                  value={preferences.copyLayout}
-                  onValueChange={(value) =>
-                    patch({ copyLayout: value as CopyLayout })
-                  }
-                >
-                  {LAYOUTS.map((value) => (
-                    <SegmentedControl.Item key={value} value={value}>
-                      {LAYOUT_SHORT_LABEL[value]}
-                    </SegmentedControl.Item>
-                  ))}
-                </SegmentedControl.Root>
-              </SettingsRow>
+      <UpdateSettingsSection />
 
-              <SettingsRow label="同名文件" help={CONFLICT_HELP}>
-                <SegmentedControl.Root
-                  className="settings-segmented"
-                  aria-label="同名文件"
-                  value={preferences.copyConflict}
-                  onValueChange={(value) =>
-                    patch({ copyConflict: value as CopyConflictPolicy })
-                  }
-                >
-                  {CONFLICTS.map((value) => (
-                    <SegmentedControl.Item key={value} value={value}>
-                      {COPY_CONFLICT_LABEL[value]}
-                    </SegmentedControl.Item>
-                  ))}
-                </SegmentedControl.Root>
-              </SettingsRow>
+      <SettingsGroup id="logging" title="调试日志">
+        <SettingsRow
+          label="启用调试日志"
+          help={
+            <>
+              默认关闭，开启后立即生效。日志按天写入{' '}
+              {logInfo ? (
+                <Code size="1">{logInfo.dir}</Code>
+              ) : logInfoFailed ? (
+                'userData/logs（读取目录失败）'
+              ) : (
+                'userData/logs'
+              )}
+              {'，保留最近 7 天。'}
+            </>
+          }
+        >
+          <Switch
+            checked={preferences.debugLogEnabled}
+            aria-label="启用调试日志"
+            onCheckedChange={(checked) => patch({ debugLogEnabled: checked })}
+          />
+        </SettingsRow>
 
-              <SliderRow
-                label="历史记录保留条数"
-                help="超出后自动删除最旧的记录。"
-                value={historyLimit}
-                range={HISTORY_LIMIT_RANGE}
-                onChange={(next) => void saveHistoryLimit(next)}
-              />
-            </SettingsGroup>
+        <SettingsRow label="日志目录">
+          <Button
+            variant="soft"
+            color="gray"
+            size="2"
+            onClick={() => void openLogDir()}
+          >
+            打开日志目录
+          </Button>
+        </SettingsRow>
+      </SettingsGroup>
 
-            <SettingsGroup id="performance" title="性能">
-              <SliderRow
-                label="同时读取目录"
-                help="读取共享盘时同时发出的目录请求数；失败率过高会自动降一档。"
-                value={preferences.scanConcurrency}
-                range={PREFERENCE_RANGE.scanConcurrency}
-                envName={envName('scanConcurrency')}
-                onChange={(next) => patch({ scanConcurrency: next })}
-              />
-              <SliderRow
-                label="每批扫描机台"
-                help="一批机台扫完再开下一批，内存峰值只与单批相关。"
-                value={preferences.scanBatchSize}
-                range={PREFERENCE_RANGE.scanBatchSize}
-                envName={envName('scanBatchSize')}
-                onChange={(next) => patch({ scanBatchSize: next })}
-              />
-              <SliderRow
-                label="同时复制文件"
-                help="同时写入目标目录的文件数；共享盘冲突频繁时调低。"
-                value={preferences.copyConcurrency}
-                range={PREFERENCE_RANGE.copyConcurrency}
-                envName={envName('copyConcurrency')}
-                onChange={(next) => patch({ copyConcurrency: next })}
-              />
-              <SliderRow
-                label="每批复制文件"
-                help="每批复制完让出一次界面刷新，进度更新更及时。"
-                value={preferences.copyBatchSize}
-                range={PREFERENCE_RANGE.copyBatchSize}
-                envName={envName('copyBatchSize')}
-                onChange={(next) => patch({ copyBatchSize: next })}
-              />
-            </SettingsGroup>
-
-            <UpdateSettingsSection />
-
-            <SettingsGroup id="logging" title="调试日志">
-              <SettingsRow
-                label="启用调试日志"
-                help={
-                  <>
-                    默认关闭，开启后立即生效。日志按天写入{' '}
-                    {logInfo ? (
-                      <Code size="1">{logInfo.dir}</Code>
-                    ) : logInfoFailed ? (
-                      'userData/logs（读取目录失败）'
-                    ) : (
-                      'userData/logs'
-                    )}
-                    {'，保留最近 7 天。'}
-                  </>
-                }
-              >
-                <Switch
-                  checked={preferences.debugLogEnabled}
-                  aria-label="启用调试日志"
-                  onCheckedChange={(checked) =>
-                    patch({ debugLogEnabled: checked })
-                  }
-                />
-              </SettingsRow>
-
-              <SettingsRow label="日志目录">
-                <Button
-                  variant="soft"
-                  color="gray"
-                  size="2"
-                  onClick={() => void openLogDir()}
-                >
-                  打开日志目录
-                </Button>
-              </SettingsRow>
-            </SettingsGroup>
-
-            <SettingsGroup id="reset" title="重置">
-              <SettingsRow
-                label="复制与性能设置"
-                help="分组方式、同名文件策略与四个并发档位回到出厂值；扫描历史与调试日志不受影响。"
-              >
-                <Button
-                  variant="soft"
-                  color="gray"
-                  size="2"
-                  onClick={restoreCopyDefaults}
-                >
-                  恢复默认
-                </Button>
-              </SettingsRow>
-            </SettingsGroup>
-          </Box>
-        </Box>
-      </Box>
-    </Flex>
+      <SettingsGroup id="reset" title="重置">
+        <SettingsRow
+          label="复制与性能设置"
+          help="分组方式、同名文件策略与四个并发档位回到出厂值；扫描历史与调试日志不受影响。"
+        >
+          <Button
+            variant="soft"
+            color="gray"
+            size="2"
+            onClick={restoreCopyDefaults}
+          >
+            恢复默认
+          </Button>
+        </SettingsRow>
+      </SettingsGroup>
+    </PageShell>
   )
 }
 

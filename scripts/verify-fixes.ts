@@ -2138,7 +2138,7 @@ const scanParamsTests = async () => {
 
     for (const category of SCAN_CATEGORIES) {
       const meta = SCAN_CATEGORY_META[category]
-      assert.ok(meta.label && meta.eyebrow && meta.networkHint, category)
+      assert.ok(meta.label && meta.networkHint, category)
       assert.ok(
         Array.isArray(settings.categories[category].typeCatalog),
         `${category} 的类型清单不在配置里`,

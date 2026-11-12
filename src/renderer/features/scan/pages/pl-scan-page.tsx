@@ -37,7 +37,6 @@ const PlScanPage = () => {
   return (
     <PlantScanPage
       category="pl"
-      title="利珀PL图片批量拷贝"
       notices={
         !configured ? (
           <UnconfiguredNotice

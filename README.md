@@ -228,10 +228,10 @@ src/
 - 布局与文本优先使用 `Box` / `Flex` / `Grid` / `Text` / `Heading`；原生标签只保留语义必需的 `button`、`label`、`input`、`details` 等
 - 样式优先用 props：能由 Radix props 表达的间距、尺寸与布局不要写进 CSS；可迁移边界与写法见 [`AGENTS.md`](AGENTS.md) 原则 3
 - 设计层：全局令牌、reset、共享工具类与 sonner 覆盖在 `src/renderer/index.css`；组件 CSS 与组件同目录（渲染层组件目录、组件文件与样式统一 kebab-case），业务 feature CSS 在各自 feature 目录（如 `features/scan/scan.css`）。不引入 reset / 其它组件库
-- 页面标题统一由 `components/page-header/page-header` 渲染，`AppLayout` 不再重复标题栏；扫描页的任务进度、统计与控制按钮统一放在 `features/scan/components/scan-task-panel`
+- 页面骨架统一由 `components/page-shell/page-shell` 渲染：整个正文区是 Radix `ScrollArea` 的单一滚动视口，顶部 64px 标题区吸顶（标题行由 `components/page-header/page-header` 渲染，不再使用眉标），正文从下方滚过时标题区呈半透明磨砂玻璃（`backdrop-filter`）；滚动条是 overlay、不占布局宽度，并从标题区下方开始。标题始终贴内容区水平内边距、不随窗口宽度变化，正文按自身 `max-width` 居中，页面内不再有独立的限高滚动区（Excel 预览表格同样随页滚动）。标题高度与滚动偏移共用 `--app-page-header-height`。新增页面必须套 `PageShell`，`AppLayout` 只负责卡片与内容区容器。扫描页的任务进度、统计与控制按钮统一放在 `features/scan/components/scan-task-panel`
 - 设置项说明统一放在名称旁的 `?`（`components/help-tip`）：悬停或点击打开说明卡，行内只保留真实数据（路径、版本、时间）；会丢数据或不可撤销的后果仍写在按钮、选项卡或确认框里
-- 窗口使用自定义顶带：顶部 40px 与画布同色，只承载系统窗口控件（macOS 红绿灯 / Windows 右上角按钮），不显示标题，同时兼作拖拽区；Windows 按钮覆盖层颜色需与 `--app-canvas` 保持一致（`src/main/index.ts` 里的字面量）；页面标题仍由 `PageHeader` 渲染
-- 侧边栏、顶带与内容区共用 `--app-canvas` 底色；内容区保留四周 12px 间隙、圆角、边框与轻阴影，页面在卡片内部滚动，层级由页面里的白色面板（`--app-surface`）承担
+- 窗口使用自定义顶带：顶部 40px 与画布同色，只承载系统窗口控件（macOS 红绿灯 / Windows 右上角按钮），不显示标题，同时兼作拖拽区；Windows 按钮覆盖层颜色需与 `--app-canvas` 保持一致（`src/main/index.ts` 里的字面量）；页面标题仍由 `PageShell` 内的 `PageHeader` 渲染
+- 侧边栏、顶带与内容区共用 `--app-canvas` 底色；内容区保留四周 12px 间隙、圆角、边框与轻阴影，页面在 `PageShell` 的正文区内滚动，层级由页面里的白色面板（`--app-surface`）承担
 - 选择类控件统一使用 `components/choice-list`（多选）与 `ChoiceRadio`（单选），整个单元格可点击
 - 别名：`@/*` → `src/renderer/*`（`tsconfig*.json` 与 `electron.vite.config.ts` 同步配置）
 - 图标：`@radix-ui/react-icons`；提示：`sonner`；`cn()` 为内部纯逻辑实现

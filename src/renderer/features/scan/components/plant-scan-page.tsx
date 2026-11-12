@@ -4,19 +4,18 @@ import { Box, Flex, Grid } from '@radix-ui/themes'
 
 import { CopyPanel } from '@/features/copy'
 import { HistoryPanel } from '@/features/history'
-import { PageHeader } from '@/components/page-header/page-header'
+import { PageShell } from '@/components/page-shell/page-shell'
 import { Panel, PanelBody, PanelHeader } from '@/components/panel'
 import { ScanStatusBadge } from './scan-status-badge'
 import { ScanTaskPanel } from './scan-task-panel'
 import { useScanSession } from '../hooks/useScanSession'
 import { useToast } from '@/hooks/useToast'
 import type { ScanCategory, ScanTaskParams } from '@shared/ipc'
-import { SCAN_CATEGORY_META } from '@shared/scanCategories'
+import { SCAN_CATEGORY_LABEL } from '@shared/scanCategories'
 import '../scan.css'
 
 interface PlantScanPageProps {
   category: ScanCategory
-  title: string
   /** EL 与入口类页面的说明不同；不传时用入口类默认文案 */
   description?: string
   networkHint: string
@@ -38,7 +37,6 @@ interface PlantScanPageProps {
 
 const PlantScanPage = ({
   category,
-  title,
   description = '按入口目录中的快捷方式识别机台，按日期、班次与类型收集图片，并批量复制到本地。',
   networkHint,
   notices,
@@ -76,14 +74,11 @@ const PlantScanPage = ({
   const canStart = ready && !busy && !creating && !other
 
   return (
-    <Box>
-      <PageHeader
-        eyebrow={SCAN_CATEGORY_META[category].eyebrow}
-        title={title}
-        description={description}
-        badge={task ? <ScanStatusBadge status={task.status} /> : null}
-      />
-
+    <PageShell
+      title={SCAN_CATEGORY_LABEL[category]}
+      description={description}
+      badge={task ? <ScanStatusBadge status={task.status} /> : null}
+    >
       <Grid className="workbench-grid">
         <Panel>
           <PanelHeader
@@ -137,7 +132,7 @@ const PlantScanPage = ({
           />
         </Flex>
       </Grid>
-    </Box>
+    </PageShell>
   )
 }
 

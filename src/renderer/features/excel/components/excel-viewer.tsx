@@ -196,7 +196,7 @@ const ExcelViewer = () => {
       {file.status === 'completed' ? (
         <Grid className="workbench-grid">
           {/* 左侧筛选 */}
-          <Panel className="sticky-panel">
+          <Panel>
             <PanelHeader
               icon={<TableIcon width={13} height={13} />}
               title="筛选条件"

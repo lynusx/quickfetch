@@ -9,7 +9,7 @@ import './app-layout.css'
  *
  * 顶带承载系统窗口控件（macOS 红绿灯 / Windows 右上角按钮），不显示标题；
  * 侧边栏与四周留白共用应用底色，内容区是一张固定浮起的卡片，页面在卡片内滚动。
- * 页面标题统一由各页的 PageHeader 渲染。
+ * 页面骨架（固定标题区 + 内滚动正文）统一由各页的 PageShell 渲染。
  */
 const LayoutPage = () => (
   <Flex className="app-shell" direction="column">
