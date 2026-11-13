@@ -3,7 +3,6 @@ release
 dist
 .pnpm-store
 pnpm-lock.yaml
-skills-lock.json
 .claude
 
 # 现场临时资料（路径说明、快捷方式样本），不参与格式化与提交

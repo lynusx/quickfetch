@@ -11,6 +11,11 @@
 | 要动 UI、加组件、调整样式 | [`skills/radix-themes/SKILL.md`](skills/radix-themes/SKILL.md)     |
 | 整体怎么跑起来            | [`README.md`](../README.md)                                        |
 
+## 项目级 skills
+
+通用 skill 只装全局（`~/.claude/skills`），不提交进仓库；`.claude/skills/` 只保留本项目独有的
+`radix-themes`。安装技能后若又出现 `skills-lock.json` 或同名目录，不要带进提交。
+
 ## Radix Themes (@radix-ui/themes) 相关改动
 
 项目统一使用 `@radix-ui/themes` 构建 UI，根节点由 `<Theme>` 包裹，已彻底移除 shadcn/ui 及 Tailwind CSS。
@@ -165,5 +170,5 @@ rm -rf release/* && pnpm dist:win                 # 打包，产物在 release/
 rm -f /workspace/shots/*                          # 拍截图前清空
 ```
 
-`.claude/` 是第三方 skill 文档与本文档所在位置，已加进 `.prettierignore`。跑 `format:fix` 前请确认它还在忽略列表里，
+`.claude/` 是 skill 文档与本文档所在位置，已加进 `.prettierignore`。跑 `format:fix` 前请确认它还在忽略列表里，
 否则会把别人的文档整篇重排，混进 diff 里。
