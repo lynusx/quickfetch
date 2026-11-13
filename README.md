@@ -38,7 +38,7 @@ RCA EL、力禧特EL、利珀PL、森标 AOI 图片拷贝与 Excel 解析工具�
 
 ## 开发
 
-Node.js >= 22.12.0（见 `engines` 与 `.nvmrc`），pnpm 10.12.3。
+Node.js ^24（唯一真相是 `package.json` 的 `engines.node`），pnpm 10.12.3。
 
 ```bash
 pnpm install
@@ -46,6 +46,9 @@ pnpm dev      # electron-vite 起渲染层 dev server 并拉起 Electron
 pnpm typecheck
 pnpm format:check   # 只检查；写入用 pnpm format:fix
 ```
+
+> 版本管理器提示找不到 Node 时，执行 `fnm install 24` 或 `nvm install 24`；
+> 版本不符时 `pnpm install`、`pnpm dev` 会直接中止并给出提示。
 
 > 若启动报 `Electron uninstall`，说明依赖的安装脚本被 pnpm 跳过；
 > `pnpm dev` 会通过 `scripts/ensure-electron.cjs` 自动补下载。

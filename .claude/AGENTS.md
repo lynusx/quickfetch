@@ -54,6 +54,11 @@ Windows 上实际位置是 `%APPDATA%\QuickFetch\`，**和开发态是同一个�
 **环境变量优先级**：`环境变量 > 设置页 > 默认值`，实现在 `src/main/services/settings/load.ts` 的 `loadFrom()`。
 被环境变量接管的项，设置页会把输入框标灰（`AppSettings.envOverrides`）。加新档位时这个字段要同步。
 
+**Node 版本只有一个真相**：`package.json` 的 `engines.node`（当前 `^24.0.0`）是唯一来源，不设
+`.nvmrc` / `.node-version`。`scripts/check-node.cjs` 在 `preinstall` / `predev` / `prestart`
+读取同一字段，版本不符直接退出并给出安装命令；CI 用 `node-version-file: package.json`。
+升级 Node 只改 `engines.node` 与 README 的版本说明，不要再加版本文件。
+
 **网络错误判定**：只有 `src/main/services/scanner/fsx.ts` 里 `NETWORK_CODES` 列出的错误码才算「不可达」，其余一律按
 「目录不可用」处理。断网熔断全靠这个判定，把路径问题算成断网会直接暂停整个任务并提示
 「请接专用内网」，现场极难查。同理，探测第二层目录（力禧特EL的共享名、利珀PL的标识目录）

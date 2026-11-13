@@ -8,7 +8,8 @@
   "type": "module",
   "main": "out/main/index.cjs",
   "scripts": {
-    "predev": "node scripts/ensure-electron.cjs",
+    "preinstall": "node scripts/check-node.cjs",
+    "predev": "node scripts/check-node.cjs && node scripts/ensure-electron.cjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc -b",
@@ -16,7 +17,7 @@
     "dist:win": "pnpm check:release && pnpm build && electron-builder --win --x64 --publish never",
     "lint": "eslint . && stylelint \"src/**/*.css\"",
     "verify": "node scripts/verify-run.mjs",
-    "prestart": "node scripts/ensure-electron.cjs",
+    "prestart": "node scripts/check-node.cjs && node scripts/ensure-electron.cjs",
     "start": "electron-vite preview",
     "format": "prettier --check .",
     "format:check": "prettier --check .",
@@ -60,7 +61,7 @@
     "zustand": "^5.0.9"
   },
   "engines": {
-    "node": ">=22.12.0"
+    "node": "^24.0.0"
   },
   "packageManager": "pnpm@10.12.3+sha512.467df2c586056165580ad6dfb54ceaad94c5a30f80893ebdec5a44c5aa73c205ae4a5bb9d5ed6bb84ea7c249ece786642bbb49d06a307df218d03da41c317417",
   "pnpm": {
