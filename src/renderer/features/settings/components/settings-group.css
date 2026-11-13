@@ -1,33 +1,19 @@
-/* 设置分区：标题 + 白卡。 */
+/* 设置分区：标题 + 白卡。卡片外观来自 `.app-card`，这里只给取值。 */
 
 .settings-group {
-  scroll-margin-top: 16px;
+  scroll-margin-top: var(--space-4);
 }
 
 .settings-group + .settings-group {
-  margin-top: 28px;
+  margin-top: var(--space-6);
 }
 
 .settings-group-title {
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
   color: var(--gray-12);
 }
 
-.settings-card {
-  overflow: hidden;
-  background: var(--app-surface);
-  border: 1px solid var(--app-border);
-  border-radius: 10px;
-  box-shadow: 0 1px 2px var(--gray-a2);
-}
-
-/* 卡片底部区域：状态、进度与操作，不强行塞进右侧控件位 */
+/* 卡片底部区域：状态、进度与操作，不强行塞进右侧控件位。
+   布局（flex 方向、gap、padding）走 props，这里只留分隔线。 */
 .settings-card-footer {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
   border-top: 1px solid var(--app-border);
 }

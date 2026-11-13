@@ -1,11 +1,7 @@
-/* 应用外壳：AppLayout。 */
+/* 应用外壳：AppLayout。布局走 props，本文件只保留背景、边框、阴影与
+   props 表达不了的窗口拖拽区。 */
 
 .app-shell {
-  display: flex;
-  flex-direction: column;
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
   background: var(--app-canvas);
 }
 
@@ -16,17 +12,12 @@
  * Windows 的窗口按钮覆盖层颜色在 src/main/index.ts 里同步为同一灰度。
  */
 .app-topbar {
-  flex: 0 0 40px;
   background: var(--app-canvas);
   -webkit-app-region: drag;
   user-select: none;
 }
 
 .app-body {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
   background: var(--app-canvas);
 }
 
@@ -35,25 +26,8 @@
  * 外壳不再滚动，页面用 PageShell 在卡片内部固定标题、滚动正文。
  */
 .app-main {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  height: auto;
-  margin: 12px;
-  overflow: hidden;
   background: var(--app-canvas);
   border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-panel);
-  box-shadow: var(--app-shadow-panel);
-}
-
-/* 页面骨架自己管内边距与最大宽度，这里只负责撑满卡片 */
-.app-content {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  padding: 0;
+  border-radius: var(--radius-4);
+  box-shadow: var(--shadow-2);
 }

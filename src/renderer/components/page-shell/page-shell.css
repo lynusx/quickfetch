@@ -31,7 +31,5 @@
 /* 引导句沿用原页头说明的版式 */
 .page-shell-description {
   max-width: 760px;
-  font-size: 13px;
-  line-height: 1.65;
   color: var(--gray-10);
 }

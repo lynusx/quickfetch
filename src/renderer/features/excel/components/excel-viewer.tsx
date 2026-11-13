@@ -29,30 +29,30 @@ import type { ExcelFile } from '../types'
 
 const FileMeta = ({ file }: { file: ExcelFile }) => (
   <Grid className="file-meta" columns="3" gap="2">
-    <Box className="file-meta-item">
-      <Text as="span" size="1" color="gray" className="file-meta-label">
+    <Flex className="file-meta-item" direction="column" gap="1" py="2" px="3">
+      <Text as="div" size="1" color="gray" className="file-meta-label">
         文件大小
       </Text>
-      <Text as="span" className="file-meta-value">
+      <Text as="div" size="1" weight="medium" truncate className="tabular">
         {file.size}
       </Text>
-    </Box>
-    <Box className="file-meta-item">
-      <Text as="span" size="1" color="gray" className="file-meta-label">
+    </Flex>
+    <Flex className="file-meta-item" direction="column" gap="1" py="2" px="3">
+      <Text as="div" size="1" color="gray" className="file-meta-label">
         工作表
       </Text>
-      <Text as="span" className="file-meta-value">
+      <Text as="div" size="1" weight="medium" truncate className="tabular">
         {file.sheets.length} 个
       </Text>
-    </Box>
-    <Box className="file-meta-item">
-      <Text as="span" size="1" color="gray" className="file-meta-label">
+    </Flex>
+    <Flex className="file-meta-item" direction="column" gap="1" py="2" px="3">
+      <Text as="div" size="1" color="gray" className="file-meta-label">
         上传时间
       </Text>
-      <Text as="span" className="file-meta-value">
+      <Text as="div" size="1" weight="medium" truncate className="tabular">
         {file.uploadTime}
       </Text>
-    </Box>
+    </Flex>
   </Grid>
 )
 
@@ -125,12 +125,7 @@ const ExcelViewer = () => {
             <FileMeta file={file} />
 
             <Flex justify="end">
-              <Button
-                variant="soft"
-                color="gray"
-                size="2"
-                onClick={() => setFile(null)}
-              >
+              <Button variant="soft" color="gray" onClick={() => setFile(null)}>
                 <Cross2Icon width={14} height={14} />
                 清除文件
               </Button>
@@ -194,7 +189,7 @@ const ExcelViewer = () => {
       ) : null}
 
       {file.status === 'completed' ? (
-        <Grid className="workbench-grid">
+        <Grid className="workbench-grid" gap="4" align="start">
           {/* 左侧筛选 */}
           <Panel>
             <PanelHeader

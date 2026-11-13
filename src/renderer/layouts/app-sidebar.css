@@ -1,58 +1,43 @@
-/* 应用侧边栏：AppSidebar。 */
-
-.app-sidebar {
-  display: flex;
-  flex-direction: column;
-  flex: 0 0 var(--app-sidebar-width);
-  width: var(--app-sidebar-width);
-  height: 100%;
-}
+/* 应用侧边栏：AppSidebar。布局走 props，本文件只保留交互态与
+   props 表达不了的窗口拖拽区。 */
 
 .sidebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 12px 18px 16px;
   /* 品牌行没有交互元素，和顶带一起作为窗口拖拽区 */
   -webkit-app-region: drag;
   user-select: none;
 }
 
 .brand-name {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  line-height: 1.25;
   color: var(--gray-12);
 }
 
-.sidebar-nav {
+/* ScrollArea 不转发 flexGrow/minHeight，弹性只能留在这里 */
+.sidebar-scroll {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  padding: 6px 12px 16px;
 }
 
 .nav-group + .nav-group {
-  margin-top: 20px;
+  margin-top: var(--space-5);
 }
 
+/* 分组标签：缩进与下间距走 margin prop（`mx` / `mb`）——这里没有背景与描边，
+   padding 与 margin 的渲染位置完全一致，不必为此再套一层盒子。
+   `color` 用 gray-9：`Text color="gray"` 只到 11 阶，表达不了更弱的层级。 */
 .nav-group-label {
-  padding: 0 10px 8px;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
   color: var(--gray-9);
 }
 
+/* 导航项必须渲染成 <a>（React Router 的 NavLink 提供 aria-current 与客户端跳转），
+   拿不到 Flex 的布局 props，所以这几条布局声明只能留在这里，不算双写；
+   文字色是状态色（:hover / [aria-current]），Text 的 color 是静态 prop，也盖不住。 */
 .nav-item {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
-  border-radius: var(--app-radius-control);
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border-radius: var(--radius-4);
   color: var(--gray-11);
   text-decoration: none;
   transition:
@@ -61,7 +46,7 @@
 }
 
 .nav-item + .nav-item {
-  margin-top: 2px;
+  margin-top: var(--space-1);
 }
 
 .nav-item:hover {
@@ -86,13 +71,7 @@
 }
 
 .nav-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  flex-shrink: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-4);
   background: var(--gray-a3);
   color: var(--gray-11);
   transition:
@@ -116,39 +95,19 @@
 
 .nav-label {
   display: block;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.3;
   white-space: nowrap;
 }
 
-.nav-item[aria-current='page'] .nav-label {
-  font-weight: 600;
-}
-
 .sidebar-footer {
-  padding: 12px;
   border-top: 1px solid var(--app-border);
 }
 
 .sidebar-footer .nav-item {
-  padding: 8px 10px;
-}
-
-.sidebar-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 10px 10px 2px;
-  font-size: 10.5px;
-  color: var(--gray-9);
+  padding: var(--space-2);
 }
 
 .sidebar-status {
   display: inline-flex;
-  align-items: center;
-  gap: 5px;
 }
 
 /* 有新版本时的提示入口：与版本号同一行，不抢主操作区 */

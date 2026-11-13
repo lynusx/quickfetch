@@ -82,7 +82,7 @@ const CONFLICT_HELP = CONFLICTS.map((value, index) => (
   <Fragment key={value}>
     {index > 0 ? <br /> : null}
     {value === 'overwrite' ? (
-      <Text as="span" color="red">
+      <Text color="red">
         {COPY_CONFLICT_LABEL[value]} → {CONFLICT_HINT[value]}
       </Text>
     ) : (
@@ -177,7 +177,7 @@ const SliderRow = ({
           }}
         />
       </Box>
-      <Text as="span" size="2" weight="medium" className="settings-row-value">
+      <Text size="2" weight="medium" className="settings-row-value">
         {draft}
       </Text>
     </SettingsRow>
@@ -404,12 +404,7 @@ const SettingsPage = () => {
         </SettingsRow>
 
         <SettingsRow label="日志目录">
-          <Button
-            variant="soft"
-            color="gray"
-            size="2"
-            onClick={() => void openLogDir()}
-          >
+          <Button variant="soft" color="gray" onClick={() => void openLogDir()}>
             打开日志目录
           </Button>
         </SettingsRow>
@@ -420,12 +415,7 @@ const SettingsPage = () => {
           label="复制与性能设置"
           help="分组方式、同名文件策略与四个并发档位回到出厂值；扫描历史与调试日志不受影响。"
         >
-          <Button
-            variant="soft"
-            color="gray"
-            size="2"
-            onClick={restoreCopyDefaults}
-          >
+          <Button variant="soft" color="gray" onClick={restoreCopyDefaults}>
             恢复默认
           </Button>
         </SettingsRow>

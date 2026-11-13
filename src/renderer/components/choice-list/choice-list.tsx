@@ -83,6 +83,8 @@ export const ChoiceList = ({
             className="choice-cell"
             align="center"
             gap="2"
+            minWidth="0"
+            p="2"
             data-selected={checked || undefined}
             data-disabled={disabled || undefined}
             title={option.title}
@@ -101,11 +103,11 @@ export const ChoiceList = ({
               onClick={(event) => event.stopPropagation()}
               onCheckedChange={(next) => toggle(option.value, next === true)}
             />
-            <Text as="span" size="2" className="choice-label">
+            <Text size="2" className="choice-label">
               {option.label}
             </Text>
             {option.meta != null ? (
-              <Text as="span" size="1" color="gray" className="choice-meta">
+              <Text size="1" color="gray" className="choice-meta">
                 {option.meta}
               </Text>
             ) : null}
@@ -156,6 +158,8 @@ export const ChoiceRadio = ({
               className="choice-cell"
               align="center"
               gap="2"
+              minWidth="0"
+              p="2"
               data-selected={checked || undefined}
               data-disabled={disabled || undefined}
               title={option.title}
@@ -171,11 +175,11 @@ export const ChoiceRadio = ({
                 }
                 onClick={(event) => event.stopPropagation()}
               />
-              <Text as="span" size="2" className="choice-label">
+              <Text size="2" className="choice-label">
                 {option.label}
               </Text>
               {option.meta != null ? (
-                <Text as="span" size="1" color="gray" className="choice-meta">
+                <Text size="1" color="gray" className="choice-meta">
                   {option.meta}
                 </Text>
               ) : null}

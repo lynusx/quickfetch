@@ -1,58 +1,25 @@
-/* 统计：Stat / StatGrid。 */
+/* 统计：Stat / StatGrid。布局走 props，本文件只保留列模板（含响应式）与字体/颜色。 */
 
 .stat-grid {
-  display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
 }
 
 .stat {
-  min-width: 0;
-  padding: 11px 13px;
   border: 1px solid var(--gray-a4);
   border-radius: var(--radius-3);
   background: var(--gray-a2);
 }
 
+/* 标签与单位用 gray-10 / gray-9，比 `Text color="gray"`（11 阶）更浅；
+   Text 的 color 只能给到 11 / 12（highContrast）两档，表达不了更弱的层级。
+
+   除此之外本文件不再声明文本布局：块级由 `as="div"` 表达，截断由 `truncate`
+   prop 表达，两格之间的 8px 由父 `<Flex gap="1">` 管，单位前的间距走 `ml="1"`。 */
 .stat-label {
-  display: block;
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
   color: var(--gray-10);
 }
 
-.stat-value {
-  display: block;
-  margin-top: 5px;
-  font-size: 21px;
-  font-weight: 680;
-  line-height: 1.15;
-  letter-spacing: -0.03em;
-  font-variant-numeric: tabular-nums;
-  color: var(--gray-12);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.stat[data-tone='accent'] .stat-value {
-  color: var(--accent-11);
-}
-
-.stat[data-tone='success'] .stat-value {
-  color: var(--green-11);
-}
-
-.stat[data-tone='danger'] .stat-value {
-  color: var(--red-11);
-}
-
 .stat-unit {
-  margin-left: 3px;
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0;
   color: var(--gray-9);
 }
 

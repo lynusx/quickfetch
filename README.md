@@ -224,9 +224,9 @@ src/
 
 - 组件库：**Radix Themes**（`@radix-ui/themes`），根节点由 `<Theme>` 包裹
 - 样式：`@radix-ui/themes/styles.css`，使用 Radix 设计令牌
+- **Radix 的用法规则不在本文重复**：props 与 CSS 的分工、尺度档位、默认值、颜色与布局边界、项目确认过的例外，全在 [`.claude/skills/radix-themes/SKILL.md`](.claude/skills/radix-themes/SKILL.md)。动 UI 前先过一遍它的自查清单，按现象找改法查同目录的 `references/anti-patterns.md`
 - 字体：拉丁使用 `Public Sans Variable`，中文回退到系统字体（Windows 微软雅黑、macOS PingFang SC、Linux Noto Sans CJK）；不打包 CJK 字体。字体变量需同时覆盖 `:root` 与 `.radix-themes`，否则 Radix 组件会使用自己的默认栈
-- 布局与文本优先使用 `Box` / `Flex` / `Grid` / `Text` / `Heading`；原生标签只保留语义必需的 `button`、`label`、`input`、`details` 等
-- 样式优先用 props：能由 Radix props 表达的间距、尺寸与布局不要写进 CSS；可迁移边界与写法见 [`AGENTS.md`](AGENTS.md) 原则 3
+- 白卡外观只有一处实现：`Card variant="surface"` + `index.css` 的 `.app-card`（只管内边距归零与描边色），圆角跟 Card 的 `size` 走，页面不再声明覆盖变量（Card 的描边是 inset ring，不占布局，比手写 border 少 2px 高度）
 - 设计层：全局令牌、reset、共享工具类与 sonner 覆盖在 `src/renderer/index.css`；组件 CSS 与组件同目录（渲染层组件目录、组件文件与样式统一 kebab-case），业务 feature CSS 在各自 feature 目录（如 `features/scan/scan.css`）。不引入 reset / 其它组件库
 - 页面骨架统一由 `components/page-shell/page-shell` 渲染：整个正文区是 Radix `ScrollArea` 的单一滚动视口，顶部 64px 标题区吸顶（标题行由 `components/page-header/page-header` 渲染，不再使用眉标），正文从下方滚过时标题区呈半透明磨砂玻璃（`backdrop-filter`）；滚动条是 overlay、不占布局宽度，并从标题区下方开始。标题始终贴内容区水平内边距、不随窗口宽度变化，正文按自身 `max-width` 居中，页面内不再有独立的限高滚动区（Excel 预览表格同样随页滚动）。标题高度与滚动偏移共用 `--app-page-header-height`。新增页面必须套 `PageShell`，`AppLayout` 只负责卡片与内容区容器。扫描页的任务进度、统计与控制按钮统一放在 `features/scan/components/scan-task-panel`
 - 设置项说明统一放在名称旁的 `?`（`components/help-tip`）：悬停或点击打开说明卡，行内只保留真实数据（路径、版本、时间）；会丢数据或不可撤销的后果仍写在按钮、选项卡或确认框里

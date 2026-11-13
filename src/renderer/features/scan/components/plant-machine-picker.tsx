@@ -7,7 +7,7 @@ import {
   ReloadIcon,
 } from '@radix-ui/react-icons'
 import {
-  Box,
+  Badge,
   Button,
   Callout,
   Flex,
@@ -54,6 +54,13 @@ const shareBadge = (
 
   return { label: share, tone: 'ready' }
 }
+
+/** 三态对应的 Badge 语义色；ready 走主题强调色，不写死 indigo */
+const SHARE_TONE_COLOR = {
+  muted: 'gray',
+  ready: undefined,
+  missing: 'red',
+} as const
 
 /**
  * 机台列表的额外过滤与空态文案。
@@ -268,14 +275,12 @@ const PlantMachinePicker = ({
         <details className="skipped-box">
           <summary>
             <ExclamationTriangleIcon width={14} height={14} />
-            <Text as="span" size="1">
-              {skipped.length} 个快捷方式已跳过
-            </Text>
+            <Text size="1">{skipped.length} 个快捷方式已跳过</Text>
           </summary>
           <Flex className="skipped-list" direction="column" gap="1">
             {skipped.map((item) => (
               <Flex key={`${item.plant}/${item.file}`} align="baseline" gap="2">
-                <Text as="span" size="1" className="mono">
+                <Text size="1" color="gray" className="mono">
                   {item.plant}/{item.file}
                 </Text>
                 <Text size="1" color="gray">
@@ -381,19 +386,26 @@ const PlantMachinePicker = ({
                     return {
                       value: machine.key,
                       label: (
-                        <Flex align="center" gap="1" className="machine-label">
-                          <Text as="span" size="2" className="mono">
+                        <Flex
+                          align="center"
+                          gap="2"
+                          minWidth="0"
+                          width="100%"
+                          className="machine-label"
+                        >
+                          <Text size="2" className="mono">
                             {machine.name}
                           </Text>
                           {badge ? (
-                            <Box
-                              as="span"
+                            <Badge
                               className="share-badge"
+                              variant="soft"
+                              color={SHARE_TONE_COLOR[badge.tone]}
                               data-tone={badge.tone}
                               title={`共享：${badge.label}`}
                             >
                               {badge.label}
-                            </Box>
+                            </Badge>
                           ) : null}
                         </Flex>
                       ),

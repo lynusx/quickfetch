@@ -21,7 +21,6 @@ import {
   useSettingsStore,
 } from '@/features/settings/settingsStore'
 import { useUpdateStore } from './updateStore'
-import './update.css'
 
 const PHASE_LABEL: Record<UpdatePhase, string> = {
   idle: '未检查',
@@ -173,16 +172,18 @@ export const UpdateSettingsSection = () => {
         />
       </SettingsRow>
 
-      <div className="settings-card-footer update-state" aria-live="polite">
+      <Flex
+        className="settings-card-footer"
+        direction="column"
+        gap="3"
+        px="4"
+        py="3"
+        aria-live="polite"
+      >
         <Flex align="start" justify="between" gap="3" wrap="wrap">
-          <Flex align="center" gap="2" className="update-status">
+          <Flex align="center" gap="2" minWidth="0">
             {busy ? <Spinner size="1" /> : null}
-            <Text
-              as="p"
-              size="2"
-              weight="medium"
-              className="settings-row-label"
-            >
+            <Text as="p" size="2" weight="medium">
               {statusText}
             </Text>
           </Flex>
@@ -191,7 +192,6 @@ export const UpdateSettingsSection = () => {
             <Button
               variant="soft"
               color="gray"
-              size="2"
               disabled={busy || phase === 'downloaded' || phase === 'disabled'}
               onClick={() => void runCheck()}
             >
@@ -199,14 +199,11 @@ export const UpdateSettingsSection = () => {
             </Button>
 
             {installed && phase === 'available' ? (
-              <Button size="2" onClick={() => void runDownload()}>
-                下载更新
-              </Button>
+              <Button onClick={() => void runDownload()}>下载更新</Button>
             ) : null}
 
             {installed && phase === 'downloaded' ? (
               <Button
-                size="2"
                 disabled={!state?.canInstall}
                 onClick={() => void runInstall()}
               >
@@ -218,7 +215,6 @@ export const UpdateSettingsSection = () => {
               <Button
                 variant="soft"
                 color="gray"
-                size="2"
                 onClick={() => void runOpenPage()}
               >
                 打开下载页面
@@ -245,7 +241,7 @@ export const UpdateSettingsSection = () => {
         ) : null}
 
         {portable && phase === 'available' ? (
-          <Callout.Root color="amber" className="update-callout">
+          <Callout.Root color="amber" mt="1">
             <Callout.Icon>
               <InfoCircledIcon width={16} height={16} />
             </Callout.Icon>
@@ -257,7 +253,7 @@ export const UpdateSettingsSection = () => {
         ) : null}
 
         {installed && phase === 'downloaded' && !postponed ? (
-          <Callout.Root color="green" className="update-callout">
+          <Callout.Root color="green" mt="1">
             <Callout.Icon>
               <InfoCircledIcon width={16} height={16} />
             </Callout.Icon>
@@ -282,7 +278,7 @@ export const UpdateSettingsSection = () => {
         ) : null}
 
         {state?.blockedByTasks && state.blockedReason ? (
-          <Callout.Root color="amber" className="update-callout">
+          <Callout.Root color="amber" mt="1">
             <Callout.Icon>
               <ExclamationTriangleIcon width={16} height={16} />
             </Callout.Icon>
@@ -291,14 +287,14 @@ export const UpdateSettingsSection = () => {
         ) : null}
 
         {phase === 'error' && state?.error ? (
-          <Callout.Root color="red" role="alert" className="update-callout">
+          <Callout.Root color="red" role="alert" mt="1">
             <Callout.Icon>
               <ExclamationTriangleIcon width={16} height={16} />
             </Callout.Icon>
             <Callout.Text>{state.error}</Callout.Text>
           </Callout.Root>
         ) : null}
-      </div>
+      </Flex>
     </SettingsGroup>
   )
 }

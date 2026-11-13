@@ -136,7 +136,7 @@ export const HelpTip = ({ title, children }: HelpTipProps) => {
           size="2"
           weight="bold"
           id={titleId}
-          mb="4px"
+          mb="1"
           className="help-tip-title"
         >
           {title}

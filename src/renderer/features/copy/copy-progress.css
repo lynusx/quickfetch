@@ -1,7 +1,6 @@
 /* 复制进度展示：四个扫描页共用，保证五项信息排版一致。 */
 
 .copy-progress {
-  padding: 12px 13px;
   border: 1px solid var(--app-border);
   border-radius: var(--radius-3);
   background: var(--gray-a2);
@@ -9,48 +8,32 @@
 
 /* 取消后的摘要行：不再显示进度条与批次，只留「已复制 N/M 张」 */
 .copy-canceled {
-  padding: 9px 13px;
   border: 1px solid var(--app-border);
   border-radius: var(--radius-3);
   background: var(--gray-a2);
 }
 
-.copy-progress-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 7px;
-}
-
 .copy-progress-label {
-  font-size: 11.5px;
-  font-weight: 500;
   color: var(--gray-11);
 }
 
 .copy-progress-value {
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   color: var(--gray-12);
 }
 
+/* 行列异距（4px 14px）props 无法表达，布局留在这里；display 由 Flex 组件提供 */
 .copy-progress-meta {
-  display: flex;
   flex-wrap: wrap;
-  gap: 4px 14px;
-  margin-top: 9px;
-  font-size: 10.5px;
-  color: var(--gray-10);
+  gap: var(--space-1) var(--space-4);
+  margin-top: var(--space-2);
   font-variant-numeric: tabular-nums;
 }
 
 .copy-progress-meta span {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 /* 文件路径可能很长：允许它在行内收缩，否则会把面板横向撑开 */

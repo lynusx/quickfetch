@@ -1,5 +1,5 @@
 import { TableIcon } from '@radix-ui/react-icons'
-import { ScrollArea, Table, Text } from '@radix-ui/themes'
+import { Box, ScrollArea, Table, Text } from '@radix-ui/themes'
 
 import { EmptyState } from '@/components/empty-state/empty-state'
 import type { ExcelSheet } from '../types'
@@ -88,16 +88,12 @@ const SheetTablePreview = ({ sheet, mode }: SheetTablePreviewProps) => {
       </Table.Root>
 
       {showRowTruncation && (
-        <Text
-          as="p"
-          align="center"
-          size="1"
-          color="gray"
-          className="sheet-footer"
-        >
-          还有 {hiddenRowsCount} 行数据未在预览中显示
-          {mode === 'result' ? '（复制或导出时包含全量数据）' : ''}
-        </Text>
+        <Box className="sheet-footer" py="2">
+          <Text as="p" align="center" size="1" color="gray" className="tabular">
+            还有 {hiddenRowsCount} 行数据未在预览中显示
+            {mode === 'result' ? '（复制或导出时包含全量数据）' : ''}
+          </Text>
+        </Box>
       )}
     </ScrollArea>
   )

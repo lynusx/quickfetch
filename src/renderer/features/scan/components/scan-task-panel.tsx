@@ -35,6 +35,17 @@ const DOT_TONE: Record<string, string> = {
   muted: '',
 }
 
+/**
+ * 状态文字的颜色。语气由 `branchState()` 统一决定，这里只做「语气 → Radix 颜色」
+ * 的翻译，圆点与文字共用同一份语气，不会一个变红一个还灰着。
+ */
+const STATUS_TEXT_COLOR: Record<string, 'red' | 'amber' | 'gray'> = {
+  danger: 'red',
+  warn: 'amber',
+  success: 'gray',
+  muted: 'gray',
+}
+
 interface ScanTaskPanelProps {
   task: ScanTask | null
   creating: boolean
@@ -126,44 +137,39 @@ export const ScanTaskPanel = ({
           </StatGrid>
 
           <Box>
-            <Flex
-              className="progress-head"
-              align="baseline"
-              justify="between"
-              gap="3"
-            >
+            <Flex align="baseline" justify="between" gap="3" mb="2">
               <Flex align="center" gap="2">
                 {task?.status === 'running' || task?.status === 'pending' ? (
                   <Spinner size="1" />
                 ) : null}
                 <Text
-                  as="span"
                   size="1"
+                  weight="medium"
                   color="gray"
                   className="progress-label"
                 >
                   完成进度
                 </Text>
               </Flex>
-              <Text as="span" className="progress-value">
+              <Text size="3" weight="bold" className="progress-value">
                 {task?.progress.percent ?? 0}%
               </Text>
             </Flex>
             <Progress value={task?.progress.percent ?? 0} size="2" />
 
-            <Flex className="progress-meta" wrap="wrap" gap="2">
+            <Flex className="progress-meta">
               {task && task.progress.batchTotal > 0 ? (
-                <Text as="span" size="1" color="gray">
+                <Text size="1" color="gray">
                   第 {task.progress.batchIndex}/{task.progress.batchTotal} 批
                 </Text>
               ) : null}
               {task && task.progress.concurrency > 0 ? (
-                <Text as="span" size="1" color="gray">
+                <Text size="1" color="gray">
                   并发 {task.progress.concurrency}
                 </Text>
               ) : null}
               {task && task.progress.detailsPending > 0 ? (
-                <Text as="span" size="1" color="gray">
+                <Text size="1" color="gray">
                   待读明细 {task.progress.detailsPending}
                 </Text>
               ) : null}
@@ -173,29 +179,29 @@ export const ScanTaskPanel = ({
                 运行态才显示：暂停时最想知道的是"还差多少"，已完成则没必要。
               */}
               {task && task.status === 'running' && view.machinesPending > 0 ? (
-                <Text as="span" size="1" color="amber">
+                <Text size="1" color="amber">
                   正在等 {view.machinesPending} 台机台
                 </Text>
               ) : null}
               {view.etaText ? (
-                <Text as="span" size="1" color="gray">
+                <Text size="1" color="gray">
                   剩余 {view.etaText}
                 </Text>
               ) : null}
               {view.hasInaccessible ? (
                 <Flex as="span" align="center" gap="2" wrap="wrap">
                   {view.inaccessible.network > 0 ? (
-                    <Text as="span" size="1" color="red">
+                    <Text size="1" color="red">
                       网络不通 {view.inaccessible.network} 台
                     </Text>
                   ) : null}
                   {view.inaccessible.auth > 0 ? (
-                    <Text as="span" size="1" color="amber">
+                    <Text size="1" color="amber">
                       未认证 {view.inaccessible.auth} 台
                     </Text>
                   ) : null}
                   {view.inaccessible.denied > 0 ? (
-                    <Text as="span" size="1" color="amber">
+                    <Text size="1" color="amber">
                       无权限 {view.inaccessible.denied} 台
                     </Text>
                   ) : null}
@@ -208,23 +214,21 @@ export const ScanTaskPanel = ({
                 className="path-strip"
                 align="center"
                 gap="2"
+                mt="3"
+                py="1"
+                px="2"
                 title={task.progress.currentPath}
               >
-                <Text as="span" size="1" color="gray">
+                <Text size="1" color="gray">
                   {task.progress.currentPath}
-                </Text>
+                </Text>{' '}
               </Flex>
             ) : null}
           </Box>
 
-          <Flex className="action-bar" wrap="wrap" align="center" gap="2">
+          <Flex wrap="wrap" align="center" gap="2">
             {!busy ? (
-              <Button
-                size="2"
-                variant="solid"
-                onClick={onStart}
-                disabled={!canStart}
-              >
+              <Button onClick={onStart} disabled={!canStart}>
                 {creating ? (
                   <Spinner size="1" />
                 ) : (
@@ -235,13 +239,12 @@ export const ScanTaskPanel = ({
             ) : (
               <>
                 {task?.status === 'paused' ? (
-                  <Button size="2" onClick={onResume}>
+                  <Button onClick={onResume}>
                     <PlayIcon width={15} height={15} />
                     继续
                   </Button>
                 ) : (
                   <Button
-                    size="2"
                     variant="outline"
                     onClick={onPause}
                     disabled={task?.status !== 'running'}
@@ -250,7 +253,7 @@ export const ScanTaskPanel = ({
                     暂停
                   </Button>
                 )}
-                <Button size="2" variant="outline" onClick={onCancel}>
+                <Button variant="outline" onClick={onCancel}>
                   <StopIcon width={15} height={15} />
                   取消
                 </Button>
@@ -261,7 +264,7 @@ export const ScanTaskPanel = ({
           {!ready && !busy && missing?.length ? (
             <Flex className="inline-hint" align="start" gap="2">
               <InfoCircledIcon width={13} height={13} />
-              <Text as="span" size="1" color="gray">
+              <Text size="1" color="gray">
                 还需要选择{missing.join('、')}，选齐后才能开始扫描
               </Text>
             </Flex>
@@ -272,7 +275,7 @@ export const ScanTaskPanel = ({
             (error ?? task?.error) ||
             task?.status === 'paused' ||
             (task?.status === 'completed' && task.totalImages === 0)) && (
-            <Flex className="callout-stack" direction="column" gap="2">
+            <Flex direction="column" gap="2">
               {other && otherLabel ? (
                 <Callout.Root color="blue" size="1">
                   <Callout.Icon>
@@ -323,17 +326,17 @@ export const ScanTaskPanel = ({
           )}
 
           {task && task.status !== 'pending' ? (
-            <Box className="panel-section">
-              <Flex
-                className="panel-section-title"
-                align="center"
-                justify="between"
-                gap="3"
-              >
-                <Text as="span" size="1" weight="medium">
+            <Box className="panel-section" mt="4" pt="4">
+              <Flex align="center" justify="between" gap="3" mb="3">
+                <Text size="1" weight="medium">
                   各机台结果
                 </Text>
-                <Text as="span" size="1" color="gray" className="field-count">
+                <Text
+                  size="1"
+                  weight="medium"
+                  color="gray"
+                  className="field-count"
+                >
                   {formatDuration(task.elapsedMs)}
                   {view.abnormalCount > 0 &&
                     ` · ${view.abnormalCount} 台无结果`}
@@ -342,31 +345,22 @@ export const ScanTaskPanel = ({
 
               <Box className="data-list">
                 <Grid className="data-list-head">
-                  <Text as="span" size="1" color="gray" weight="medium">
+                  <Text size="1" color="gray" weight="medium">
                     机台
                   </Text>
-                  <Text as="span" size="1" color="gray" weight="medium">
+                  <Text size="1" color="gray" weight="medium">
                     状态
                   </Text>
-                  <Text
-                    as="span"
-                    size="1"
-                    color="gray"
-                    weight="medium"
-                    align="right"
-                  >
+                  <Text size="1" color="gray" weight="medium" align="right">
                     图片
                   </Text>
                 </Grid>
                 {view.rows.map((row) => (
-                  <Grid
-                    className="data-row"
-                    key={row.machine}
-                    data-state={row.kind ?? undefined}
-                  >
+                  <Grid className="data-row" key={row.machine}>
                     <Text
-                      as="span"
                       size="1"
+                      color="gray"
+                      highContrast
                       className="data-row-machine"
                       title={row.machine}
                     >
@@ -384,15 +378,21 @@ export const ScanTaskPanel = ({
                         className="status-dot"
                         data-tone={DOT_TONE[row.tone] || undefined}
                       />
-                      <Text as="span" size="1" className="data-row-message">
+                      <Text
+                        size="1"
+                        weight={row.tone === 'danger' ? 'medium' : undefined}
+                        color={STATUS_TEXT_COLOR[row.tone] ?? 'gray'}
+                        className="data-row-message"
+                      >
                         {row.statusText}
                       </Text>
                     </Flex>
                     <Text
-                      as="span"
                       size="1"
                       align="right"
                       weight="medium"
+                      color="gray"
+                      highContrast
                       className="data-row-value"
                     >
                       {row.imagesText}

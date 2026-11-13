@@ -159,7 +159,7 @@ const HistoryPanel = ({
         actions={
           <>
             {refreshing ? <Spinner size="1" /> : null}
-            <Text as="span" size="1" color="gray" className="field-count">
+            <Text size="1" weight="medium" color="gray" className="field-count">
               {visible.length} / {limit}
             </Text>
             <Button
@@ -177,7 +177,13 @@ const HistoryPanel = ({
       {open ? (
         <PanelBody>
           <Flex direction="column" gap="3">
-            <Flex className="history-toolbar" align="center" gap="3">
+            <Flex
+              className="history-toolbar"
+              align="center"
+              gap="3"
+              py="2"
+              px="3"
+            >
               <Text
                 as="div"
                 size="1"
@@ -240,15 +246,18 @@ const HistoryPanel = ({
                         key={item.id}
                         align="center"
                         gap="3"
+                        py="2"
+                        px="3"
                         data-active={isActive || undefined}
                       >
                         <Flex
                           direction="column"
                           gap="1"
-                          className="history-main"
+                          flexGrow="1"
+                          minWidth="0"
                         >
                           <Flex className="history-time" align="center" gap="2">
-                            <Text as="span" size="1" color="gray">
+                            <Text size="1" color="gray">
                               {formatTime(item.createdAt)}
                             </Text>
                             <Badge
@@ -271,7 +280,7 @@ const HistoryPanel = ({
                             title={`${item.params.machines.join('、')}\n${summarize(item)}`}
                             onClick={() => handleRestore(item)}
                           >
-                            <Text as="span" size="1" weight="medium">
+                            <Text size="1" weight="medium">
                               {summarize(item)}
                             </Text>
                           </button>

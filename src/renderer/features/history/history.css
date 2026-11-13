@@ -1,10 +1,8 @@
-/* 历史记录：HistoryPanel。 */
+/* 历史记录：HistoryPanel。布局走 props，本文件只保留边框/背景/字体与交互态。
+   例外：history-toolbar-hint 的 flex:1/min-width:0 留在这里——Text 只有 margin 类
+   props，没有 flexGrow/minWidth。 */
 
 .history-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
   border: 1px solid var(--app-border);
   border-radius: var(--radius-3);
   background: var(--gray-a2);
@@ -13,8 +11,6 @@
 .history-toolbar-hint {
   flex: 1;
   min-width: 0;
-  font-size: 10.5px;
-  line-height: 1.55;
   color: var(--gray-10);
 }
 
@@ -29,10 +25,6 @@
 }
 
 .history-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 9px 12px;
   border-bottom: 1px solid var(--gray-a3);
   transition: background-color var(--app-transition);
 }
@@ -49,20 +41,7 @@
   background: var(--accent-a2);
 }
 
-.history-main {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  flex: 1;
-  min-width: 0;
-}
-
 .history-time {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 10.5px;
-  color: var(--gray-9);
   font-variant-numeric: tabular-nums;
 }
 
@@ -72,8 +51,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11.5px;
-  font-weight: 500;
   color: var(--accent-11);
   text-align: left;
 }
@@ -85,8 +62,5 @@
 .history-stats {
   flex-shrink: 0;
   text-align: right;
-  font-size: 10.5px;
-  line-height: 1.5;
-  color: var(--gray-9);
   font-variant-numeric: tabular-nums;
 }

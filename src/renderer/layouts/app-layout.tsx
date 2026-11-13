@@ -12,15 +12,48 @@ import './app-layout.css'
  * 页面骨架（固定标题区 + 内滚动正文）统一由各页的 PageShell 渲染。
  */
 const LayoutPage = () => (
-  <Flex className="app-shell" direction="column">
-    <Box className="app-topbar" aria-hidden="true" />
-    <Flex className="app-body">
+  <Flex
+    className="app-shell"
+    direction="column"
+    width="100vw"
+    height="100vh"
+    overflow="hidden"
+  >
+    <Box
+      className="app-topbar"
+      aria-hidden="true"
+      flexShrink="0"
+      flexBasis="40px"
+    />
+    <Flex
+      className="app-body"
+      flexGrow="1"
+      flexBasis="0"
+      minHeight="0"
+      overflow="hidden"
+    >
       <AppSidebar />
-      <Box className="app-main" role="main">
-        <Box className="app-content">
+      <Flex
+        className="app-main"
+        role="main"
+        direction="column"
+        flexGrow="1"
+        flexBasis="0"
+        minWidth="0"
+        minHeight="0"
+        overflow="hidden"
+        m="3"
+      >
+        <Flex
+          className="app-content"
+          direction="column"
+          flexGrow="1"
+          flexBasis="0"
+          minHeight="0"
+        >
           <Outlet />
-        </Box>
-      </Box>
+        </Flex>
+      </Flex>
     </Flex>
   </Flex>
 )

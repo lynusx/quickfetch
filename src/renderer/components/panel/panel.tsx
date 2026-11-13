@@ -1,5 +1,5 @@
-import type { CSSProperties, ReactNode } from 'react'
-import { Box, Flex, Heading, Text } from '@radix-ui/themes'
+import type { ReactNode } from 'react'
+import { Box, Card, Flex, Heading, Text } from '@radix-ui/themes'
 import { cn } from '@/lib/utils'
 
 import './panel.css'
@@ -7,19 +7,18 @@ import './panel.css'
 interface PanelProps {
   children: ReactNode
   className?: string
-  style?: CSSProperties
-  /** 需要表格或列表自己贴边时去掉内边距 */
-  flush?: boolean
 }
 
-export const Panel = ({ children, className, style, flush }: PanelProps) => (
-  <Box
-    className={cn('panel', className)}
-    style={style}
-    data-flush={flush || undefined}
-  >
+/**
+ * 面板外壳。
+ *
+ * 背景、描边、圆角与裁剪交给 Radix `Card`（surface 变体），`Card` 没有暴露成
+ * prop 的部分（圆角、内边距）由 `.app-card` 用它的变量补齐。
+ */
+export const Panel = ({ children, className }: PanelProps) => (
+  <Card variant="surface" className={cn('app-card', 'panel', className)}>
     {children}
-  </Box>
+  </Card>
 )
 
 interface PanelHeaderProps {
@@ -35,15 +34,22 @@ export const PanelHeader = ({
   icon,
   actions,
 }: PanelHeaderProps) => (
-  <Flex className="panel-header">
-    <Box className="panel-header-main">
-      <Flex className="panel-title-row" align="center" gap="2">
+  <Flex align="start" justify="between" gap="4" pt="4" px="4">
+    <Flex direction="column" minWidth="0">
+      <Flex align="center" gap="2">
         {icon ? (
-          <Flex className="panel-icon" align="center" justify="center">
+          <Flex
+            className="panel-icon"
+            align="center"
+            justify="center"
+            width="22px"
+            height="22px"
+            flexShrink="0"
+          >
             {icon}
           </Flex>
         ) : null}
-        <Heading as="h2" className="panel-title">
+        <Heading as="h2" size="2">
           {title}
         </Heading>
       </Flex>
@@ -52,9 +58,9 @@ export const PanelHeader = ({
           {description}
         </Text>
       ) : null}
-    </Box>
+    </Flex>
     {actions ? (
-      <Flex className="panel-actions" align="center" gap="1">
+      <Flex align="center" gap="2" flexShrink="0">
         {actions}
       </Flex>
     ) : null}
@@ -67,7 +73,9 @@ interface PanelBodyProps {
 }
 
 export const PanelBody = ({ children, className }: PanelBodyProps) => (
-  <Box className={cn('panel-body', className)}>{children}</Box>
+  <Box className={className} p="4">
+    {children}
+  </Box>
 )
 
 export default Panel

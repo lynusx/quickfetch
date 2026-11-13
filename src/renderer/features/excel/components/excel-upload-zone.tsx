@@ -91,19 +91,24 @@ const ExcelUploadZone = () => {
         )}
       </Flex>
 
-      <Text as="span" className="upload-title">
+      <Text size="3" weight="bold">
         {statusText}
       </Text>
-      <Text as="span" size="1" color="gray" className="upload-desc">
+      <Text size="1" color="gray" className="upload-desc">
         {file
           ? `当前文件：${file.name}`
           : `支持 .xlsx、.xls 格式，单次仅处理 1 个文件，最大 ${MAX_EXCEL_SIZE_LABEL}`}
       </Text>
 
       {!isProcess ? (
-        <Flex className="upload-cta" align="center" gap="1">
+        <Flex
+          className="upload-cta"
+          display="inline-flex"
+          align="center"
+          gap="2"
+        >
           <UploadIcon width={13} height={13} />
-          <Text as="span" size="1" weight="medium">
+          <Text size="1" weight="medium" className="upload-cta-label">
             {file ? '选择新文件' : '选择 Excel 文件'}
           </Text>
         </Flex>

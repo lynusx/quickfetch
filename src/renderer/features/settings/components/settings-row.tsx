@@ -23,8 +23,8 @@ interface SettingsLabelProps {
 
 /** 设置项名称 + 说明卡入口；滑杆行等自定义行也复用它 */
 export const SettingsLabel = ({ label, help }: SettingsLabelProps) => (
-  <Flex align="center" gap="6px">
-    <Text as="p" size="2" weight="medium" className="settings-row-label">
+  <Flex align="center" gap="2">
+    <Text as="p" size="2" weight="medium">
       {label}
     </Text>
     {help ? <HelpTip title={label}>{help}</HelpTip> : null}
@@ -48,9 +48,10 @@ export const SettingsRow = ({
     className={cn('settings-row', className)}
     align="center"
     justify="between"
-    gap="20px"
+    gap="5"
     minHeight="52px"
-    p="10px 16px"
+    py="2"
+    px="4"
   >
     <Box flexGrow="1" flexShrink="1" flexBasis="0" minWidth="0" maxWidth="50%">
       <SettingsLabel label={label} help={help} />

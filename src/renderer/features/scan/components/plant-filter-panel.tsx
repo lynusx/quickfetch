@@ -348,9 +348,7 @@ export const FilterTypes = ({
                     types.map((type) => (
                       <Badge key={type} color="gray" variant="soft" size="2">
                         <Flex align="center" gap="1">
-                          <Text as="span" size="1">
-                            {type}
-                          </Text>
+                          <Text size="1">{type}</Text>
                           <IconButton
                             size="1"
                             variant="ghost"

@@ -65,9 +65,6 @@ body {
   --app-surface: var(--color-panel-solid);
   --app-border: var(--gray-5);
   --app-border-strong: var(--gray-6);
-  --app-radius-panel: 14px;
-  --app-radius-control: 9px;
-  --app-shadow-panel: 0 1px 2px var(--gray-a3);
   --app-transition: 140ms cubic-bezier(0.2, 0, 0, 1);
 }
 
@@ -76,8 +73,14 @@ body {
   color: var(--accent-12);
 }
 
-.app-shell :focus-visible {
-  outline: 2px solid var(--accent-8);
+/*
+ * focus 环：Radix 组件自己带，且用的是 `--focus-8`（= 当前强调色）。
+ * 这里只补原生可聚焦元素——NavLink 渲染的 `<a>`、Excel 上传区的 `<label>`、
+ * 历史折叠区的 `<summary>`，它们拿不到 Radix 的 `.rt-*` 样式。
+ * 用 `:is()` 收窄到这三类，不去覆盖 Radix 自己的 focus 规则。
+ */
+.app-shell :is(a, label, summary):focus-visible {
+  outline: 2px solid var(--focus-8);
   outline-offset: 2px;
 }
 
@@ -94,7 +97,7 @@ body {
   background: var(--gray-a4);
   border: 3px solid transparent;
   background-clip: content-box;
-  border-radius: 8px;
+  border-radius: var(--radius-4);
 }
 
 .app-shell ::-webkit-scrollbar-thumb:hover {
@@ -110,6 +113,23 @@ body {
 
 .mono {
   font-family: var(--code-font-family);
+}
+
+/*
+ * 卡片外观：白底 + 1px 描边。结构性外观（背景、描边、裁剪）交给 Radix `Card`，
+ * 但它把内边距、描边色只做成 CSS 变量，没有对应 prop，所以集中在这里。
+ *
+ * 圆角**不写**：Card 默认 `size="2"` 自己算出 `--radius-4`，跟着 Theme 的 `radius`
+ * 一起变。真有卡片需要更大的圆角，传 `size`，不要在这里覆盖变量。
+ */
+.app-card {
+  --base-card-padding-top: 0;
+  --base-card-padding-right: 0;
+  --base-card-padding-bottom: 0;
+  --base-card-padding-left: 0;
+  /* Card 的 surface 变体用它画内描边，换成应用自己的边框色 */
+  --base-card-surface-box-shadow: 0 0 0 1px var(--app-border);
+  --card-background-color: var(--app-surface);
 }
 
 .status-dot {
@@ -138,15 +158,10 @@ body {
 }
 
 .workbench-grid {
-  display: grid;
   grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
-  gap: 18px;
-  align-items: start;
 }
 
 .field-count {
-  font-size: 11px;
-  font-weight: 500;
   color: var(--gray-9);
   font-variant-numeric: tabular-nums;
 }
@@ -159,18 +174,7 @@ body {
 }
 
 .choice-scroll-inner {
-  padding: 8px;
-}
-
-.action-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.action-bar-spacer {
-  flex: 1;
+  padding: var(--space-2);
 }
 
 @media (max-width: 1180px) {

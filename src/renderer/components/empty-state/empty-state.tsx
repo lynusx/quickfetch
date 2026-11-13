@@ -22,11 +22,20 @@ export const EmptyState = ({
     align="center"
     justify="center"
     gap="2"
+    py="6"
+    px="4"
   >
-    <Flex className="empty-icon" align="center" justify="center">
+    <Flex
+      className="empty-icon"
+      align="center"
+      justify="center"
+      width="42px"
+      height="42px"
+      mb="1"
+    >
       {icon}
     </Flex>
-    <Text as="p" weight="medium" className="empty-title">
+    <Text as="p" size="2" weight="medium">
       {title}
     </Text>
     {description ? (
@@ -34,7 +43,7 @@ export const EmptyState = ({
         {description}
       </Text>
     ) : null}
-    {action ? <Box className="empty-action">{action}</Box> : null}
+    {action ? <Box mt="1">{action}</Box> : null}
   </Flex>
 )
 

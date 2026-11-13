@@ -1,9 +1,4 @@
-/* 选择项：ChoiceList / ChoiceRadio。 */
-
-.choice-grid {
-  display: grid;
-  gap: 6px;
-}
+/* 选择项：ChoiceList / ChoiceRadio。布局走 props，本文件只保留列模板与交互态。 */
 
 .choice-cols-1 {
   grid-template-columns: repeat(1, minmax(0, 1fr));
@@ -22,11 +17,6 @@
 }
 
 .choice-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 7px 9px;
   border: 1px solid var(--gray-a4);
   border-radius: var(--radius-2);
   background: var(--app-surface);
@@ -59,19 +49,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
-  line-height: 1.4;
   color: var(--gray-11);
 }
 
 .choice-cell[data-selected='true'] .choice-label {
-  font-weight: 600;
+  font-weight: var(--font-weight-medium);
   color: var(--accent-12);
 }
 
 .choice-meta {
   flex-shrink: 0;
-  font-size: 10.5px;
   color: var(--gray-9);
   font-variant-numeric: tabular-nums;
 }
@@ -80,41 +67,18 @@
  * 机台行尾的共享探测徽标。
  *
  * 三态必须能一眼分开，所以用颜色而不是文字位置：
- * 灰=未探测、蓝=已探到、红=探过但没有。
+ * 灰=未探测、蓝=已探到、红=探过但没有。字号、行高与字距都交给 `Badge size`，
+ * 这里只补 Badge 没暴露的截断与内边距。
  */
-.machine-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  width: 100%;
-}
-
 .share-badge {
-  flex-shrink: 0;
   margin-left: auto;
-  padding: 1px 5px;
-  border-radius: var(--radius-1);
-  font-size: 9.5px;
-  line-height: 1.5;
-  font-weight: 500;
-  white-space: nowrap;
+  padding: 0 var(--space-1);
+  max-width: 84px;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 84px;
 }
 
+/* 「未探测」要比另外两态更弱：Badge 的 gray-soft 用 gray-11，压回 gray-9 */
 .share-badge[data-tone='muted'] {
   color: var(--gray-9);
-  background: var(--gray-a3);
-}
-
-.share-badge[data-tone='ready'] {
-  color: var(--accent-11);
-  background: var(--accent-a3);
-}
-
-.share-badge[data-tone='missing'] {
-  color: var(--red-11);
-  background: var(--red-a3);
 }

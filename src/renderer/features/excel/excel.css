@@ -1,14 +1,16 @@
 /* Excel 特性样式。 */
 
+/* 根节点是原生 <label>（点击触发文件选择），拿不到 Flex 的布局 props；
+   text-align 作用于 inline 的 span 子节点，也只能留在容器上。 */
 .upload-zone {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 38px 24px;
+  gap: var(--space-3);
+  padding: var(--space-7) var(--space-5);
   border: 1px dashed var(--gray-a7);
-  border-radius: var(--app-radius-panel);
+  border-radius: var(--radius-4);
   background: var(--app-surface);
   text-align: center;
   cursor: pointer;
@@ -35,8 +37,8 @@
 }
 
 .upload-zone[data-compact='true'] {
-  padding: 22px 24px;
-  gap: 8px;
+  padding: var(--space-5);
+  gap: var(--space-2);
 }
 
 .upload-zone[data-compact='true'] .upload-icon {
@@ -55,94 +57,66 @@
   color: var(--accent-11);
 }
 
-.upload-title {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  color: var(--gray-12);
-}
+/* 标题不加样式：`.rt-Text` 自带 margin 0，文字色继承主题根的 gray-12 */
 
+/* 说明文字用 gray-10：`Text color="gray"` 只到 11 阶，表达不了更弱的层级 */
 .upload-desc {
-  margin: 0;
   max-width: 520px;
-  font-size: 11.5px;
-  line-height: 1.55;
   color: var(--gray-10);
 }
 
+/* Flex 没有 alignSelf / padding prop，居中与内边距只能留在这里 */
 .upload-cta {
-  display: inline-flex;
-  align-items: center;
   align-self: center;
-  gap: 6px;
-  margin-top: 2px;
-  padding: 6px 12px;
+  margin-top: var(--space-1);
+  padding: var(--space-1) var(--space-3);
   border: 1px solid var(--gray-a6);
   border-radius: var(--radius-2);
   background: var(--app-surface);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--gray-12);
   box-shadow: 0 1px 1px var(--gray-a3);
+}
+
+/* 文字色随容器 hover 变化，只能靠后代选择器；Text 的 color prop 无法响应祖先状态 */
+.upload-cta-label {
+  color: var(--gray-12);
 }
 
 .upload-zone:hover .upload-cta {
   border-color: var(--accent-a7);
+}
+
+.upload-zone:hover .upload-cta-label {
   color: var(--accent-11);
 }
 
 .guide-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 18px;
+  gap: var(--space-4);
 }
 
 .guide-title {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--gray-12);
+  gap: var(--space-2);
 }
 
 .guide-text {
-  margin: 5px 0 0;
-  font-size: 11.5px;
-  line-height: 1.6;
+  margin: var(--space-1) 0 0;
   color: var(--gray-10);
 }
 
-.file-meta {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
+/* `.file-meta` 的 display / 列模板 / gap 由 `<Grid columns="3" gap="2">` 表达，
+   不在这里重复；`.file-meta-item` 的内边距与行内间距走 `py`/`px`/`gap`，
+   这里只留外观。 */
 .file-meta-item {
-  padding: 10px 12px;
   border: 1px solid var(--gray-a4);
   border-radius: var(--radius-3);
   background: var(--gray-a2);
 }
 
 .file-meta-label {
-  display: block;
-  font-size: 10.5px;
   color: var(--gray-10);
-}
-
-.file-meta-value {
-  display: block;
-  margin-top: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--gray-12);
-  font-variant-numeric: tabular-nums;
 }
 
 .table-shell {
@@ -167,8 +141,8 @@
   color: var(--gray-9);
 }
 
+/* 有上分隔线，文字必须被推离这条线——这是「有可见边界的盒子」，
+   内边距交给外层 Box 的 `pt`，本规则只画线。 */
 .sheet-footer {
-  padding: 8px 0;
   border-top: 1px solid var(--gray-4);
-  font-variant-numeric: tabular-nums;
 }

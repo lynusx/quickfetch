@@ -108,14 +108,12 @@ export const DatePicker = ({
           type="button"
           variant="surface"
           color="gray"
-          size="2"
           className="date-trigger"
           disabled={disabled}
           aria-label={`选择日期，当前 ${displayText}`}
         >
           <CalendarIcon width={14} height={14} />
           <Text
-            as="span"
             size="2"
             color={selectedDate ? undefined : 'gray'}
             className="date-trigger-text"

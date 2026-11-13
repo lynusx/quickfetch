@@ -27,24 +27,30 @@ export const Field = ({
   className,
 }: FieldProps) => (
   <Flex direction="column" gap="2" className={cn('field', className)}>
-    <Flex className="field-head" align="center" justify="between" gap="3">
-      <Flex className="field-label" align="center" gap="2">
+    <Flex
+      className="field-head"
+      align="center"
+      justify="between"
+      gap="3"
+      minHeight="22px"
+    >
+      <Flex align="center" gap="2" minWidth="0">
         {icon ? (
           <Box as="span" className="field-label-icon">
             {icon}
           </Box>
         ) : null}
-        <Text as="span" size="1" weight="medium">
+        <Text size="1" weight="medium">
           {label}
         </Text>
         {count != null ? (
-          <Text as="span" size="1" color="gray" className="field-count">
+          <Text size="1" weight="medium" color="gray" className="field-count">
             {count}
           </Text>
         ) : null}
       </Flex>
       {actions ? (
-        <Flex className="field-actions" align="center" gap="1">
+        <Flex className="field-actions" align="center" gap="1" flexShrink="0">
           {actions}
         </Flex>
       ) : null}
@@ -67,13 +73,22 @@ interface StepProps {
 
 /** 带编号的步骤块，用来说明「先选机台、再选日期」的顺序 */
 export const Step = ({ index, done, children }: StepProps) => (
-  <Flex className="step" data-done={done || undefined}>
-    <Flex className="step-index" align="center" justify="center">
-      <Text as="span" size="1" weight="bold" className="tabular">
+  <Flex className="step" data-done={done || undefined} gap="3">
+    <Flex
+      className="step-index"
+      align="center"
+      justify="center"
+      width="22px"
+      height="22px"
+      flexShrink="0"
+    >
+      <Text size="1" weight="bold" className="tabular">
         {String(index).padStart(2, '0')}
       </Text>
     </Flex>
-    <Box className="step-content">{children}</Box>
+    <Box flexGrow="1" minWidth="0">
+      {children}
+    </Box>
   </Flex>
 )
 

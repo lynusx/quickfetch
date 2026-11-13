@@ -156,11 +156,15 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
             : '复制前必须选好目标目录；主进程不会自己弹框，避免对话框关掉了任务却已经开始。'
         }
       >
-        <Flex className="field-row" align="center" gap="2">
+        <Flex align="center" gap="2">
           <Flex
             className="target-dir"
             align="center"
             gap="2"
+            flexGrow="1"
+            minWidth="0"
+            height="34px"
+            px="2"
             data-empty={!activeDir}
           >
             <Text size="1" truncate color={activeDir ? undefined : 'gray'}>
@@ -169,7 +173,6 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
           </Flex>
           <Button
             variant="outline"
-            size="2"
             disabled={busy || running || paused}
             onClick={() => void handlePickTarget()}
           >
@@ -202,7 +205,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
         hint="至少勾选 1 台机台后才能开始复制。"
       >
         <ScrollArea type="auto" scrollbars="vertical" className="choice-scroll">
-          <Grid className="machine-grid" gap="1">
+          <Grid className="machine-grid" gap="1" p="2">
             {machineStats.map((item) => {
               const checked = machines.includes(item.machine)
 
@@ -218,6 +221,9 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
                   className="machine-item"
                   align="center"
                   gap="2"
+                  minWidth="0"
+                  py="1"
+                  px="2"
                   data-disabled={running || paused || undefined}
                   data-dimmed={running || undefined}
                   onClick={handleToggle}
@@ -231,7 +237,6 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
                     onCheckedChange={handleToggle}
                   />
                   <Text
-                    as="span"
                     size="1"
                     truncate
                     className="machine-item-label"
@@ -239,12 +244,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
                   >
                     {item.machine}
                   </Text>
-                  <Text
-                    as="span"
-                    size="1"
-                    color="gray"
-                    className="machine-item-count"
-                  >
+                  <Text size="1" color="gray" className="machine-item-count">
                     {item.images}
                   </Text>
                 </Flex>
@@ -294,10 +294,9 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
       </Box>
 
       {/* 控制按钮 */}
-      <Flex className="action-bar" wrap="wrap" align="center" gap="2">
+      <Flex wrap="wrap" align="center" gap="2">
         {!running && !paused ? (
           <Button
-            size="2"
             variant="solid"
             onClick={() => {
               if (conflict === 'overwrite' && (preview?.conflicts ?? 0) > 0) {
@@ -318,17 +317,12 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
         ) : (
           <>
             {paused ? (
-              <Button
-                size="2"
-                onClick={() => void handleResume()}
-                disabled={busy}
-              >
+              <Button onClick={() => void handleResume()} disabled={busy}>
                 <PlayIcon width={15} height={15} />
                 继续
               </Button>
             ) : (
               <Button
-                size="2"
                 variant="outline"
                 onClick={() => void handlePause()}
                 disabled={busy}
@@ -338,7 +332,6 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
               </Button>
             )}
             <Button
-              size="2"
               variant="outline"
               onClick={() => void handleCancel()}
               disabled={busy}
@@ -351,7 +344,6 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
 
         {finished && (task?.progress.failed ?? 0) > 0 ? (
           <Button
-            size="2"
             variant="outline"
             onClick={() => void handleRetry()}
             disabled={busy}
@@ -392,7 +384,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
             继续会用源文件覆盖它们，覆盖后无法撤销。
           </Dialog.Description>
           <Flex className="target-dir" align="center" gap="2" mb="3">
-            <Text size="1" truncate>
+            <Text size="1" truncate color="gray">
               {activeDir}
             </Text>
           </Flex>

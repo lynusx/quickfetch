@@ -19,6 +19,7 @@
 
 .rdp-caption_label {
   font-size: var(--font-size-2);
+  line-height: var(--line-height-2);
   font-weight: var(--font-weight-bold);
   color: var(--gray-12);
 }
@@ -54,6 +55,7 @@
 
 .rdp-weekday {
   font-size: var(--font-size-1);
+  line-height: var(--line-height-1);
   font-weight: var(--font-weight-medium);
   color: var(--gray-9);
   width: 32px;
@@ -63,6 +65,7 @@
 
 .rdp-day_button {
   font-size: var(--font-size-1);
+  line-height: var(--line-height-1);
   color: var(--gray-12);
   cursor: pointer;
   border-radius: var(--radius-2);

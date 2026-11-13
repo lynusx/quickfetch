@@ -79,7 +79,7 @@ const PlantScanPage = ({
       description={description}
       badge={task ? <ScanStatusBadge status={task.status} /> : null}
     >
-      <Grid className="workbench-grid">
+      <Grid className="workbench-grid" gap="4" align="start">
         <Panel>
           <PanelHeader
             icon={<MagnifyingGlassIcon width={13} height={13} />}
@@ -88,11 +88,13 @@ const PlantScanPage = ({
           />
           <PanelBody>
             {picker}
-            <Box className="panel-section">{filterPanel}</Box>
+            <Box className="panel-section" mt="4" pt="4">
+              {filterPanel}
+            </Box>
           </PanelBody>
         </Panel>
 
-        <Flex className="panel-stack" direction="column">
+        <Flex direction="column" gap="4" minWidth="0">
           <ScanTaskPanel
             task={task}
             creating={creating}

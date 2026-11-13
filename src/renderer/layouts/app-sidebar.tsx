@@ -7,7 +7,7 @@ import {
   TableIcon,
   TargetIcon,
 } from '@radix-ui/react-icons'
-import { Box, Flex, Text } from '@radix-ui/themes'
+import { Box, Flex, ScrollArea, Text } from '@radix-ui/themes'
 import { SCAN_CATEGORY_LABEL } from '@shared/scanCategories'
 
 import { BrandMark } from '@/components/brand-mark/brand-mark'
@@ -58,58 +58,101 @@ export const AppSidebar = () => {
   const version = useAppVersion()
 
   return (
-    <Flex className="app-sidebar" direction="column">
-      <Flex className="sidebar-brand" align="center">
+    <Flex
+      className="app-sidebar"
+      direction="column"
+      flexShrink="0"
+      flexBasis="var(--app-sidebar-width)"
+      width="var(--app-sidebar-width)"
+      height="100%"
+    >
+      <Flex
+        className="sidebar-brand"
+        align="center"
+        gap="3"
+        pt="3"
+        px="4"
+        pb="4"
+      >
         <BrandMark />
-        <Text as="div" className="brand-name">
+        <Text as="div" size="3" weight="bold" className="brand-name">
           秒取
         </Text>
       </Flex>
 
-      <Box className="sidebar-nav" role="navigation" aria-label="主导航">
-        {NAV_GROUPS.map((group) => (
-          <Box className="nav-group" key={group.label}>
-            <Text as="div" className="nav-group-label">
-              {group.label}
-            </Text>
-            {group.items.map((item) => (
-              <NavLink key={item.to} to={item.to} className="nav-item">
-                <Flex className="nav-icon" align="center" justify="center">
-                  <item.icon width={15} height={15} />
-                </Flex>
-                <Box as="span" className="nav-text">
-                  <Text as="span" className="nav-label">
-                    {item.label}
-                  </Text>
-                </Box>
-              </NavLink>
-            ))}
-          </Box>
-        ))}
-      </Box>
+      <ScrollArea
+        className="sidebar-scroll"
+        type="auto"
+        scrollbars="vertical"
+        role="navigation"
+        aria-label="主导航"
+      >
+        <Box px="3" pt="1" pb="4">
+          {NAV_GROUPS.map((group) => (
+            <Box className="nav-group" key={group.label}>
+              <Text
+                as="div"
+                size="1"
+                weight="medium"
+                mx="2"
+                mb="2"
+                className="nav-group-label"
+              >
+                {group.label}
+              </Text>
+              {group.items.map((item) => (
+                <NavLink key={item.to} to={item.to} className="nav-item">
+                  <Flex
+                    className="nav-icon"
+                    align="center"
+                    justify="center"
+                    width="28px"
+                    height="28px"
+                    flexShrink="0"
+                  >
+                    <item.icon width={15} height={15} />
+                  </Flex>
+                  <Box as="span" className="nav-text">
+                    <Text size="2" weight="medium" className="nav-label">
+                      {item.label}
+                    </Text>
+                  </Box>
+                </NavLink>
+              ))}
+            </Box>
+          ))}
+        </Box>
+      </ScrollArea>
 
-      <Box className="sidebar-footer">
+      <Box className="sidebar-footer" p="3">
         <NavLink to={ROUTES.SETTINGS} className="nav-item">
-          <Flex className="nav-icon" align="center" justify="center">
+          <Flex
+            className="nav-icon"
+            align="center"
+            justify="center"
+            width="28px"
+            height="28px"
+            flexShrink="0"
+          >
             <GearIcon width={15} height={15} />
           </Flex>
           <Box as="span" className="nav-text">
-            <Text as="span" className="nav-label">
+            <Text size="2" weight="medium" className="nav-label">
               设置
             </Text>
           </Box>
         </NavLink>
 
-        <Flex className="sidebar-meta" align="center" justify="between" gap="2">
+        <Flex align="center" justify="between" gap="2" pt="2" pb="1" px="2">
           <Flex as="span" className="sidebar-status" align="center" gap="1">
             <Box as="span" className="status-dot" data-tone="success" />
-            <Text as="span" size="1" color="gray">
+            <Text size="1" color="gray">
               本地运行
             </Text>
           </Flex>
           <Flex as="span" align="center" gap="2">
             <UpdateBadge />
-            <Text as="span" size="1" color="gray" className="tabular">
+            <Text size="1" color="gray" className="tabular">
               v{version ?? '…'}
             </Text>
           </Flex>

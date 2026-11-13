@@ -1,42 +1,18 @@
-/* 空状态：EmptyState。 */
+/* 空状态：EmptyState。布局走 props，本文件只保留字体/颜色等。
+   标题不设 `margin` / `color`：`.rt-Text` 已经是 margin 0，根节点已经是 gray-12。 */
 
 .empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 34px 20px;
   text-align: center;
 }
 
 .empty-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  margin-bottom: 2px;
   border-radius: var(--radius-3);
   background: var(--gray-a3);
   color: var(--gray-9);
 }
 
-.empty-title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--gray-12);
-}
-
+/* 说明文字用 gray-10：`Text color="gray"` 只到 11 阶，表达不了更弱的层级 */
 .empty-description {
   max-width: 380px;
-  margin: 0;
-  font-size: 11.5px;
-  line-height: 1.6;
   color: var(--gray-10);
-}
-
-.empty-action {
-  margin-top: 4px;
 }

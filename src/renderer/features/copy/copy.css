@@ -1,40 +1,23 @@
-/* 复制特性样式：CopyPanel。 */
+/* 复制特性样式：CopyPanel。布局走 props，本文件只保留边框/背景/字体与交互态。 */
 
 .target-dir {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-  height: 34px;
-  padding: 0 10px;
   border: 1px solid var(--app-border-strong);
   border-radius: var(--radius-2);
   background: var(--gray-a2);
+  /* Text 没有 font-family prop，等宽只能留在容器上由子元素继承 */
   font-family: var(--code-font-family);
-  font-size: 11px;
-  color: var(--gray-11);
 }
 
 .target-dir[data-empty='true'] {
   border-style: dashed;
   background: transparent;
-  color: var(--gray-9);
 }
 
 .machine-grid {
-  display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  padding: 8px;
 }
 
 .machine-item {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  padding: 5px 7px;
   border-radius: var(--radius-2);
   cursor: pointer;
   transition: background-color var(--app-transition);
@@ -59,13 +42,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--code-font-family);
-  font-size: 11px;
   color: var(--gray-11);
 }
 
 .machine-item-count {
   flex-shrink: 0;
-  font-size: 10.5px;
   color: var(--gray-9);
   font-variant-numeric: tabular-nums;
 }

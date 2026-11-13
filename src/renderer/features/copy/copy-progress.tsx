@@ -84,7 +84,14 @@ const CopyProgress = ({
   // 取消后只留摘要，不把进度条冻在 13% 让人以为还在跑
   if (task.status === 'canceled') {
     return (
-      <Flex className="copy-canceled" align="center" gap="2" wrap="wrap">
+      <Flex
+        className="copy-canceled"
+        align="center"
+        gap="2"
+        wrap="wrap"
+        py="2"
+        px="3"
+      >
         <Badge color="gray" variant="surface">
           已取消
         </Badge>
@@ -104,7 +111,7 @@ const CopyProgress = ({
   }
 
   return (
-    <Box className="copy-progress">
+    <Box className="copy-progress" p="3">
       <Flex direction="column" gap="2">
         <Flex justify="between" align="center">
           <Flex align="center" gap="2">
@@ -130,52 +137,47 @@ const CopyProgress = ({
           </Text>
         </Flex>
 
-        <Flex
-          className="copy-progress-head"
-          align="baseline"
-          justify="between"
-          gap="3"
-        >
+        <Flex align="baseline" justify="between" gap="3" mb="2">
           <Flex align="center" gap="2">
             {running ? <Spinner size="1" /> : null}
             <Text
-              as="span"
               size="1"
+              weight="medium"
               color="gray"
               className="copy-progress-label"
             >
               完成进度
             </Text>
           </Flex>
-          <Text as="span" className="copy-progress-value">
+          <Text size="3" weight="bold" className="copy-progress-value">
             {percent}%
           </Text>
         </Flex>
 
         <Progress value={percent} size="2" />
 
-        <Flex className="copy-progress-meta" wrap="wrap">
-          <Text as="span" size="1" color="gray">
+        <Flex className="copy-progress-meta">
+          <Text size="1" color="gray">
             {finished ? '总耗时' : '已用'} {formatDuration(progress.elapsedMs)}
           </Text>
 
           {finished ? (
             progress.finishedAt !== null ? (
-              <Text as="span" size="1" color="gray">
+              <Text size="1" color="gray">
                 {task.status === 'completed' ? '完成于' : '结束于'}{' '}
                 {formatClockTime(progress.finishedAt)}
               </Text>
             ) : null
           ) : paused ? (
-            <Text as="span" size="1" color="amber">
+            <Text size="1" color="amber">
               剩余 已暂停
             </Text>
           ) : (
             <>
-              <Text as="span" size="1" color="gray">
+              <Text size="1" color="gray">
                 {eta ? `剩余 ${eta}` : '剩余 计算中'}
               </Text>
-              <Text as="span" size="1" color="gray">
+              <Text size="1" color="gray">
                 {finishAt !== null
                   ? `预计 ${formatClockTime(finishAt)} 完成`
                   : '预计完成 计算中'}
@@ -183,7 +185,7 @@ const CopyProgress = ({
             </>
           )}
 
-          <Text as="span" size="1" color="gray" className="tabular">
+          <Text size="1" color="gray" className="tabular">
             {formatFileSize(progress.copiedBytes)} /{' '}
             {progress.totalBytes > 0
               ? formatFileSize(progress.totalBytes)
@@ -194,17 +196,16 @@ const CopyProgress = ({
           </Text>
 
           {speed > 0 ? (
-            <Text as="span" size="1" color="gray" className="tabular">
+            <Text size="1" color="gray" className="tabular">
               {running ? '实时网速' : '平均网速'} {formatFileSize(speed)}/s
             </Text>
           ) : running ? (
-            <Text as="span" size="1" color="gray">
+            <Text size="1" color="gray">
               实时网速 计算中
             </Text>
           ) : null}
 
           <Text
-            as="span"
             size="1"
             color="gray"
             truncate

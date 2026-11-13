@@ -61,7 +61,7 @@ export const PageShell = ({
               size="1"
               color="gray"
               className="page-shell-description"
-              mb="18px"
+              mb="4"
             >
               {description}
             </Text>
