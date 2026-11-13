@@ -152,6 +152,10 @@ import {
 } from '../src/shared/ipc'
 import type { ScanCategory, ScanTaskParams } from '../src/shared/ipc'
 
+// 路径由 join 拼出来：Windows 是 `\`，macOS/Linux 是 `/`。
+// 断言与假 reader 比较前统一成 `/`，两种平台跑同一套用例。
+const asPosix = (value: string) => value.replaceAll('\\', '/')
+
 const results: { name: string; ok: boolean; detail?: string }[] = []
 
 const test = async (name: string, fn: () => Promise<void>) => {
@@ -4027,7 +4031,7 @@ const resolverSeamTests = async () => {
     const resolved = await resolver.resolve('东区/7A')
 
     assert.equal(resolved.ok, true)
-    assert.match(resolved.base, /\\el\\A-01-B$/)
+    assert.match(asPosix(resolved.base), /\/el\/A-01-B$/)
     assert.equal(calls.length, 2, '只读缓存候选的共享根与固定层')
     assert.equal(persisted.length, 0, '命中缓存不应回写')
   })
@@ -4062,7 +4066,7 @@ const resolverSeamTests = async () => {
       date: '20261104',
       onShare: (_machine, share) => persisted.push(share),
       read: async (path) => {
-        if (path.includes('\\el')) return result('unreachable')
+        if (asPosix(path).includes('/el')) return result('unreachable')
         return path.endsWith('A-01-B')
           ? result('ok', ['20261104'])
           : result('ok')
@@ -4113,7 +4117,7 @@ const resolverSeamTests = async () => {
     const resolved = await resolver.resolve('东区/3C')
 
     assert.equal(resolved.ok, true)
-    assert.match(resolved.base, /pl-3c\\Matting$/)
+    assert.match(asPosix(resolved.base), /pl-3c\/Matting$/)
     assert.equal(calls.length, 2)
   })
 
@@ -4127,7 +4131,9 @@ const resolverSeamTests = async () => {
       date: '20261104',
       onShare: (_machine, share) => persisted.push(share),
       read: async (path) => {
-        if (path.includes(`${host}\\pl-3c`)) return result('missing')
+        if (asPosix(path).includes(`${asPosix(host)}/pl-3c`)) {
+          return result('missing')
+        }
         return result('unreadable')
       },
     })
@@ -4141,7 +4147,7 @@ const resolverSeamTests = async () => {
 
   await test('resolver: probe 函数同样接受注入 reader', async () => {
     const lxt = await probeLxtShare('\\\\10.0.0.3', '20261104', async (path) =>
-      path.endsWith('SaveImages\\A-01-B')
+      asPosix(path).endsWith('SaveImages/A-01-B')
         ? result('ok', ['20261104'])
         : result('ok'),
     )
@@ -4154,7 +4160,7 @@ const resolverSeamTests = async () => {
       '东区',
       '20261104',
       async (path) =>
-        path.endsWith('pl-03c\\Matting')
+        asPosix(path).endsWith('pl-03c/Matting')
           ? result('ok', ['2026.11.04'])
           : result('ok'),
     )
@@ -4192,7 +4198,7 @@ const resolverSeamTests = async () => {
         if (path.includes('东区pl-10b') && path.endsWith('Matting')) {
           return result('ok', ['2026.11.04'])
         }
-        if (path.endsWith('pl-10b\\Matting')) {
+        if (asPosix(path).endsWith('pl-10b/Matting')) {
           return result('ok', ['2026.10.01'])
         }
 
@@ -4204,8 +4210,8 @@ const resolverSeamTests = async () => {
 
     assert.equal(resolved.ok, true)
     assert.match(
-      resolved.base,
-      /东区pl-10b\\Matting$/,
+      asPosix(resolved.base),
+      /东区pl-10b\/Matting$/,
       '只有带厂区前缀的候选包含本次日期',
     )
   })
