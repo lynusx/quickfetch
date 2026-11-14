@@ -1,5 +1,5 @@
 import { TableIcon } from '@radix-ui/react-icons'
-import { Box, ScrollArea, Table, Text } from '@radix-ui/themes'
+import { Box, Table, Text } from '@radix-ui/themes'
 
 import { EmptyState } from '@/components/empty-state/empty-state'
 import type { ExcelSheet } from '../types'
@@ -51,8 +51,13 @@ const SheetTablePreview = ({ sheet, mode }: SheetTablePreviewProps) => {
   const headerRow = displayData[0]
   const dataRows = displayData.slice(1)
 
+  /**
+   * 横向滚动交给 `Table.Root` 自带的 ScrollArea：它内部已经包了一层，
+   * 外面再套一层就是两个滚动容器，横条互相抢。页脚留在外面，
+   * 不然它会跟着表格一起横向移出视口。
+   */
   return (
-    <ScrollArea type="auto" scrollbars="both">
+    <>
       <Table.Root size="1" variant="surface">
         <Table.Header>
           <Table.Row>
@@ -95,7 +100,7 @@ const SheetTablePreview = ({ sheet, mode }: SheetTablePreviewProps) => {
           </Text>
         </Box>
       )}
-    </ScrollArea>
+    </>
   )
 }
 

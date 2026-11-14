@@ -54,7 +54,6 @@ interface CopyAction {
   patchTask: (task: CopyTask) => void
   /** 用户手动设置勾选（含取消全选），之后不再自动补选 */
   setMachines: (machines: string[]) => void
-  toggleMachine: (machine: string) => void
   /** 显式全选当前机台；不标记为手动修改，之后新出现的机台仍会自动补选 */
   selectAll: (machines: string[]) => void
   /** 扫描任务的机台列表变化时同步；同一任务内用户改过勾选就不再覆盖 */
@@ -104,13 +103,6 @@ const createCopyStore = (category: ScanCategory) =>
               : state,
           ),
         setMachines: (machines) => set({ machines, selectionTouched: true }),
-        toggleMachine: (machine) =>
-          set((state) => ({
-            machines: state.machines.includes(machine)
-              ? state.machines.filter((item) => item !== machine)
-              : [...state.machines, machine],
-            selectionTouched: true,
-          })),
         selectAll: (machines) => set({ machines, selectionTouched: false }),
         syncMachines: (taskId, machines) =>
           set((state) => {

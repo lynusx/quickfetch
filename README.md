@@ -231,10 +231,10 @@ src/
 - 字体：拉丁使用 `Public Sans Variable`，中文回退到系统字体（Windows 微软雅黑、macOS PingFang SC、Linux Noto Sans CJK）；不打包 CJK 字体。字体变量需同时覆盖 `:root` 与 `.radix-themes`，否则 Radix 组件会使用自己的默认栈
 - 白卡外观只有一处实现：`Card variant="surface"` + `index.css` 的 `.app-card`（只管内边距归零与描边色），圆角跟 Card 的 `size` 走，页面不再声明覆盖变量（Card 的描边是 inset ring，不占布局，比手写 border 少 2px 高度）
 - 设计层：全局令牌、reset、共享工具类与 sonner 覆盖在 `src/renderer/index.css`；组件 CSS 与组件同目录（渲染层组件目录、组件文件与样式统一 kebab-case），业务 feature CSS 在各自 feature 目录（如 `features/scan/scan.css`）。不引入 reset / 其它组件库
-- 页面骨架统一由 `components/page-shell/page-shell` 渲染：整个正文区是 Radix `ScrollArea` 的单一滚动视口，顶部 64px 标题区吸顶（标题行由 `components/page-header/page-header` 渲染，不再使用眉标），正文从下方滚过时标题区呈半透明磨砂玻璃（`backdrop-filter`）；滚动条是 overlay、不占布局宽度，并从标题区下方开始。标题始终贴内容区水平内边距、不随窗口宽度变化，正文按自身 `max-width` 居中，页面内不再有独立的限高滚动区（Excel 预览表格同样随页滚动）。标题高度与滚动偏移共用 `--app-page-header-height`。新增页面必须套 `PageShell`，`AppLayout` 只负责卡片与内容区容器。扫描页的任务进度、统计与控制按钮统一放在 `features/scan/components/scan-task-panel`
+- 页面骨架统一由 `components/page-shell/page-shell` 渲染：整个正文区是 Radix `ScrollArea` 的单一滚动视口，标题属于滚动内容——页首留 24px，标题先随正文上移，到内容区顶部后吸顶（标题行由 `components/page-header/page-header` 渲染，不再使用眉标）。正文从下方滚过时标题呈与内容区同源的半透明磨砂玻璃（`backdrop-filter`），吸顶后出现一条下边框；滚动条是 overlay、不占布局宽度，占满内容区高度。标题与正文共用内容区水平内边距（16px）、标题不随窗口宽度变化，正文按自身 `max-width` 居中，页面内不再有独立的限高滚动区（Excel 预览表格同样随页滚动）。标题高度与滚动偏移共用 `--app-page-header-height`。新增页面必须套 `PageShell`，`AppLayout` 只负责内容区容器。扫描页的任务进度、统计与控制按钮统一放在 `features/scan/components/scan-task-panel`
 - 设置项说明统一放在名称旁的 `?`（`components/help-tip`）：悬停或点击打开说明卡，行内只保留真实数据（路径、版本、时间）；会丢数据或不可撤销的后果仍写在按钮、选项卡或确认框里
 - 窗口使用自定义顶带：顶部 40px 与画布同色，只承载系统窗口控件（macOS 红绿灯 / Windows 右上角按钮），不显示标题，同时兼作拖拽区；Windows 按钮覆盖层颜色需与 `--app-canvas` 保持一致（`src/main/index.ts` 里的字面量）；页面标题仍由 `PageShell` 内的 `PageHeader` 渲染
-- 侧边栏、顶带与内容区共用 `--app-canvas` 底色；内容区保留四周 12px 间隙、圆角、边框与轻阴影，页面在 `PageShell` 的正文区内滚动，层级由页面里的白色面板（`--app-surface`）承担
+- 侧边栏与顶带共用 `--app-canvas` 底色；内容区是 `--app-surface` 白底平面，左贴侧边栏、上贴顶带下沿、右与下贴窗口边，不保留间隙、描边与阴影，只留左上角圆角（`var(--radius-4)`）；页面层级由白色面板的 1px 描边承担
 - 选择类控件统一使用 `components/choice-list`（多选）与 `ChoiceRadio`（单选），整个单元格可点击
 - 别名：`@/*` → `src/renderer/*`（`tsconfig*.json` 与 `electron.vite.config.ts` 同步配置）
 - 图标：`@radix-ui/react-icons`；提示：`sonner`；`cn()` 为内部纯逻辑实现

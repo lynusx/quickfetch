@@ -103,3 +103,23 @@
   margin-top: var(--space-1);
   color: var(--amber-9);
 }
+
+/**
+ * 机台行尾的共享探测徽标。
+ *
+ * 三态必须能一眼分开，所以用颜色而不是文字位置：
+ * 灰=未探测、蓝=已探到、红=探过但没有。字号、行高与字距都交给 `Badge size`，
+ * 这里只补 Badge 没暴露的截断与内边距。
+ */
+.share-badge {
+  margin-left: auto;
+  padding: 0 var(--space-1);
+  max-width: 84px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 「未探测」要比另外两态更弱：Badge 的 gray-soft 用 gray-11，压回 gray-9 */
+.share-badge[data-tone='muted'] {
+  color: var(--gray-9);
+}

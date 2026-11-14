@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Box, Flex, ScrollArea, Text } from '@radix-ui/themes'
 
@@ -18,13 +19,14 @@ interface PageShellProps {
 }
 
 /**
- * 页面骨架：单一滚动视口 + 吸顶的标题区。
+ * 页面骨架：内容区顶部留白 + 随内容滚动、到顶吸顶的标题。
  *
- * 滚动交给 Radix ScrollArea：标题区粘在视口顶部，正文从下方滚过；标题区为
- * 半透明画布色并带背景模糊，内容经过时才呈现磨砂玻璃。滚动条是 overlay，
- * 不占布局宽度，并下移到标题区下方（见 page-shell.css）。标题区高度与滚动
- * 偏移共用 `--app-page-header-height`，标题始终贴内容区的水平内边距，位置
- * 不随窗口宽度变化；正文按自身 max-width 居中。
+ * 标题属于滚动内容，不单独占一行固定栏：页首 24px 让它先随正文上移，
+ * 移到内容区顶部后由 sticky 固定。标题底色取自内容区（白色半透明），
+ * 正文从下方穿过时才呈现磨砂玻璃；吸顶后由哨兵元素触发一条下边框，
+ * 静止时与内容区完全融为一体。滚动条占满内容区高度；键盘聚焦的元素
+ * 靠 scroll-padding-top 让开标题。标题与正文共用水平内边距，正文按
+ * 自身 max-width 居中。
  */
 export const PageShell = ({
   title,
@@ -33,37 +35,63 @@ export const PageShell = ({
   description,
   contentMaxWidth = 'var(--app-content-max)',
   children,
-}: PageShellProps) => (
-  <Flex flexGrow="1" flexShrink="1" flexBasis="0" minHeight="0">
-    <ScrollArea
-      className="page-shell-scroll"
-      type="scroll"
-      size="2"
-      scrollbars="vertical"
-    >
-      <Box className="page-shell-content">
-        <Flex
-          className="page-shell-header"
-          align="center"
-          position="sticky"
-          top="0"
-          height="var(--app-page-header-height)"
-          px="3"
-        >
-          <PageHeader title={title} help={help} badge={badge} />
-        </Flex>
+}: PageShellProps) => {
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const [stuck, setStuck] = useState(false)
 
-        <Box maxWidth={contentMaxWidth} mx="auto" px="3" pt="3" pb="9">
-          {description ? (
-            <Text as="p" size="1" className="page-shell-description" mb="4">
-              {description}
-            </Text>
-          ) : null}
-          {children}
+  // 哨兵滚出视口顶部即标题已吸顶；只用于切换下边框
+  useEffect(() => {
+    const root = viewportRef.current
+    const sentinel = sentinelRef.current
+    if (!root || !sentinel) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setStuck(!entry.isIntersecting),
+      { root },
+    )
+    observer.observe(sentinel)
+
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <Flex flexGrow="1" flexShrink="1" flexBasis="0" minHeight="0">
+      <ScrollArea
+        ref={viewportRef}
+        className="page-shell-scroll"
+        type="scroll"
+        size="2"
+        scrollbars="vertical"
+      >
+        <Box className="page-shell-content" pt="5">
+          {/* 标题到达内容区顶部的标记，不渲染任何内容 */}
+          <Box ref={sentinelRef} height="1px" aria-hidden="true" />
+
+          <Flex
+            className="page-shell-header"
+            data-stuck={stuck ? 'true' : undefined}
+            align="center"
+            position="sticky"
+            top="0"
+            height="var(--app-page-header-height)"
+            px="4"
+          >
+            <PageHeader title={title} help={help} badge={badge} />
+          </Flex>
+
+          <Box maxWidth={contentMaxWidth} mx="auto" px="4" pt="3" pb="9">
+            {description ? (
+              <Text as="p" size="1" className="page-shell-description" mb="4">
+                {description}
+              </Text>
+            ) : null}
+            {children}
+          </Box>
         </Box>
-      </Box>
-    </ScrollArea>
-  </Flex>
-)
+      </ScrollArea>
+    </Flex>
+  )
+}
 
 export default PageShell

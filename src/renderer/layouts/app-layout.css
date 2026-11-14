@@ -22,12 +22,11 @@
 }
 
 /*
- * 内容区：与画布同色，靠 12px 间隙、边框与圆角同侧边栏分隔；
- * 外壳不再滚动，页面用 PageShell 在卡片内部固定标题、滚动正文。
+ * 内容区：白底平面，左贴侧边栏、上贴顶带下沿、右与下贴窗口边；
+ * 只留左上角圆角与侧边栏分开，不画描边、不加阴影。外壳不滚动，
+ * 页面用 PageShell 在内容区内滚动正文。
  */
 .app-main {
-  background: var(--app-canvas);
-  border: 1px solid var(--app-border);
-  border-radius: var(--radius-4);
-  box-shadow: var(--shadow-2);
+  background: var(--app-surface);
+  border-radius: var(--radius-4) 0 0 0;
 }

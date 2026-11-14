@@ -187,17 +187,6 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.choice-scroll {
-  max-height: 222px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--radius-3);
-  background: var(--app-surface);
-}
-
-.choice-scroll-inner {
-  padding: var(--space-2);
-}
-
 @media (max-width: 1180px) {
   .workbench-grid {
     grid-template-columns: minmax(0, 1fr);

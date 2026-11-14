@@ -13,17 +13,15 @@ import {
   Box,
   Button,
   Callout,
-  Checkbox,
   Dialog,
   Flex,
-  Grid,
-  ScrollArea,
   Spinner,
   Strong,
   Text,
 } from '@radix-ui/themes'
 
 import { BulkActions } from '@/components/bulk-actions/bulk-actions'
+import { ChoiceList } from '@/components/choice-list'
 import { Field } from '@/components/field'
 import { EmptyState } from '@/components/empty-state/empty-state'
 import { ROUTES } from '@/routes/paths'
@@ -74,7 +72,6 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
 
   const machines = copyStore((state) => state.machines)
   const showFailures = copyStore((state) => state.showFailures)
-  const toggleMachine = copyStore((state) => state.toggleMachine)
   const setMachines = copyStore((state) => state.setMachines)
   const selectAll = copyStore((state) => state.selectAll)
   const setShowFailures = copyStore((state) => state.setShowFailures)
@@ -201,54 +198,23 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
         }
         hint="至少勾选 1 台机台后才能开始复制。"
       >
-        <ScrollArea type="auto" scrollbars="vertical" className="choice-scroll">
-          <Grid className="machine-grid" gap="1" p="2">
-            {machineStats.map((item) => {
-              const checked = machines.includes(item.machine)
-
-              const handleToggle = () => {
-                if (running || paused) return
-
-                toggleMachine(item.machine)
-              }
-
-              return (
-                <Flex
-                  key={item.machine}
-                  className="machine-item"
-                  align="center"
-                  gap="2"
-                  minWidth="0"
-                  py="1"
-                  px="2"
-                  data-disabled={running || paused || undefined}
-                  data-dimmed={running || undefined}
-                  onClick={handleToggle}
-                >
-                  <Checkbox
-                    size="1"
-                    checked={checked}
-                    disabled={running || paused}
-                    aria-label={item.machine}
-                    onClick={(event) => event.stopPropagation()}
-                    onCheckedChange={handleToggle}
-                  />
-                  <Text
-                    size="1"
-                    truncate
-                    className="machine-item-label"
-                    title={item.machine}
-                  >
-                    {item.machine}
-                  </Text>
-                  <Text size="1" className="machine-item-count">
-                    {item.images}
-                  </Text>
-                </Flex>
-              )
-            })}
-          </Grid>
-        </ScrollArea>
+        <ChoiceList
+          columns={3}
+          scroll
+          disabled={running || paused}
+          value={machines}
+          onValueChange={setMachines}
+          options={machineStats.map((item) => ({
+            value: item.machine,
+            label: (
+              <Text size="2" className="mono">
+                {item.machine}
+              </Text>
+            ),
+            meta: item.images,
+            title: item.machine,
+          }))}
+        />
       </Field>
 
       {/* 复制选项与预览 */}

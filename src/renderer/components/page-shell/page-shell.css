@@ -1,13 +1,12 @@
-/* 页面骨架：单一滚动视口 + 吸顶标题区。布局由 Radix props 表达，这里只留视觉。 */
+/* 页面骨架：单一滚动视口 + 随内容滚动、到顶吸顶的标题区。
+   布局由 Radix props 表达，这里只留视觉与吸顶状态。 */
 
 /*
  * 滚动容器：在容器内建立独立层叠上下文，标题区才能压住正文里的定位元素，
  * 同时不抬高到 Radix 传送到 body 的弹层之上。
- * 垂直滚动条从标题区下方开始，不再横穿吸顶标题。
  */
 .page-shell-scroll {
   isolation: isolate;
-  --scrollarea-scrollbar-vertical-margin-top: var(--app-page-header-height);
 }
 
 /* 真正的滚动视口由 ScrollArea 渲染：键盘聚焦的元素不会被吸顶标题挡住 */
@@ -15,17 +14,16 @@
   scroll-padding-top: var(--app-page-header-height);
 }
 
-/* ScrollArea 会把视口直接子元素设成 fit-content，页面骨架需要撑满宽度 */
-.page-shell-scroll .rt-ScrollAreaViewport > .page-shell-content {
-  width: 100%;
+/* 吸顶标题：底色取自内容区，正文滚到下方时呈现磨砂玻璃 */
+.page-shell-header {
+  background: color-mix(in srgb, var(--app-surface) 64%, transparent);
+  backdrop-filter: blur(14px);
+  z-index: 1;
 }
 
-/* 吸顶标题区：半透明画布色 + 背景模糊，正文滚到下方时呈现磨砂玻璃 */
-.page-shell-header {
-  background: color-mix(in srgb, var(--app-canvas) 64%, transparent);
-  backdrop-filter: blur(14px);
+/* 下边框只在吸顶后出现：静止时标题与内容区融为一体 */
+.page-shell-header[data-stuck='true'] {
   border-bottom: 1px solid var(--app-border);
-  z-index: 1;
 }
 
 /* 引导句沿用原页头说明的版式 */
