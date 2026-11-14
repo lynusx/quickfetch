@@ -1,0 +1,121 @@
+# Radix Themes 文档索引
+
+每条链接都是 `.md` 版本：纯正文，没有导航、页脚与样式表，适合直接读。
+组件页内含 API Reference 表（Prop / Type / Default），不必去读渲染后的 HTML。
+分组与官方文档侧边栏一致，组标题用官方英文名，组内顺序即侧边栏顺序。
+
+## 怎么用
+
+1. **确认有没有这个东西**：先看 **Themes 组件导航页**——56 个组件，每条一句话用途，是**可证无的全集**：`https://www.radix-ui.com/themes/docs/components.md`。导航页没有就是没有；本索引只用于定位页面，漏了不代表不存在。
+
+2. **查某个组件的 prop**：打开它的 `.md` 读 API Reference。表里只有**组件层新增的 prop**——`ScrollArea` 的 `type`、`Select.Content` 的 `position`、`Tabs.Root` 的 `defaultValue` 都不在表上，却都在同一页的示例里用。继承来的 prop 去 API Reference 首句的 primitive 链接读，那是 **prop 源**：只读它的 API 表，不学它的示例（那里是无样式组件 + 手写 CSS）。
+
+3. **顺着正文里的链接继续读**：`.md` 正文中的链接写成站点绝对路径、且不带 `.md`
+   （如 `/themes/docs/overview/layout#margin-props`）。这样取：
+
+   - 补域名与 `.md`、**保留 `#片段`**：`https://www.radix-ui.com` + 路径 + `.md#片段`
+   - **不要把路径当相对路径**：`/themes/...` 解析到站点根，不是当前 `.md` 所在目录
+   - 片段是该页标题的锚点，可用来直接定位段落，不必整页读完
+   - 链接可能指向 `.md` 里没有的页（如 `/colors`），那是站点其他栏目，换别的入口找
+   - primitive 页不在本索引里，按需拼：`https://www.radix-ui.com/primitives/docs/{components,overview,guides,utilities}/<kebab>.md`
+
+4. **索引过期了吗？** 官方组件导航页永远是最新的组件全集；把它与下方 `Layout` / `Typography` / `Components` / `Utilities` 四组条目对比——**名单不一致就说明本文件该更新了**，以导航页为准。
+
+   若某个 prop 与官方文档对不上，通常是本地 `@radix-ui/themes` 落后于文档站：先升级依赖，再用源码确认该版本的实际行为。
+
+   ```bash
+   node -p "require('@radix-ui/themes/package.json').version"
+   grep -E '^\s{2}\w+:' node_modules/@radix-ui/themes/src/components/<kebab-name>.props.tsx
+   ```
+
+   `.props.tsx` 里是 `{ type, values, default, responsive }` 的原始定义，反映的是**已装版本**，不代表最新文档。
+
+## Themes
+
+### Overview
+
+- [Getting started](https://www.radix-ui.com/themes/docs/overview/getting-started.md)
+- [Styling](https://www.radix-ui.com/themes/docs/overview/styling.md)
+- [Layout](https://www.radix-ui.com/themes/docs/overview/layout.md)
+- [Releases](https://www.radix-ui.com/themes/docs/overview/releases.md)
+- [Resources](https://www.radix-ui.com/themes/docs/overview/resources.md)
+
+### Theme
+
+- [Theme overview](https://www.radix-ui.com/themes/docs/theme/overview.md)
+- [Color](https://www.radix-ui.com/themes/docs/theme/color.md)
+- [Dark mode](https://www.radix-ui.com/themes/docs/theme/dark-mode.md)
+- [Typography](https://www.radix-ui.com/themes/docs/theme/typography.md)
+- [Spacing](https://www.radix-ui.com/themes/docs/theme/spacing.md)
+- [Breakpoints](https://www.radix-ui.com/themes/docs/theme/breakpoints.md)
+- [Radius](https://www.radix-ui.com/themes/docs/theme/radius.md)
+- [Shadows](https://www.radix-ui.com/themes/docs/theme/shadows.md)
+- [Cursors](https://www.radix-ui.com/themes/docs/theme/cursors.md)
+
+### Layout
+
+- [Box](https://www.radix-ui.com/themes/docs/components/box.md)
+- [Flex](https://www.radix-ui.com/themes/docs/components/flex.md)
+- [Grid](https://www.radix-ui.com/themes/docs/components/grid.md)
+- [Container](https://www.radix-ui.com/themes/docs/components/container.md)
+- [Section](https://www.radix-ui.com/themes/docs/components/section.md)
+
+### Typography
+
+- [Text](https://www.radix-ui.com/themes/docs/components/text.md)
+- [Heading](https://www.radix-ui.com/themes/docs/components/heading.md)
+- [Blockquote](https://www.radix-ui.com/themes/docs/components/blockquote.md)
+- [Code](https://www.radix-ui.com/themes/docs/components/code.md)
+- [Em](https://www.radix-ui.com/themes/docs/components/em.md)
+- [Kbd](https://www.radix-ui.com/themes/docs/components/kbd.md)
+- [Link](https://www.radix-ui.com/themes/docs/components/link.md)
+- [Quote](https://www.radix-ui.com/themes/docs/components/quote.md)
+- [Strong](https://www.radix-ui.com/themes/docs/components/strong.md)
+
+### Components
+
+- [Alert Dialog](https://www.radix-ui.com/themes/docs/components/alert-dialog.md)
+- [Aspect Ratio](https://www.radix-ui.com/themes/docs/components/aspect-ratio.md)
+- [Avatar](https://www.radix-ui.com/themes/docs/components/avatar.md)
+- [Badge](https://www.radix-ui.com/themes/docs/components/badge.md)
+- [Button](https://www.radix-ui.com/themes/docs/components/button.md)
+- [Callout](https://www.radix-ui.com/themes/docs/components/callout.md)
+- [Card](https://www.radix-ui.com/themes/docs/components/card.md)
+- [Checkbox](https://www.radix-ui.com/themes/docs/components/checkbox.md)
+- [Checkbox Group](https://www.radix-ui.com/themes/docs/components/checkbox-group.md)
+- [Checkbox Cards](https://www.radix-ui.com/themes/docs/components/checkbox-cards.md)
+- [Context Menu](https://www.radix-ui.com/themes/docs/components/context-menu.md)
+- [Data List](https://www.radix-ui.com/themes/docs/components/data-list.md)
+- [Dialog](https://www.radix-ui.com/themes/docs/components/dialog.md)
+- [Dropdown Menu](https://www.radix-ui.com/themes/docs/components/dropdown-menu.md)
+- [Hover Card](https://www.radix-ui.com/themes/docs/components/hover-card.md)
+- [Icon Button](https://www.radix-ui.com/themes/docs/components/icon-button.md)
+- [Inset](https://www.radix-ui.com/themes/docs/components/inset.md)
+- [Popover](https://www.radix-ui.com/themes/docs/components/popover.md)
+- [Progress](https://www.radix-ui.com/themes/docs/components/progress.md)
+- [Radio](https://www.radix-ui.com/themes/docs/components/radio.md)
+- [Radio Group](https://www.radix-ui.com/themes/docs/components/radio-group.md)
+- [Radio Cards](https://www.radix-ui.com/themes/docs/components/radio-cards.md)
+- [Scroll Area](https://www.radix-ui.com/themes/docs/components/scroll-area.md)
+- [Segmented Control](https://www.radix-ui.com/themes/docs/components/segmented-control.md)
+- [Select](https://www.radix-ui.com/themes/docs/components/select.md)
+- [Separator](https://www.radix-ui.com/themes/docs/components/separator.md)
+- [Skeleton](https://www.radix-ui.com/themes/docs/components/skeleton.md)
+- [Slider](https://www.radix-ui.com/themes/docs/components/slider.md)
+- [Spinner](https://www.radix-ui.com/themes/docs/components/spinner.md)
+- [Switch](https://www.radix-ui.com/themes/docs/components/switch.md)
+- [Table](https://www.radix-ui.com/themes/docs/components/table.md)
+- [Tabs](https://www.radix-ui.com/themes/docs/components/tabs.md)
+- [Tab Nav](https://www.radix-ui.com/themes/docs/components/tab-nav.md)
+- [Text Area](https://www.radix-ui.com/themes/docs/components/text-area.md)
+- [Text Field](https://www.radix-ui.com/themes/docs/components/text-field.md)
+- [Tooltip](https://www.radix-ui.com/themes/docs/components/tooltip.md)
+
+### Utilities
+
+- [Accessible Icon](https://www.radix-ui.com/themes/docs/components/accessible-icon.md)
+- [Portal](https://www.radix-ui.com/themes/docs/components/portal.md)
+- [Reset](https://www.radix-ui.com/themes/docs/components/reset.md)
+- [Slot](https://www.radix-ui.com/themes/docs/components/slot.md)
+- [Theme](https://www.radix-ui.com/themes/docs/components/theme.md)
+- [Visually Hidden](https://www.radix-ui.com/themes/docs/components/visually-hidden.md)

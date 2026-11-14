@@ -1,0 +1,34 @@
+# templates/ci.yml —— 复制到 .github/workflows/ui-guardrails.yml
+# 依赖：项目里已把 templates/.stylelintrc.mjs 复制为 .stylelintrc.mjs
+name: ui-guardrails
+
+on:
+  pull_request:
+
+jobs:
+  guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: stylelint（字号三件套 / 写死颜色）
+        run: pnpm exec stylelint "src/**/*.css"
+
+      - name: 间距 prop 多值（会被静默丢弃）
+        run: |
+          if grep -rnE '\b(p|px|py|pt|pr|pb|pl)="[^"]*[0-9] +[0-9]' src --include=*.tsx; then
+            echo "::error::间距 prop 只接单档位；多值改写成 py/px，或使用带单位的合法 CSS 简写"
+            exit 1
+          fi
+
+      - name: 裸元素（只提示，人工复核）
+        run: grep -rnE '<(div|span|p|h[1-6])\b' src --include=*.tsx || true

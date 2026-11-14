@@ -227,7 +227,7 @@ src/
 
 - 组件库：**Radix Themes**（`@radix-ui/themes`），根节点由 `<Theme>` 包裹
 - 样式：`@radix-ui/themes/styles.css`，使用 Radix 设计令牌
-- **Radix 的用法规则不在本文重复**：props 与 CSS 的分工、尺度档位、默认值、颜色与布局边界、项目确认过的例外，全在 [`.claude/skills/radix-themes/SKILL.md`](.claude/skills/radix-themes/SKILL.md)。动 UI 前先过一遍它的自查清单，按现象找改法查同目录的 `references/anti-patterns.md`
+- **Radix 的用法规则不在本文重复**：props 与 CSS 的分工、尺度档位、默认值、颜色与布局边界、项目确认过的例外，全在 [`.claude/skills/radix-themes-best-practices/SKILL.md`](.claude/skills/radix-themes-best-practices/SKILL.md)。动 UI 前先过一遍它的自查清单，按现象找改法查同目录的 `references/pitfalls.md`
 - 字体：拉丁使用 `Public Sans Variable`，中文回退到系统字体（Windows 微软雅黑、macOS PingFang SC、Linux Noto Sans CJK）；不打包 CJK 字体。字体变量需同时覆盖 `:root` 与 `.radix-themes`，否则 Radix 组件会使用自己的默认栈
 - 白卡外观只有一处实现：`Card variant="surface"` + `index.css` 的 `.app-card`（只管内边距归零与描边色），圆角跟 Card 的 `size` 走，页面不再声明覆盖变量（Card 的描边是 inset ring，不占布局，比手写 border 少 2px 高度）
 - 设计层：全局令牌、reset、共享工具类与 sonner 覆盖在 `src/renderer/index.css`；组件 CSS 与组件同目录（渲染层组件目录、组件文件与样式统一 kebab-case），业务 feature CSS 在各自 feature 目录（如 `features/scan/scan.css`）。不引入 reset / 其它组件库

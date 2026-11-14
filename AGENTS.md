@@ -5,11 +5,11 @@
 
 ## 先读这些
 
-| 场景                            | 该读什么                                                                       |
-| ------------------------------- | ------------------------------------------------------------------------------ |
-| 整体怎么跑、目录结构、UI 约定   | [`README.md`](README.md)                                                       |
-| 架构、IPC、配置落盘、网络判定等 | [`.claude/AGENTS.md`](.claude/AGENTS.md)                                       |
-| 要动 UI、加组件、调整样式       | [`.claude/skills/radix-themes/SKILL.md`](.claude/skills/radix-themes/SKILL.md) |
+| 场景                            | 该读什么                                                                                                     |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| 整体怎么跑、目录结构、UI 约定   | [`README.md`](README.md)                                                                                     |
+| 架构、IPC、配置落盘、网络判定等 | [`.claude/AGENTS.md`](.claude/AGENTS.md)                                                                     |
+| 要动 UI、加组件、调整样式       | [`.claude/skills/radix-themes-best-practices/SKILL.md`](.claude/skills/radix-themes-best-practices/SKILL.md) |
 
 ## 四条原则
 
@@ -24,7 +24,7 @@
 3. **界面只用 Radix Themes 组件。** 布局用 `Box` / `Flex` / `Grid` / `Section` / `Container`，排版用 `Text` / `Heading` / `Strong` / `Em` / `Code` / `Link` / `Blockquote`；不在 JSX 里手写裸 `div` / `span` / `p` / `h1`–`h6` 做布局或排版，不混入 shadcn/ui、Tailwind 或其他组件库，不写内联 `style`。
    - **props 优先，CSS 兜底。** 间距、尺寸、对齐、flex 比例、overflow 写 props；CSS 只留 props 表达不了的部分。同一属性写两处时，项目 CSS 后加载会静默吃掉 prop。
    - **字号、颜色、间距各有唯一来源。** 字号是 `size`，颜色是 `Text` 的 `color`，间距是 `p` / `gap` 这类 prop——写在别处就是第二份真相。
-   - 规则全文、档位表、默认值、项目确认过的例外，在 [`radix-themes` skill](.claude/skills/radix-themes/SKILL.md)：**动 UI 前先读自查清单，改完按清单过一遍**。要判断「某处留 CSS 是否正当」查 [references/rules.md](.claude/skills/radix-themes/references/rules.md) 第 7 节；按现象找改法查 [references/anti-patterns.md](.claude/skills/radix-themes/references/anti-patterns.md)。
+   - 规则全文、档位表、默认值、项目确认过的例外，在 [`radix-themes-best-practices` skill](.claude/skills/radix-themes-best-practices/SKILL.md)：**动 UI 前先读自查清单，改完按清单过一遍**。要判断「某处留 CSS 是否正当」查 [references/rules.md](.claude/skills/radix-themes-best-practices/references/rules.md) 第 7 节；按现象找改法查 [references/pitfalls.md](.claude/skills/radix-themes-best-practices/references/pitfalls.md)。
 
 4. **样式跟着组件走。** 共享组件每个组件一个目录；渲染层的组件目录名、组件文件与样式文件统一 kebab-case（如 `components/panel/panel.tsx` + `components/panel/panel.css`、`layouts/app-layout.tsx` + `layouts/app-layout.css`），样式在组件文件里 `import`；`index.ts` 只做多组件导出，不放组件实现。业务 feature 的 CSS 与组件同目录（如 `features/scan/scan.css`）。不要新建 `styles/app.css` 之类的汇总文件，也不要把所有样式聚在一个文件里。只有全局令牌、reset、共享工具类和跨组件/跨 feature 共享类放 `src/renderer/index.css`；新增组件时一并创建同名 CSS，没有样式就不建空文件。
 

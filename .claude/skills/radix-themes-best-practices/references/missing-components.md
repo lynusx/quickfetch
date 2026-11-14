@@ -2,6 +2,8 @@
 
 Themes 未提供 Date Picker、TreeView、Carousel、Combobox、DataTable 等复杂组件。按以下优先级处理：
 
+**有一批组件只在 Primitives 里有、Themes 没有包装**：`Accordion`、`Collapsible`、`Form`、`Label`、`Menubar`、`OneTimePasswordField`、`PasswordToggleField`、`Toast`、`Toggle`、`Toolbar`。它们是无样式的，要用就得自写全部外观 + 令牌覆盖（见下面的「一致性三件套」），或者按方案表换成第三方库。
+
 ## 优先级
 
 1. **首选**：引入无样式底层库（如 Date Picker 用 `react-day-picker`）+ Radix 令牌覆盖层。
@@ -85,7 +87,7 @@ export function DatePicker() {
 | Date Picker | `react-day-picker` | Themes `Popover` + `Button` |
 | Combobox / 搜索选择 | `cmdk` | Themes `Popover` + `TextField` |
 | Carousel | `embla-carousel-react` | Themes `IconButton` 做翻页 |
-| Toast | Themes 自带？否 → `sonner`（用令牌覆盖样式） | — |
+| Toast | `sonner`（Themes 没有 Toast；样式用令牌覆盖） | — |
 | DataTable | `@tanstack/react-table`（无样式） | Themes `Table` 组件渲染 |
 | TreeView | `@headless-tree/react` 或自研 | Themes 令牌 |
 

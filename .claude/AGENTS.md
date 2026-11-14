@@ -6,15 +6,15 @@
 
 ## 先读这些
 
-| 场景                      | 该读什么                                                          |
-| ------------------------- | ----------------------------------------------------------------- |
-| 要动 UI、加组件、调整样式 | [`skills/radix-themes/SKILL.md`](skills/radix-themes/SKILL.md)     |
-| 整体怎么跑起来            | [`README.md`](../README.md)                                        |
+| 场景                      | 该读什么                                                                                     |
+| ------------------------- | -------------------------------------------------------------------------------------------- |
+| 要动 UI、加组件、调整样式 | [`skills/radix-themes-best-practices/SKILL.md`](skills/radix-themes-best-practices/SKILL.md) |
+| 整体怎么跑起来            | [`README.md`](../README.md)                                                                  |
 
 ## 项目级 skills
 
 通用 skill 只装全局（`~/.claude/skills`），不提交进仓库；`.claude/skills/` 只保留本项目独有的
-`radix-themes`。安装技能后若又出现 `skills-lock.json` 或同名目录，不要带进提交。
+`radix-themes-best-practices`。安装技能后若又出现 `skills-lock.json` 或同名目录，不要带进提交。
 
 ## Radix Themes (@radix-ui/themes) 相关改动
 
