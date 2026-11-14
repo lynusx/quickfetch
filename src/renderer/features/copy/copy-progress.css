@@ -24,9 +24,7 @@
 
 /* 行列异距（4px 14px）props 无法表达，布局留在这里；display 由 Flex 组件提供 */
 .copy-progress-meta {
-  flex-wrap: wrap;
   gap: var(--space-1) var(--space-4);
-  margin-top: var(--space-2);
   font-variant-numeric: tabular-nums;
 }
 

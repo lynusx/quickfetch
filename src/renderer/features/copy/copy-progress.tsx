@@ -140,12 +140,7 @@ const CopyProgress = ({
         <Flex align="baseline" justify="between" gap="3" mb="2">
           <Flex align="center" gap="2">
             {running ? <Spinner size="1" /> : null}
-            <Text
-              size="1"
-              weight="medium"
-              color="gray"
-              className="copy-progress-label"
-            >
+            <Text size="1" weight="medium" className="copy-progress-label">
               完成进度
             </Text>
           </Flex>
@@ -156,7 +151,7 @@ const CopyProgress = ({
 
         <Progress value={percent} size="2" />
 
-        <Flex className="copy-progress-meta">
+        <Flex className="copy-progress-meta" wrap="wrap" mt="2">
           <Text size="1" color="gray">
             {finished ? '总耗时' : '已用'} {formatDuration(progress.elapsedMs)}
           </Text>

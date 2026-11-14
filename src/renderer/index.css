@@ -106,8 +106,7 @@ body {
 }
 
 /* 数字统一等宽，进度与统计不会跳动 */
-.tabular,
-.num {
+.tabular {
   font-variant-numeric: tabular-nums;
 }
 

@@ -39,9 +39,7 @@
 
 /* 行列异距（4px 14px）props 无法表达，布局留在这里；display 由 Flex 组件提供 */
 .progress-meta {
-  flex-wrap: wrap;
   gap: var(--space-1) var(--space-4);
-  margin-top: var(--space-2);
   font-variant-numeric: tabular-nums;
 }
 
@@ -75,7 +73,6 @@
 
 .data-list-head,
 .data-row {
-  display: grid;
   grid-template-columns: minmax(96px, 150px) 1fr 76px;
   align-items: center;
   gap: var(--space-3);
@@ -107,13 +104,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--code-font-family);
-}
-
-.data-row-status {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
 }
 
 /* 状态文案保持单行；完整诊断信息放在 title 里，不把表格撑开 */

@@ -142,12 +142,7 @@ export const ScanTaskPanel = ({
                 {task?.status === 'running' || task?.status === 'pending' ? (
                   <Spinner size="1" />
                 ) : null}
-                <Text
-                  size="1"
-                  weight="medium"
-                  color="gray"
-                  className="progress-label"
-                >
+                <Text size="1" weight="medium" className="progress-label">
                   完成进度
                 </Text>
               </Flex>
@@ -157,7 +152,7 @@ export const ScanTaskPanel = ({
             </Flex>
             <Progress value={task?.progress.percent ?? 0} size="2" />
 
-            <Flex className="progress-meta">
+            <Flex className="progress-meta" wrap="wrap" mt="2">
               {task && task.progress.batchTotal > 0 ? (
                 <Text size="1" color="gray">
                   第 {task.progress.batchIndex}/{task.progress.batchTotal} 批
@@ -331,12 +326,7 @@ export const ScanTaskPanel = ({
                 <Text size="1" weight="medium">
                   各机台结果
                 </Text>
-                <Text
-                  size="1"
-                  weight="medium"
-                  color="gray"
-                  className="field-count"
-                >
+                <Text size="1" weight="medium" className="field-count">
                   {formatDuration(task.elapsedMs)}
                   {view.abnormalCount > 0 &&
                     ` · ${view.abnormalCount} 台无结果`}
@@ -368,9 +358,9 @@ export const ScanTaskPanel = ({
                     </Text>
                     <Flex
                       as="span"
-                      className="data-row-status"
                       align="center"
-                      gap="1"
+                      gap="2"
+                      minWidth="0"
                       title={row.detail ?? undefined}
                     >
                       <Box

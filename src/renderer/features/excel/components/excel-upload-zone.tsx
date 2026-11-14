@@ -94,7 +94,7 @@ const ExcelUploadZone = () => {
       <Text size="3" weight="bold">
         {statusText}
       </Text>
-      <Text size="1" color="gray" className="upload-desc">
+      <Text size="1" className="upload-desc">
         {file
           ? `当前文件：${file.name}`
           : `支持 .xlsx、.xls 格式，单次仅处理 1 个文件，最大 ${MAX_EXCEL_SIZE_LABEL}`}
@@ -106,6 +106,9 @@ const ExcelUploadZone = () => {
           display="inline-flex"
           align="center"
           gap="2"
+          mt="1"
+          py="1"
+          px="3"
         >
           <UploadIcon width={13} height={13} />
           <Text size="1" weight="medium" className="upload-cta-label">

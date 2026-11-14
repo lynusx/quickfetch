@@ -59,7 +59,6 @@ export const AppSidebar = () => {
 
   return (
     <Flex
-      className="app-sidebar"
       direction="column"
       flexShrink="0"
       flexBasis="var(--app-sidebar-width)"
@@ -75,7 +74,7 @@ export const AppSidebar = () => {
         pb="4"
       >
         <BrandMark />
-        <Text as="div" size="3" weight="bold" className="brand-name">
+        <Text as="div" size="3" weight="bold">
           秒取
         </Text>
       </Flex>
@@ -112,11 +111,9 @@ export const AppSidebar = () => {
                   >
                     <item.icon width={15} height={15} />
                   </Flex>
-                  <Box as="span" className="nav-text">
-                    <Text size="2" weight="medium" className="nav-label">
-                      {item.label}
-                    </Text>
-                  </Box>
+                  <Text size="2" weight="medium" className="nav-text nav-label">
+                    {item.label}
+                  </Text>
                 </NavLink>
               ))}
             </Box>
@@ -136,15 +133,13 @@ export const AppSidebar = () => {
           >
             <GearIcon width={15} height={15} />
           </Flex>
-          <Box as="span" className="nav-text">
-            <Text size="2" weight="medium" className="nav-label">
-              设置
-            </Text>
-          </Box>
+          <Text size="2" weight="medium" className="nav-text nav-label">
+            设置
+          </Text>
         </NavLink>
 
         <Flex align="center" justify="between" gap="2" pt="2" pb="1" px="2">
-          <Flex as="span" className="sidebar-status" align="center" gap="1">
+          <Flex as="span" display="inline-flex" align="center" gap="1">
             <Box as="span" className="status-dot" data-tone="success" />
             <Text size="1" color="gray">
               本地运行

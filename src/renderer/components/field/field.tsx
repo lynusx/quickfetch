@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
 import { Box, Flex, Text } from '@radix-ui/themes'
-import { cn } from '@/lib/utils'
 
 import './field.css'
 
@@ -13,7 +12,6 @@ interface FieldProps {
   actions?: ReactNode
   hint?: ReactNode
   children: ReactNode
-  className?: string
 }
 
 /** 表单字段的统一标题行：标题 + 计数 + 右侧操作，避免每处各写一套 */
@@ -24,16 +22,9 @@ export const Field = ({
   actions,
   hint,
   children,
-  className,
 }: FieldProps) => (
-  <Flex direction="column" gap="2" className={cn('field', className)}>
-    <Flex
-      className="field-head"
-      align="center"
-      justify="between"
-      gap="3"
-      minHeight="22px"
-    >
+  <Flex direction="column" gap="2">
+    <Flex align="center" justify="between" gap="3" minHeight="22px">
       <Flex align="center" gap="2" minWidth="0">
         {icon ? (
           <Box as="span" className="field-label-icon">
@@ -44,20 +35,20 @@ export const Field = ({
           {label}
         </Text>
         {count != null ? (
-          <Text size="1" weight="medium" color="gray" className="field-count">
+          <Text size="1" weight="medium" className="field-count">
             {count}
           </Text>
         ) : null}
       </Flex>
       {actions ? (
-        <Flex className="field-actions" align="center" gap="1" flexShrink="0">
+        <Flex align="center" gap="1" flexShrink="0">
           {actions}
         </Flex>
       ) : null}
     </Flex>
     {children}
     {hint ? (
-      <Text as="p" size="1" color="gray" className="field-hint">
+      <Text as="p" size="1" className="field-hint">
         {hint}
       </Text>
     ) : null}

@@ -18,13 +18,7 @@ interface SettingsGroupProps {
  */
 export const SettingsGroup = ({ id, title, children }: SettingsGroupProps) => (
   <Box id={id} className="settings-group">
-    <Heading
-      as="h2"
-      size="3"
-      weight="medium"
-      className="settings-group-title"
-      mb="3"
-    >
+    <Heading as="h2" size="3" weight="medium" mb="3">
       {title}
     </Heading>
     <Card variant="surface" className="app-card">

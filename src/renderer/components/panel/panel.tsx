@@ -16,7 +16,7 @@ interface PanelProps {
  * prop 的部分（圆角、内边距）由 `.app-card` 用它的变量补齐。
  */
 export const Panel = ({ children, className }: PanelProps) => (
-  <Card variant="surface" className={cn('app-card', 'panel', className)}>
+  <Card variant="surface" className={cn('app-card', className)}>
     {children}
   </Card>
 )
@@ -54,7 +54,7 @@ export const PanelHeader = ({
         </Heading>
       </Flex>
       {description ? (
-        <Text as="p" size="1" color="gray" className="panel-description">
+        <Text as="p" size="1" className="panel-description" mt="1">
           {description}
         </Text>
       ) : null}
@@ -69,13 +69,10 @@ export const PanelHeader = ({
 
 interface PanelBodyProps {
   children: ReactNode
-  className?: string
 }
 
-export const PanelBody = ({ children, className }: PanelBodyProps) => (
-  <Box className={className} p="4">
-    {children}
-  </Box>
+export const PanelBody = ({ children }: PanelBodyProps) => (
+  <Box p="4">{children}</Box>
 )
 
 export default Panel

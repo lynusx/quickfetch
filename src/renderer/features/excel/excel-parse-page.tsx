@@ -66,17 +66,17 @@ const ExcelParsePage = () => {
             description="上传、解析、筛选、导出，四步完成"
           />
           <PanelBody>
-            <Grid className="guide-grid" gap="4">
+            <Grid columns="repeat(auto-fit, minmax(220px, 1fr))" gap="4">
               {GUIDE.map((item, index) => (
                 <Step key={item.title} index={index + 1}>
                   <Box>
-                    <Flex className="guide-title" align="center" gap="1">
+                    <Flex align="center" gap="2">
                       <item.icon width={13} height={13} />
                       <Text size="1" weight="medium">
                         {item.title}
                       </Text>
                     </Flex>
-                    <Text as="p" size="1" color="gray" className="guide-text">
+                    <Text as="p" size="1" className="guide-text" mt="1">
                       {item.text}
                     </Text>
                   </Box>

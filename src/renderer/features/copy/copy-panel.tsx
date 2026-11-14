@@ -244,7 +244,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
                   >
                     {item.machine}
                   </Text>
-                  <Text size="1" color="gray" className="machine-item-count">
+                  <Text size="1" className="machine-item-count">
                     {item.images}
                   </Text>
                 </Flex>

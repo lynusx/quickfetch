@@ -131,7 +131,7 @@ export const DatePicker = ({
       <Popover.Content size="1" align="start" className="date-popover">
         <Flex direction="column" gap="2">
           {/* 快捷选项 */}
-          <Grid className="date-shortcuts" columns="3" gap="1">
+          <Grid columns="3" gap="1">
             <Button
               type="button"
               variant="ghost"

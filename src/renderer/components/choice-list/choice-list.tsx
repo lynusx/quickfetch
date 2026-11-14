@@ -107,7 +107,7 @@ export const ChoiceList = ({
               {option.label}
             </Text>
             {option.meta != null ? (
-              <Text size="1" color="gray" className="choice-meta">
+              <Text size="1" className="choice-meta">
                 {option.meta}
               </Text>
             ) : null}
@@ -179,7 +179,7 @@ export const ChoiceRadio = ({
                 {option.label}
               </Text>
               {option.meta != null ? (
-                <Text size="1" color="gray" className="choice-meta">
+                <Text size="1" className="choice-meta">
                   {option.meta}
                 </Text>
               ) : null}

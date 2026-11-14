@@ -8,10 +8,6 @@
   margin-top: var(--space-6);
 }
 
-.settings-group-title {
-  color: var(--gray-12);
-}
-
 /* 卡片底部区域：状态、进度与操作，不强行塞进右侧控件位。
    布局（flex 方向、gap、padding）走 props，这里只留分隔线。 */
 .settings-card-footer {

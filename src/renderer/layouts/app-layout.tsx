@@ -44,15 +44,7 @@ const LayoutPage = () => (
         overflow="hidden"
         m="3"
       >
-        <Flex
-          className="app-content"
-          direction="column"
-          flexGrow="1"
-          flexBasis="0"
-          minHeight="0"
-        >
-          <Outlet />
-        </Flex>
+        <Outlet />
       </Flex>
     </Flex>
   </Flex>

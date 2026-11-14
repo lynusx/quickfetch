@@ -48,21 +48,14 @@ export const PageShell = ({
           position="sticky"
           top="0"
           height="var(--app-page-header-height)"
+          px="3"
         >
-          <Flex align="center" width="100%" px="3">
-            <PageHeader title={title} help={help} badge={badge} />
-          </Flex>
+          <PageHeader title={title} help={help} badge={badge} />
         </Flex>
 
         <Box maxWidth={contentMaxWidth} mx="auto" px="3" pt="3" pb="9">
           {description ? (
-            <Text
-              as="p"
-              size="1"
-              color="gray"
-              className="page-shell-description"
-              mb="4"
-            >
+            <Text as="p" size="1" className="page-shell-description" mb="4">
               {description}
             </Text>
           ) : null}

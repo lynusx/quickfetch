@@ -30,7 +30,7 @@ import type { ExcelFile } from '../types'
 const FileMeta = ({ file }: { file: ExcelFile }) => (
   <Grid className="file-meta" columns="3" gap="2">
     <Flex className="file-meta-item" direction="column" gap="1" py="2" px="3">
-      <Text as="div" size="1" color="gray" className="file-meta-label">
+      <Text as="div" size="1" className="file-meta-label">
         文件大小
       </Text>
       <Text as="div" size="1" weight="medium" truncate className="tabular">
@@ -38,7 +38,7 @@ const FileMeta = ({ file }: { file: ExcelFile }) => (
       </Text>
     </Flex>
     <Flex className="file-meta-item" direction="column" gap="1" py="2" px="3">
-      <Text as="div" size="1" color="gray" className="file-meta-label">
+      <Text as="div" size="1" className="file-meta-label">
         工作表
       </Text>
       <Text as="div" size="1" weight="medium" truncate className="tabular">
@@ -46,7 +46,7 @@ const FileMeta = ({ file }: { file: ExcelFile }) => (
       </Text>
     </Flex>
     <Flex className="file-meta-item" direction="column" gap="1" py="2" px="3">
-      <Text as="div" size="1" color="gray" className="file-meta-label">
+      <Text as="div" size="1" className="file-meta-label">
         上传时间
       </Text>
       <Text as="div" size="1" weight="medium" truncate className="tabular">

@@ -159,7 +159,7 @@ const HistoryPanel = ({
         actions={
           <>
             {refreshing ? <Spinner size="1" /> : null}
-            <Text size="1" weight="medium" color="gray" className="field-count">
+            <Text size="1" weight="medium" className="field-count">
               {visible.length} / {limit}
             </Text>
             <Button
@@ -184,12 +184,7 @@ const HistoryPanel = ({
               py="2"
               px="3"
             >
-              <Text
-                as="div"
-                size="1"
-                color="gray"
-                className="history-toolbar-hint"
-              >
+              <Text as="div" size="1" className="history-toolbar-hint">
                 每条记录包含全部图片路径，可恢复查看或再次复制；保留条数在设置页调整。
               </Text>
               {visible.length > 0 ? (

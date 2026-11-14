@@ -386,13 +386,7 @@ const PlantMachinePicker = ({
                     return {
                       value: machine.key,
                       label: (
-                        <Flex
-                          align="center"
-                          gap="2"
-                          minWidth="0"
-                          width="100%"
-                          className="machine-label"
-                        >
+                        <Flex align="center" gap="2" minWidth="0" width="100%">
                           <Text size="2" className="mono">
                             {machine.name}
                           </Text>

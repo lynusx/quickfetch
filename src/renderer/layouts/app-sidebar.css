@@ -7,10 +7,6 @@
   user-select: none;
 }
 
-.brand-name {
-  color: var(--gray-12);
-}
-
 /* ScrollArea 不转发 flexGrow/minHeight，弹性只能留在这里 */
 .sidebar-scroll {
   flex: 1;
@@ -100,14 +96,6 @@
 
 .sidebar-footer {
   border-top: 1px solid var(--app-border);
-}
-
-.sidebar-footer .nav-item {
-  padding: var(--space-2);
-}
-
-.sidebar-status {
-  display: inline-flex;
 }
 
 /* 有新版本时的提示入口：与版本号同一行，不抢主操作区 */

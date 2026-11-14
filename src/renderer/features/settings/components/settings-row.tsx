@@ -56,7 +56,7 @@ export const SettingsRow = ({
     <Box flexGrow="1" flexShrink="1" flexBasis="0" minWidth="0" maxWidth="50%">
       <SettingsLabel label={label} help={help} />
       {description ? (
-        <Text as="p" size="1" color="gray" className="settings-row-description">
+        <Text as="p" size="1" className="settings-row-description" mt="1">
           {description}
         </Text>
       ) : null}
