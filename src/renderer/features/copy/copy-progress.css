@@ -13,27 +13,6 @@
   background: var(--gray-a2);
 }
 
-.copy-progress-label {
-  color: var(--gray-11);
-}
-
-.copy-progress-value {
-  font-variant-numeric: tabular-nums;
-  color: var(--gray-12);
-}
-
-/* 行列异距（4px 14px）props 无法表达，布局留在这里；display 由 Flex 组件提供 */
-.copy-progress-meta {
-  gap: var(--space-1) var(--space-4);
-  font-variant-numeric: tabular-nums;
-}
-
-.copy-progress-meta span {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
 /* 文件路径可能很长：允许它在行内收缩，否则会把面板横向撑开 */
 .copy-progress-path {
   min-width: 0;

@@ -23,6 +23,7 @@ import {
   Text,
 } from '@radix-ui/themes'
 
+import { BulkActions } from '@/components/bulk-actions/bulk-actions'
 import { Field } from '@/components/field'
 import { EmptyState } from '@/components/empty-state/empty-state'
 import { ROUTES } from '@/routes/paths'
@@ -188,19 +189,15 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
           sizeLabel ? ` · ${sizeLabel}` : ''
         }`}
         actions={
-          <Button
-            variant="ghost"
-            size="1"
-            color="gray"
-            disabled={running || paused}
-            onClick={() =>
+          <BulkActions
+            onToggleAll={() =>
               allSelected
                 ? setMachines([])
                 : selectAll(machineStats.map((item) => item.machine))
             }
-          >
-            {allSelected ? '取消全选' : '全选'}
-          </Button>
+            allSelected={allSelected}
+            toggleDisabled={running || paused}
+          />
         }
         hint="至少勾选 1 台机台后才能开始复制。"
       >

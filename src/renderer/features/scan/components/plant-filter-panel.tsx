@@ -4,7 +4,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   CalendarIcon,
   CheckCircledIcon,
-  CheckIcon,
   ClockIcon,
   Cross2Icon,
   LayersIcon,
@@ -21,6 +20,7 @@ import {
   TextField,
 } from '@radix-ui/themes'
 
+import { BulkActions } from '@/components/bulk-actions/bulk-actions'
 import { ChoiceList, ChoiceRadio } from '@/components/choice-list'
 import { DatePicker } from '@/components/date-picker/date-picker'
 import { Field, Step } from '@/components/field'
@@ -124,28 +124,12 @@ export const FilterLevels = ({ filter, options }: FilterLevelsProps) => {
       icon={<CheckCircledIcon width={13} height={13} />}
       count={`${levels.length}/${options.length}`}
       actions={
-        <>
-          <Button
-            type="button"
-            variant="ghost"
-            color="gray"
-            size="1"
-            disabled={levels.length === 0}
-            onClick={() => setLevels([])}
-          >
-            清空
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            color="gray"
-            size="1"
-            onClick={() => setLevels([...options])}
-          >
-            <CheckIcon width={13} height={13} />
-            全选
-          </Button>
-        </>
+        <BulkActions
+          onClear={() => setLevels([])}
+          clearDisabled={levels.length === 0}
+          onToggleAll={() => setLevels([...options])}
+          toggleIcon
+        />
       }
     >
       <ChoiceList
@@ -196,28 +180,12 @@ export const FilterSlotsField = ({
       icon={<ClockIcon width={13} height={13} />}
       count={`${slots.length}/${availableSlots.length}`}
       actions={
-        <>
-          <Button
-            type="button"
-            variant="ghost"
-            color="gray"
-            size="1"
-            disabled={slots.length === 0}
-            onClick={() => setSlots([])}
-          >
-            清空
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            color="gray"
-            size="1"
-            onClick={() => setSlots(availableSlots)}
-          >
-            <CheckIcon width={13} height={13} />
-            全选
-          </Button>
-        </>
+        <BulkActions
+          onClear={() => setSlots([])}
+          clearDisabled={slots.length === 0}
+          onToggleAll={() => setSlots(availableSlots)}
+          toggleIcon
+        />
       }
     >
       <ChoiceList
@@ -308,106 +276,94 @@ export const FilterTypes = ({
         icon={<LayersIcon width={13} height={13} />}
         count={`${selectedTypes.length}/${types.length}`}
         actions={
-          <>
-            <Button
-              type="button"
-              variant="ghost"
-              color="gray"
-              size="1"
-              disabled={selectedTypes.length === 0}
-              onClick={() => setTypes([])}
-            >
-              清空
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              color="gray"
-              size="1"
-              disabled={!types.length}
-              onClick={() => setTypes(types)}
-            >
-              <CheckIcon width={13} height={13} />
-              全选
-            </Button>
-            <Dialog.Root>
-              <Dialog.Trigger>
-                <Button type="button" variant="ghost" color="gray" size="1">
-                  <Pencil1Icon width={13} height={13} />
-                  编辑
-                </Button>
-              </Dialog.Trigger>
-              <Dialog.Content maxWidth="460px">
-                <Dialog.Title>编辑类型</Dialog.Title>
-                <Dialog.Description size="2" color="gray" mb="3">
-                  类型名需与目录名完全一致
-                </Dialog.Description>
+          <BulkActions
+            onClear={() => setTypes([])}
+            clearDisabled={selectedTypes.length === 0}
+            onToggleAll={() => setTypes(types)}
+            toggleDisabled={!types.length}
+            toggleIcon
+            extra={
+              <Dialog.Root>
+                <Dialog.Trigger>
+                  <Button type="button" variant="ghost" color="gray" size="1">
+                    <Pencil1Icon width={13} height={13} />
+                    编辑
+                  </Button>
+                </Dialog.Trigger>
+                <Dialog.Content maxWidth="460px">
+                  <Dialog.Title>编辑类型</Dialog.Title>
+                  <Dialog.Description size="2" color="gray" mb="3">
+                    类型名需与目录名完全一致
+                  </Dialog.Description>
 
-                <Flex wrap="wrap" gap="2" mb="3">
-                  {types.length ? (
-                    types.map((type) => (
-                      <Badge key={type} color="gray" variant="soft" size="2">
-                        <Flex align="center" gap="1">
-                          <Text size="1">{type}</Text>
-                          <IconButton
-                            size="1"
-                            variant="ghost"
-                            color="gray"
-                            aria-label={`删除 ${type}`}
-                            onClick={() => {
-                              onRemoveType(type)
-                              setTypes(selectedTypes.filter((t) => t !== type))
-                            }}
-                          >
-                            <Cross2Icon width={10} height={10} />
-                          </IconButton>
-                        </Flex>
-                      </Badge>
-                    ))
-                  ) : (
-                    <Text size="2" color="gray">
-                      还没有类型，在下面输入后回车添加
-                    </Text>
-                  )}
-                </Flex>
+                  <Flex wrap="wrap" gap="2" mb="3">
+                    {types.length ? (
+                      types.map((type) => (
+                        <Badge key={type} color="gray" variant="soft" size="2">
+                          <Flex align="center" gap="1">
+                            <Text size="1">{type}</Text>
+                            <IconButton
+                              size="1"
+                              variant="ghost"
+                              color="gray"
+                              aria-label={`删除 ${type}`}
+                              onClick={() => {
+                                onRemoveType(type)
+                                setTypes(
+                                  selectedTypes.filter((t) => t !== type),
+                                )
+                              }}
+                            >
+                              <Cross2Icon width={10} height={10} />
+                            </IconButton>
+                          </Flex>
+                        </Badge>
+                      ))
+                    ) : (
+                      <Text size="2" color="gray">
+                        还没有类型，在下面输入后回车添加
+                      </Text>
+                    )}
+                  </Flex>
 
-                <TextField.Root
-                  size="2"
-                  placeholder={placeholder}
-                  value={newType}
-                  onChange={(event) => setNewType(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      handleAddType()
-                    }
-                  }}
-                >
-                  <TextField.Slot side="right">
-                    <IconButton
-                      size="1"
-                      variant="ghost"
-                      aria-label="添加类型"
-                      disabled={
-                        !newType.trim() || types.includes(newType.trim())
+                  <TextField.Root
+                    size="2"
+                    placeholder={placeholder}
+                    value={newType}
+                    onChange={(event) => setNewType(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        handleAddType()
                       }
-                      onClick={handleAddType}
-                    >
-                      <PlusIcon width={14} height={14} />
-                    </IconButton>
-                  </TextField.Slot>
-                </TextField.Root>
+                    }}
+                  >
+                    <TextField.Slot side="right">
+                      <IconButton
+                        size="1"
+                        variant="ghost"
+                        aria-label="添加类型"
+                        disabled={
+                          !newType.trim() || types.includes(newType.trim())
+                        }
+                        onClick={handleAddType}
+                      >
+                        <PlusIcon width={14} height={14} />
+                      </IconButton>
+                    </TextField.Slot>
+                  </TextField.Root>
 
-                <Flex justify="end" mt="4">
-                  <Dialog.Close>
-                    <Button type="button" variant="soft" color="gray">
-                      关闭
-                    </Button>
-                  </Dialog.Close>
-                </Flex>
-              </Dialog.Content>
-            </Dialog.Root>
-          </>
+                  <Flex justify="end" mt="4">
+                    <Dialog.Close>
+                      <Button type="button" variant="soft" color="gray">
+                        关闭
+                      </Button>
+                    </Dialog.Close>
+                  </Flex>
+                </Dialog.Content>
+              </Dialog.Root>
+            }
+          />
         }
       >
         <ChoiceList

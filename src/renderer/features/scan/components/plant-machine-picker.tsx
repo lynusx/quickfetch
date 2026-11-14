@@ -8,7 +8,6 @@ import {
 } from '@radix-ui/react-icons'
 import {
   Badge,
-  Button,
   Callout,
   Flex,
   IconButton,
@@ -16,6 +15,7 @@ import {
   TextField,
 } from '@radix-ui/themes'
 
+import { BulkActions } from '@/components/bulk-actions/bulk-actions'
 import { ChoiceList, ChoiceRadio } from '@/components/choice-list'
 import { Field, Step } from '@/components/field'
 import { useToast } from '@/hooks/useToast'
@@ -320,44 +320,33 @@ const PlantMachinePicker = ({
               label="机台"
               count={`${selectedMachines.length}/${visible.length}`}
               actions={
-                <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    color="gray"
-                    size="1"
-                    onClick={() => setSelectedMachines([])}
-                    disabled={!selectedMachines.length}
-                  >
-                    清空
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    color="gray"
-                    size="1"
-                    onClick={toggleAll}
-                  >
-                    {visible.every((item) =>
-                      selectedMachines.includes(item.key),
-                    )
-                      ? '取消本区'
-                      : '全选本区'}
-                  </Button>
-                  <IconButton
-                    type="button"
-                    variant="ghost"
-                    color="gray"
-                    size="1"
-                    aria-label={labels.refreshLabel ?? '重新识别入口'}
-                    disabled={saving}
-                    onClick={async () => announce(await onRefresh())}
-                    title={labels.refreshLabel ?? '重新识别入口'}
-                  >
-                    <ReloadIcon width={13} height={13} />
-                  </IconButton>
-                  {machineListActions}
-                </>
+                <BulkActions
+                  onClear={() => setSelectedMachines([])}
+                  clearDisabled={!selectedMachines.length}
+                  onToggleAll={toggleAll}
+                  allSelected={visible.every((item) =>
+                    selectedMachines.includes(item.key),
+                  )}
+                  selectLabel="全选本区"
+                  cancelLabel="取消本区"
+                  extra={
+                    <>
+                      <IconButton
+                        type="button"
+                        variant="ghost"
+                        color="gray"
+                        size="1"
+                        aria-label={labels.refreshLabel ?? '重新识别入口'}
+                        disabled={saving}
+                        onClick={async () => announce(await onRefresh())}
+                        title={labels.refreshLabel ?? '重新识别入口'}
+                      >
+                        <ReloadIcon width={13} height={13} />
+                      </IconButton>
+                      {machineListActions}
+                    </>
+                  }
+                />
               }
             >
               <TextField.Root

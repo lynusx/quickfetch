@@ -1,6 +1,6 @@
-import { CheckIcon, CircleBackslashIcon } from '@radix-ui/react-icons'
-import { Button, Flex } from '@radix-ui/themes'
+import { Flex } from '@radix-ui/themes'
 
+import { BulkActions } from '@/components/bulk-actions/bulk-actions'
 import { ChoiceList } from '@/components/choice-list'
 import { Field } from '@/components/field'
 import { useExcelStore } from '../stores/excelStore'
@@ -46,29 +46,13 @@ const SheetFilterPanel = () => {
           label="线别"
           count={`${selectedLines.length}/${lines.size}`}
           actions={
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                color="gray"
-                size="1"
-                disabled={selectedLines.length === 0}
-                onClick={clearLines}
-              >
-                <CircleBackslashIcon width={12} height={12} />
-                清空
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                color="gray"
-                size="1"
-                onClick={() => setSelectedLines([...lines])}
-              >
-                <CheckIcon width={12} height={12} />
-                全选
-              </Button>
-            </>
+            <BulkActions
+              onClear={clearLines}
+              clearDisabled={selectedLines.length === 0}
+              clearIcon
+              onToggleAll={() => setSelectedLines([...lines])}
+              toggleIcon
+            />
           }
         >
           <ChoiceList
@@ -85,29 +69,13 @@ const SheetFilterPanel = () => {
           label="不良项"
           count={`${selectedDefects.length}/${defects.size}`}
           actions={
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                color="gray"
-                size="1"
-                disabled={selectedDefects.length === 0}
-                onClick={clearDefects}
-              >
-                <CircleBackslashIcon width={12} height={12} />
-                清空
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                color="gray"
-                size="1"
-                onClick={() => setSelectedDefects([...defects])}
-              >
-                <CheckIcon width={12} height={12} />
-                全选
-              </Button>
-            </>
+            <BulkActions
+              onClear={clearDefects}
+              clearDisabled={selectedDefects.length === 0}
+              clearIcon
+              onToggleAll={() => setSelectedDefects([...defects])}
+              toggleIcon
+            />
           }
         >
           <ChoiceList

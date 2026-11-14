@@ -28,27 +28,6 @@
   margin-top: var(--space-2);
 }
 
-.progress-label {
-  color: var(--gray-11);
-}
-
-.progress-value {
-  font-variant-numeric: tabular-nums;
-  color: var(--gray-12);
-}
-
-/* 行列异距（4px 14px）props 无法表达，布局留在这里；display 由 Flex 组件提供 */
-.progress-meta {
-  gap: var(--space-1) var(--space-4);
-  font-variant-numeric: tabular-nums;
-}
-
-.progress-meta span {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
 .path-strip {
   border: 1px solid var(--gray-a3);
   border-radius: var(--radius-2);

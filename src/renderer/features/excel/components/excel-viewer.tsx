@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import type { ReactNode } from 'react'
 import {
   ClipboardCopyIcon,
   Cross2Icon,
@@ -27,32 +28,28 @@ import { useExcelStore } from '../stores/excelStore'
 
 import type { ExcelFile } from '../types'
 
+const FileMetaItem = ({
+  label,
+  value,
+}: {
+  label: string
+  value: ReactNode
+}) => (
+  <Flex className="file-meta-item" direction="column" gap="1" py="2" px="3">
+    <Text as="div" size="1" className="file-meta-label">
+      {label}
+    </Text>
+    <Text as="div" size="1" weight="medium" truncate className="tabular">
+      {value}
+    </Text>
+  </Flex>
+)
+
 const FileMeta = ({ file }: { file: ExcelFile }) => (
   <Grid className="file-meta" columns="3" gap="2">
-    <Flex className="file-meta-item" direction="column" gap="1" py="2" px="3">
-      <Text as="div" size="1" className="file-meta-label">
-        文件大小
-      </Text>
-      <Text as="div" size="1" weight="medium" truncate className="tabular">
-        {file.size}
-      </Text>
-    </Flex>
-    <Flex className="file-meta-item" direction="column" gap="1" py="2" px="3">
-      <Text as="div" size="1" className="file-meta-label">
-        工作表
-      </Text>
-      <Text as="div" size="1" weight="medium" truncate className="tabular">
-        {file.sheets.length} 个
-      </Text>
-    </Flex>
-    <Flex className="file-meta-item" direction="column" gap="1" py="2" px="3">
-      <Text as="div" size="1" className="file-meta-label">
-        上传时间
-      </Text>
-      <Text as="div" size="1" weight="medium" truncate className="tabular">
-        {file.uploadTime}
-      </Text>
-    </Flex>
+    <FileMetaItem label="文件大小" value={file.size} />
+    <FileMetaItem label="工作表" value={`${file.sheets.length} 个`} />
+    <FileMetaItem label="上传时间" value={file.uploadTime} />
   </Grid>
 )
 
