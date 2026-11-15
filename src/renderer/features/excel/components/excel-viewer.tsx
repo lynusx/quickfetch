@@ -101,11 +101,7 @@ const ExcelViewer = () => {
           icon={<TableIcon width={13} height={13} />}
           title={file.name}
           description="文件解析失败"
-          actions={
-            <Badge color="red" variant="soft">
-              错误
-            </Badge>
-          }
+          actions={<Badge color="red">错误</Badge>}
         />
         <PanelBody>
           <Flex direction="column" gap="4">
@@ -200,58 +196,60 @@ const ExcelViewer = () => {
           </Panel>
 
           {/* 右侧数据预览 */}
-          <Panel className="panel-fill">
-            <PanelHeader
-              icon={<TableIcon width={13} height={13} />}
-              title={sheet?.name || '数据预览'}
-              description={
-                sheet
-                  ? `${sheet.rowCount} 行 × ${sheet.colCount} 列`
-                  : '调整左侧筛选条件后查看结果'
-              }
-              actions={
-                <>
-                  <Button
-                    variant="soft"
-                    color="gray"
-                    size="1"
-                    disabled={!sheet || isCopy}
-                    onClick={() => sheet && handleCopyToClipboard(sheet)}
-                  >
-                    <ClipboardCopyIcon width={14} height={14} />
-                    {isCopy ? '已复制' : '复制'}
-                  </Button>
-                  <Button
-                    variant="soft"
-                    color="gray"
-                    size="1"
-                    disabled={!sheet || isExport}
-                    onClick={() => sheet && handleExportToExcel(sheet)}
-                  >
-                    {isExport ? (
-                      <Spinner size="1" />
-                    ) : (
-                      <DownloadIcon width={14} height={14} />
-                    )}
-                    {isExport ? '导出中…' : '导出 Excel'}
-                  </Button>
-                </>
-              }
-            />
-            <PanelBody>
-              <Box className="table-shell">
-                {sheet ? (
-                  <SheetTablePreview sheet={sheet} mode="result" />
-                ) : (
-                  <EmptyState
-                    icon={<TableIcon width={18} height={18} />}
-                    title="暂无可显示的数据"
-                    description="调整左侧筛选条件后再试。"
-                  />
-                )}
-              </Box>
-            </PanelBody>
-          </Panel>
+          <Box minWidth="0">
+            <Panel>
+              <PanelHeader
+                icon={<TableIcon width={13} height={13} />}
+                title={sheet?.name || '数据预览'}
+                description={
+                  sheet
+                    ? `${sheet.rowCount} 行 × ${sheet.colCount} 列`
+                    : '调整左侧筛选条件后查看结果'
+                }
+                actions={
+                  <>
+                    <Button
+                      variant="soft"
+                      color="gray"
+                      size="1"
+                      disabled={!sheet || isCopy}
+                      onClick={() => sheet && handleCopyToClipboard(sheet)}
+                    >
+                      <ClipboardCopyIcon width={14} height={14} />
+                      {isCopy ? '已复制' : '复制'}
+                    </Button>
+                    <Button
+                      variant="soft"
+                      color="gray"
+                      size="1"
+                      disabled={!sheet || isExport}
+                      onClick={() => sheet && handleExportToExcel(sheet)}
+                    >
+                      {isExport ? (
+                        <Spinner size="1" />
+                      ) : (
+                        <DownloadIcon width={14} height={14} />
+                      )}
+                      {isExport ? '导出中…' : '导出 Excel'}
+                    </Button>
+                  </>
+                }
+              />
+              <PanelBody>
+                <Box className="table-shell">
+                  {sheet ? (
+                    <SheetTablePreview sheet={sheet} mode="result" />
+                  ) : (
+                    <EmptyState
+                      icon={<TableIcon width={18} height={18} />}
+                      title="暂无可显示的数据"
+                      description="调整左侧筛选条件后再试。"
+                    />
+                  )}
+                </Box>
+              </PanelBody>
+            </Panel>
+          </Box>
         </Grid>
       ) : null}
     </Flex>

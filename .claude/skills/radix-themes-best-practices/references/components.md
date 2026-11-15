@@ -13,8 +13,10 @@
 7. [表格](#7-表格)
 8. [文本类与字号继承](#8-文本类与字号继承)
 9. [反馈与提示](#9-反馈与提示)
+9.5. [DataList 属性列表](#95-datalist-属性列表)
 10. [状态样式用哪些属性](#10-状态样式用哪些属性)
 11. [继承 prop 面](#11-继承-prop-面)：**Themes 的 prop 表不是全集**
+12. [Utilities 工具组件](#12-utilities-工具组件)
 
 ## 这份文件只写官方没写的
 
@@ -151,15 +153,23 @@ import { AlertDialog, Button, Flex } from '@radix-ui/themes'
 ```tsx
 // ✅ 受控：受控值配 onChange
 <TextField.Root value={query} onChange={(e) => setQuery(e.target.value)} />
-<Select.Root value={mode} onValueChange={setMode}>…</Select.Root>
+<Select.Root value={mode} onValueChange={setMode}>
+  <Select.Trigger />
+  <Select.Content position="popper" side="bottom" sideOffset={4}>
+    <Select.Item value="light">浅色模式</Select.Item>
+    <Select.Item value="dark">深色模式</Select.Item>
+  </Select.Content>
+</Select.Root>
 
 // ✅ 非受控 + 原生表单提交：靠 name
 <TextField.Root name="keyword" defaultValue="" />
 <Checkbox name="overwrite" defaultChecked />
 ```
 
-**三条官方没说的**：
+**五条官方没说的**：
 
+- **`Select.Content` 默认覆盖在触发器上（`position="item-aligned"`）**：这是仿 iOS/macOS 居中展开的设计。若要实现传统 Web 风格的向下拉开菜单，**必须显式声明 `position="popper"`**，此时 `side="bottom"`、`sideOffset={4}`、`align="start"` 才会生效。
+- **`TextField.Root` 在 v3 中已是单体输入框**：不要写已弃用的 `<TextField.Input />`，`placeholder`、`value`、`onChange`、`type` 与 `ref` 直接传递给 `<TextField.Root>`。`<TextField.Slot>` 仅作为前后置图标/按钮容器。
 - **`value` 与 `defaultValue` 不要混用**，两个都给会触发「组件从受控变非受控」的警告；`name` 只对原生 `FormData` 提交有效，与受控状态无关。
 - `RadioGroup.Item` 有 children 时**自动包 `<label>`**，不需要自己写关联。
 - `Checkbox` 是单个组件（**没有**点号 API），`CheckboxGroup` 才是 `Root` + `Item`。
@@ -193,6 +203,16 @@ import { AlertDialog, Button, Flex } from '@radix-ui/themes'
 ```tsx
 <Card variant="surface" size="2">…</Card>
 <Card size="2"><Inset side="x" my="2"><Table.Root>…</Table.Root></Inset></Card>
+
+// ✅ 交互式卡片：asChild 包裹链接或按钮，Radix 自动分发 hover/active 态与点击热区
+<Card asChild variant="surface">
+  <a href="/project/123">
+    <Flex direction="column" gap="1">
+      <Text weight="bold">项目详情</Text>
+      <Text size="1" color="gray">点击查看完整指标</Text>
+    </Flex>
+  </a>
+</Card>
 ```
 
 **四条官方没说的**：
@@ -213,13 +233,34 @@ import { AlertDialog, Button, Flex } from '@radix-ui/themes'
   <Table.Header><Table.Row><Table.ColumnHeaderCell justify="end">大小</Table.ColumnHeaderCell></Table.Row></Table.Header>
   <Table.Body>{rows.map((r) => <Table.Row key={r.id}><Table.RowHeaderCell>{r.name}</Table.RowHeaderCell><Table.Cell justify="end">{r.size}</Table.Cell></Table.Row>)}</Table.Body>
 </Table.Root>
+
+// ✅ 固定列宽表格：通过 layout="fixed" + 列宽 prop 控制，无需手写 CSS
+<Table.Root variant="surface" layout="fixed">
+  <Table.Header>
+    <Table.Row>
+      <Table.ColumnHeaderCell width="180px">文件名</Table.ColumnHeaderCell>
+      <Table.ColumnHeaderCell width="100px" justify="end">大小</Table.ColumnHeaderCell>
+      <Table.ColumnHeaderCell width="120px">状态</Table.ColumnHeaderCell>
+    </Table.Row>
+  </Table.Header>
+  <Table.Body>
+    {rows.map((r) => (
+      <Table.Row key={r.id}>
+        <Table.RowHeaderCell>{r.name}</Table.RowHeaderCell>
+        <Table.Cell justify="end">{r.size}</Table.Cell>
+        <Table.Cell>{r.status}</Table.Cell>
+      </Table.Row>
+    ))}
+  </Table.Body>
+</Table.Root>
 ```
 
 **不要用 Grid 手搓表格**，会丢三样东西：列宽随内容自适应、表头与数据行的语义关联、读屏的表格导航。
 
-**两个官方没说的**：
+**三条官方没说的**：
 
 - `Table.Root` **内部自带 `ScrollArea`**。外面再包一层会出现两条滚动条，先量再做。
+- `Table.Root` 支持 `layout="fixed"`，`Table.Cell` 与 `ColumnHeaderCell` 原生支持 `width`、`minWidth`、`maxWidth` 与 `padding` props，控制列宽不需要额外 CSS 类。
 - 数字列除 `justify="end"` 外还要 `font-variant-numeric: tabular-nums`，否则数字宽度不一，列看起来是歪的。
 
 ---
@@ -244,6 +285,12 @@ import { AlertDialog, Button, Flex } from '@radix-ui/themes'
 
 **错的写法**：为了「看起来大」把面板标题写成 `as="h1"`（一页出现多个 h1）；或者为了「语义对」被迫用 `size="6"` 的巨大标题。
 
+**修剪行高留白（`trim`）与折行（`wrap`）**：
+
+- **`trim="start" | "end" | "both"`**：字体行高天然自带顶部与底部多余空间。想要与图标或容器完美居中对齐时，传 `trim="both"`（消除首尾 half-leading），不要手写负 margin。
+- **`wrap="pretty"`**：避免段落最后一行出现单个“孤字”（orphans）。
+- **`wrap="balance"`**：标题两行等宽平衡折行，避免视觉上一长一短。
+
 ---
 
 ## 9. 反馈与提示
@@ -257,12 +304,54 @@ import { AlertDialog, Button, Flex } from '@radix-ui/themes'
 </Callout.Root>
 ```
 
-**四条官方没说的**：
+**五条官方没说的**：
 
+- **`Skeleton` 与 `Spinner` 是就地包裹组件（Zero Layout Shift）**：
+  它们设计为直接包裹真实内容，通过 `loading` prop 切换状态。
+  ```tsx
+  // ✅ 零抖动：Skeleton 自动测量子节点几何尺寸并占位
+  <Skeleton loading={isLoading}>
+    <Heading size="5">{profile?.name ?? '占位姓名'}</Heading>
+  </Skeleton>
+
+  // ✅ 原地转轮：Spinner 将子元素设为 visibility:hidden 保留 DOM 尺寸，并在中心叠放转轮
+  <Spinner loading={isSubmitting}>
+    <Button onClick={submit}>确认提交</Button>
+  </Spinner>
+
+  // ❌ 严禁根据 loading 手写三元条件渲染占位块（无法保证尺寸一致，必然导致界面跳动）
+  {isLoading ? <Skeleton width="120px" height="24px" /> : <Heading>...</Heading>}
+  ```
 - **`Button loading`** 会自动禁用并把内容换成 `Spinner`，别在按钮里自己画。
 - **`Progress`**：确定进度给 `value`；不确定态**不给** `value`（`duration` 只是动画时长，没有 `infinite` 这个取值）。
 - **`Badge`** 的 `color` 只接强调色族（26 个具名色），**没有**单阶控制——要更浅或更深的语义只能回 CSS；`variant="soft"` 最常用。
 - **`@radix-ui/themes` 没有 Toast**（Primitives 有 `Toast` primitive）。全局提示用独立库（如 `sonner`）+ 令牌覆盖样式，或基于 primitive 自封。
+
+---
+
+## 9.5 DataList 属性列表
+
+> 官方页：[DataList](https://www.radix-ui.com/themes/docs/components/data-list.md)
+
+后台管理、详情抽屉或系统配置中的「标签: 值」元数据清单，**优先使用 `DataList`，不要用 Flex 或 Grid 手搓**。
+
+```tsx
+<DataList.Root orientation="horizontal" size="2">
+  <DataList.Item align="center">
+    <DataList.Label width="100px" color="gray">任务状态</DataList.Label>
+    <DataList.Value><Badge color="green">运行中</Badge></DataList.Value>
+  </DataList.Item>
+  <DataList.Item align="center">
+    <DataList.Label width="100px" color="gray">执行机台</DataList.Label>
+    <DataList.Value><Code variant="ghost">NODE-08</Code></DataList.Value>
+  </DataList.Item>
+</DataList.Root>
+```
+
+**三条官方没说的**：
+- `DataList.Label` 原生支持 `width` / `minWidth` / `maxWidth` prop：所有行设置相同的 `width="100px"` 即可实现完美的纵向列对齐，完全不需要在 CSS 里写 `flex-basis`。
+- `orientation` 支持响应式对象：`orientation={{ initial: 'vertical', sm: 'horizontal' }}`，移动端自动折叠为上下排布。
+- `trim` 可直接作用于 `DataList.Root`，消除第一行与最后一行的多余网格间隙。
 
 ---
 
@@ -379,3 +468,17 @@ grep -rln "DialogPrimitive" node_modules/@radix-ui/themes/dist --include=*.d.ts 
 看到 `React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>` 就是继承；被 `Omit<…, 'modal'>` 掉的 prop 就是禁用。
 
 3. **两者都没有**：按本文 11.2 / 11.4 的表走；表里没有的，**不要猜**——在代码注释里写明「此 prop 未核实」，并改用文档能确认的写法。
+
+---
+
+## 12. Utilities 工具组件
+
+> 官方页：[AccessibleIcon](https://www.radix-ui.com/themes/docs/components/accessible-icon.md)、[VisuallyHidden](https://www.radix-ui.com/themes/docs/components/visually-hidden.md)、[Reset](https://www.radix-ui.com/themes/docs/components/reset.md)、[Portal](https://www.radix-ui.com/themes/docs/components/portal.md)、[Slot](https://www.radix-ui.com/themes/docs/components/slot.md)
+
+| 工具组件 | 解决什么问题 | 正确用法 | 误区与反例 |
+|---|---|---|---|
+| `AccessibleIcon` | 裸 SVG 图标缺乏无障碍名称 | `<AccessibleIcon label="关闭"><Cross1Icon /></AccessibleIcon>` | `IconButton` 自身有 `aria-label`，此时不必套 `AccessibleIcon` |
+| `VisuallyHidden` | 屏幕阅读器必需、视觉上需隐藏的内容 | `<VisuallyHidden><Dialog.Title>编辑详情</Dialog.Title></VisuallyHidden>` | ❌ 用 CSS `display: none`（会导致读屏器同样读不到标题） |
+| `Reset` | 为外部/原生元素重置为 Radix 默认盒模型与排版基线 | `<Reset><form>...</form></Reset>` | 放在已被 Radix 构建块包裹的内部属于多余 |
+| `Portal` | 脱离当前 DOM 层级，挂载至 `document.body` 或特定容器 | 模态浮层、自定义上下文悬浮菜单 | 弹窗组件自身已内置 Portal，无需重复包 |
+| `Slot` | 将 props 和事件透传给唯一的子 React 元素（`asChild` 底层） | 自定义可组合组件封装 | ❌ 子元素多于一个或为纯文本时抛错 |

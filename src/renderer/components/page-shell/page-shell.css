@@ -28,6 +28,5 @@
 
 /* 引导句沿用原页头说明的版式 */
 .page-shell-description {
-  max-width: 760px;
   color: var(--gray-10);
 }

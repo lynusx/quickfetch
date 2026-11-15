@@ -6,15 +6,9 @@
   border-radius: var(--radius-3);
   background: var(--accent-a3);
   color: var(--accent-11);
-  flex-shrink: 0;
 }
 
 /* 说明文字用 gray-10：`Text color="gray"` 只到 11 阶，表达不了更弱的层级 */
 .panel-description {
   color: var(--gray-10);
-}
-
-/* 覆盖 Panel 布局的工具类（Panel 不转发 minWidth prop） */
-.panel-fill {
-  min-width: 0;
 }

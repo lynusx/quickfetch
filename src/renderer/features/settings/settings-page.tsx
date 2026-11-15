@@ -155,7 +155,7 @@ const SliderRow = ({
           </>
         ) : undefined
       }
-      className="settings-row-slider"
+      controlGrow
     >
       <Box flexGrow="1" flexShrink="1" flexBasis="0" minWidth="0">
         <Slider
@@ -177,9 +177,11 @@ const SliderRow = ({
           }}
         />
       </Box>
-      <Text size="2" weight="medium" className="settings-row-value">
-        {draft}
-      </Text>
+      <Box flexShrink="0" minWidth="32px">
+        <Text size="2" weight="medium" align="right" className="tabular">
+          {draft}
+        </Text>
+      </Box>
     </SettingsRow>
   )
 }

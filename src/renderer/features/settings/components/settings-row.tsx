@@ -13,6 +13,8 @@ interface SettingsRowProps {
   help?: ReactNode
   children?: ReactNode
   className?: string
+  /** 控件区是否填满右半栏（如 Slider 行） */
+  controlGrow?: boolean
 }
 
 interface SettingsLabelProps {
@@ -43,6 +45,7 @@ export const SettingsRow = ({
   help,
   children,
   className,
+  controlGrow,
 }: SettingsRowProps) => (
   <Flex
     className={cn('settings-row', className)}
@@ -66,7 +69,9 @@ export const SettingsRow = ({
         className="settings-row-control"
         align="center"
         gap="2"
-        flexShrink="0"
+        flexGrow={controlGrow ? '1' : undefined}
+        flexShrink={controlGrow ? '1' : '0'}
+        flexBasis={controlGrow ? '0' : undefined}
         minWidth="0"
         maxWidth="50%"
       >

@@ -140,7 +140,7 @@ body {
  * 卡片外观：白底 + 1px 描边。结构性外观（背景、描边、裁剪）交给 Radix `Card`，
  * 但它把内边距、描边色只做成 CSS 变量，没有对应 prop，所以集中在这里。
  *
- * 圆角**不写**：Card 默认 `size="2"` 自己算出 `--radius-4`，跟着 Theme 的 `radius`
+ * 圆角**不写**：Card 默认 `size="1"`（以及 `size="2"`）自己算出 `--radius-4`，跟着 Theme 的 `radius`
  * 一起变。真有卡片需要更大的圆角，传 `size`，不要在这里覆盖变量。
  */
 .app-card {

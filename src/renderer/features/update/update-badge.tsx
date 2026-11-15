@@ -23,9 +23,7 @@ export const UpdateBadge = () => {
       className="sidebar-update-link"
       aria-label="有新版本，前往更新设置"
     >
-      <Badge color="green" variant="soft" size="1">
-        有新版本
-      </Badge>
+      <Badge color="green">有新版本</Badge>
     </Link>
   )
 }

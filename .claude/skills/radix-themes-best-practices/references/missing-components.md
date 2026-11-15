@@ -80,6 +80,17 @@ export function DatePicker() {
 }
 ```
 
+## Primitives 缺失组件的官方平替
+
+部分 Primitives 虽未以同名包装进入 Themes，但 Themes 提供了极轻量的内置平替，**不必引入外部库**：
+
+| Primitives 未包装组件 | Themes 官方推荐平替 | 说明 |
+|---|---|---|
+| `Label` | `<Text as="label">` | `Text as="label"` 完美支持排版 prop 与原生 `htmlFor`；`RadioGroup.Item` 内含文字时自动包 label |
+| `Toggle` | `Switch` 或 `SegmentedControl` | 单项切换用 `Switch`；选项组用 `SegmentedControl`（底层正是 Toggle Group primitive） |
+| `Toolbar` | `Flex` + `Button/IconButton` + `Separator` | 用构建块组合出工具栏，无需额外引入外部组件 |
+| `PasswordToggleField` | `TextField.Root` + `TextField.Slot` | 用 `TextField.Slot side="right"` 放置切换可见性的 `IconButton` |
+
 ## 其他缺失组件选型建议
 
 | 组件 | 推荐底层库 | 外壳 |

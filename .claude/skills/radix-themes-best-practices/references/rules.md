@@ -45,9 +45,10 @@ props 生成的 `.rt-r-*` 与自定义 class 同级，**项目 CSS 在 Radix 之
 <Grid className="choice-grid" gap="2">
 .choice-grid { display: grid; gap: 6px; }
 
-// ✅ 布局只在 props 里写一次，值取尺度档位，CSS 只留列模板
-<Grid className="choice-grid" gap="2">
-.choice-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+// ✅ 布局由 Grid 的 props 完整表达，列数与模板优先走 columns prop（原生支持档位与 CSS 模板）
+<Grid columns="3" gap="2">
+<Grid columns="100px 1fr" gap="2">
+<Grid columns={{ initial: '1', sm: '2', md: '3' }} gap="2">
 ```
 
 ```css
@@ -63,9 +64,17 @@ props 生成的 `.rt-r-*` 与自定义 class 同级，**项目 CSS 在 Radix 之
 ### 2.2 必须留在 CSS 的
 
 `border` / `background` / `box-shadow` / `transition`、伪类与 `[data-state]`、`:has()`、
-后代/子/兄弟选择器、`.rt-*` 内部类覆盖、`Popover.Content` 的 `overflow`、`IconButton` 的 `flex-shrink`。
+后代/子/兄弟选择器、组件显式暴露的局部 CSS 变量定制（如 `--base-card-*`）、`Popover.Content` 的 `overflow`、`IconButton` 的 `flex-shrink`。
 
 **状态强调的字重**（选中加粗、异常行加粗）也留在 CSS——它表达的是状态差异，不是排版基线。
+
+> **样式覆盖的红线（Beyond Overrides）**：
+> 官方 Styling 规范明确指出：“Beyond simple style overrides, we recommend using the components as-is, or create your own versions using the same building blocks”。
+> 严禁针对 `.rt-Button`、`.rt-Card` 等内部类名编写复杂选择器去暴力重置高度、内边距或边框（这会破坏库自身的特异性与可访问性）。要么 **as-is 开箱即用**，要么使用 **14 个构建块（Box/Flex/Grid/Text）+ Primitives 从零组装**（详见 [practices.md §2.8](practices.md#28-as-is-优先-vs-构建块自建拒绝暴力覆盖)）。
+
+> **注意：不要把能用 prop 表达的网格与表格扔进 CSS**：
+> - `Grid` 的 `columns` 原生支持数字（`"3"` 即 `repeat(3, minmax(0, 1fr))`）、自定义模板（`"120px 1fr"`）和响应式对象。只有 `repeat(auto-fill, ...)` 或特殊的 `grid-template-areas` 才需要写进 CSS。
+> - `Table.Root` 支持 `layout="fixed"`，`Table.Cell` / `ColumnHeaderCell` 支持 `width` / `minWidth`，不必手写类名控制列宽。
 
 ### 2.3 不转发布局 props 的组件
 
@@ -130,6 +139,26 @@ grep -rnE '\b(p|px|py|pt|pr|pb|pl)="[0-9]+ [0-9]' src --include=*.tsx
 
 案例见 [pitfalls.md §2](pitfalls.md#2-元素贴边内边距像是-0)。
 
+### 3.4 响应式 prop 语法与断点规则
+
+Radix Themes 的绝大多数布局、尺寸与可见性 prop（`columns`、`gap`、`p`、`size`、`direction`、`display` 等）均支持**响应式对象**。
+
+规则硬约束：
+1. **移动端基准必须写 `initial`**：严禁受 Chakra UI 影响写 `base`，严禁直接从 `xs` 或 `sm` 开始而漏掉基线样式。
+2. **严禁混入 Tailwind 样式类名**：不得写 `className="md:grid-cols-3"`，统一由 prop 对象表达。
+3. **断点键名全集（6 档）**：`initial`（0px，移动端首要真相）、`xs`（520px）、`sm`（768px）、`md`（1024px）、`lg`（1280px）、`xl`（1640px）。具体像素与机制见 [theming.md §4.1 断点表](theming.md#41-breakpoints-六档断点体系)。
+
+```tsx
+// ✅ 响应式网格列数与间距
+<Grid columns={{ initial: '1', sm: '2', md: '3' }} gap={{ initial: '2', md: '4' }}>
+
+// ✅ 移动端隐藏、桌面端显示
+<Box display={{ initial: 'none', md: 'block' }}>
+
+// ❌ 错误：base 不被识别，等于没写默认值；或混入 Tailwind 前缀
+<Grid columns={{ base: '1', md: '3' }} className="sm:p-4">
+```
+
 ---
 
 ## 4. 字号只由 `size` 决定
@@ -155,6 +184,24 @@ Radix 的 type scale 里，一个 `size` 同时定义 font-size、line-height �
 
 把 stylelint 挂进项目的 lint 命令后，CSS 里的 `font-size` / `letter-spacing` 会直接被拦下；
 确实要例外就在上一行写 `stylelint-disable-next-line` 并说明理由。
+
+### 4.3 消除文字行高留白用 `trim`
+
+排版中文字行高会在字体上方和下方留下天然的额外空白（half-leading），常导致图标与文字垂直居中偏差，或卡片顶部文字看似 padding 过大。**不要用负 margin 或手动 `line-height: 1` 纠正**，使用 Radix Themes 的 `trim` prop：
+
+- `trim="normal"`（默认）
+- `trim="start"`：消除顶部空白，紧贴上边框/容器
+- `trim="end"`：消除底部空白
+- `trim="both"`：首尾同时修剪，实现图标与文字像素级对准
+
+`Text`、`Heading`、`Blockquote` 以及 `DataList` 均原生支持 `trim`。
+
+### 4.4 换行与折行用 `wrap`
+
+- `wrap="wrap"`（默认）：标准折行
+- `wrap="nowrap"`：不折行（搭配 `truncate` 可实现省略）
+- `wrap="pretty"`：防止段落末尾孤字（`text-wrap: pretty`）
+- `wrap="balance"`：标题平衡折行（`text-wrap: balance`），保证两行长度视觉匀称
 
 ---
 
@@ -240,21 +287,58 @@ prop 集合里没有 `color`——这条边界是组件库自己划的，顺着�
 
 `Box` 的 `as` 只支持 `"div" | "span"`；要 `<section>` 语义就用 `Section` 组件或保留原生标签并说明理由。
 
+### 6.4 5 大基础布局容器是几何尺寸与弹性的唯一持有者
+
+在 Radix Themes 体系中，仅有 **5 个基础布局组件**（`Box`、`Flex`、`Grid`、`Container`、`Section`）继承了 `LayoutProps`（包含 `width`、`height`、`minWidth`、`maxWidth`、`minHeight`、`maxHeight`、`position`、`inset`、`overflow`、`flexGrow`、`flexShrink`、`flexBasis`、`alignSelf`、`justifySelf`、`gridColumn` 等）。
+
+`Text`、`Heading`、`Slider`、`Button`、`Badge`、`Card`、`ScrollArea` 等非布局组件仅继承 `MarginProps`，**在设计哲学上不直接承担几何尺寸与弹性声明**。
+
+**绝对规则**：
+- **严禁**绕过 5 大布局容器，通过给叶子/非布局组件挂自定义 CSS 类来注入 `min-width`、`max-width`、`width`、`height`、`flex`、`flex-grow`、`flex-shrink`、`overflow`、`align-self` 等布局属性（例如严禁编写 `.copy-progress-path { min-width: 0; max-width: 100%; }`、`.settings-row-slider .settings-row-control { flex: 1 1 0; }`、`.history-toolbar-hint { flex: 1; min-width: 0; }`）。
+- **一律使用显式包裹（Explicit Wrapping）**：需要控制非布局组件的尺寸、弹性或截断收缩边界时，将该组件包裹在 `<Box>` 或 `<Flex>` 中，并通过组件 props 显式控制：
+  - 弹性滑杆：`<Box flexGrow="1" flexShrink="1" flexBasis="0" minWidth="0"><Slider ... /></Box>`
+  - 长文本收缩截断：`<Box minWidth="0" maxWidth="100%"><Text truncate ... /></Box>`
+  - 弹性提示文本：`<Box flexGrow="1" minWidth="0"><Text ... /></Box>`
+  - 局部固定高度滚动区：`<Box maxHeight="300px"><ScrollArea ... /></Box>`
+  - 固定宽度的数值列：`<Box flexShrink="0" minWidth="32px"><Text align="right" className="tabular">...</Text></Box>`
+
 ---
 
 ## 7. 不写组件自带的默认值
 
-| 组件     | 默认值                                          | 写了算噪音？         |
-| -------- | ----------------------------------------------- | -------------------- |
-| `Text`   | `as="span"`，**无默认 size**（不写=继承父级字号） | `as` 算；`size` 必须写 |
-| `Heading`| `as="h1"`，`size="6"`                           | 都算                 |
-| `Badge`  | `size="1"`，`variant="soft"`                    | 都算                 |
-| `Button` | `size="2"`，`variant="solid"`，`loading={false}` | 都算                 |
-| `Flex`   | `as="div"`，`direction="row"`（CSS 默认）        | 都算                 |
+组件自身已声明默认值的属性、或已由根 `<Theme>` 自动下发的属性，写上去不仅是冗余噪音，而且当组件库或根主题更新默认值时，会造成代码局部钉死、阻断全站联动。
 
-**`Text` 的 `size` 是唯一例外**：它没有默认值，不写即**继承父级字号**（父级 `size="2"` 就是 14px），不是取默认，所以必须显式写。`Heading` 有默认 `size="6"`，写 `size="6"` 同样是噪音。
+以下是高频组件的**默认值与继承特性全景速查表**：
 
-判据与两类例外见 [practices.md §3.2](practices.md#32-只写偏离默认值的-prop)。
+| 组件 | 默认外观变体 | 默认尺寸 | 默认其他属性 / 继承特性 | 规则与判定 |
+|---|---|---|---|---|
+| `<Text>` | `as="span"` | **无默认值** | 继承祖先正文字色 `var(--gray-12)` | **`size` 必须显式声明**；主文字不写 `color`，次级文字写 `color="gray"` |
+| `<Heading>` | `as="h1"` | `size="6"` | 继承正文字色 `var(--gray-12)` | `as` 按语义传；`size` 偏离 6 时传；不写 `as="h1"` 或 `size="6"` |
+| `<Badge>` | `variant="soft"` | `size="1"` | 自动消费根 `accentColor` | **`variant="soft"` 与 `size="1"` 均不要写**，通常只需传 `color` |
+| `<Button>` | `variant="solid"` | `size="2"` | 自动消费根 `accentColor`，`loading={false}` | 主要按钮只需写 `<Button>`；不写 `variant="solid"` / `size="2"` |
+| `<IconButton>` | `variant="solid"` | `size="2"` | 自动消费根 `accentColor`，`loading={false}` | solid / size 2 不写；**`aria-label` 必填** |
+| `<Card>` | `variant="surface"` | `size="1"` | 底色 `--color-panel`，圆角 `--radius-4` | **不写 `variant="surface"`，不写 `size="1"`** |
+| `<Dialog.Content>` | — | `size="3"` | `maxWidth="600px"`, `align="center"` | 默认居中且最大宽 600px，不需写 `maxWidth="600px"` |
+| `<TextField.Root>` | `variant="surface"` | `size="2"` | 底色与边框令牌 | **不写 `variant="surface"`，不写 `size="2"`** |
+| `<Select.Root>` | — | `size="2"` | 继承主题 | size 2 不写 |
+| `<Select.Content>` | `position="item-aligned"` | — | 弹层阴影与面板色 | 常规下拉菜单需显式传 `position="popper"` |
+| `<Table.Root>` | `variant="ghost"` | `size="2"` | `layout="auto"` | ghost / size 2 不写；需要卡片底和边框时才传 `variant="surface"` |
+| `<Callout.Root>` | `variant="soft"` | `size="2"` | 警示/说明语义 | soft / size 2 不写，通常只需传 `color` |
+| `<Spinner>` | — | `size="2"` | `loading={true}` | loading 默认为 true，直接包裹真实内容，不传 `loading={true}` |
+| `<Skeleton>` | — | — | `loading={true}` | loading 默认为 true，直接包裹真实内容，不传 `loading={true}` |
+| `<DataList.Root>` | — | `size="2"` | `orientation="horizontal"` | 水平排布与 size 2 不写 |
+| `<Flex>` | `as="div"` | — | `direction="row"`, `align="stretch"` | `as="div"`、`direction="row"` 不写 |
+| `<Grid>` | `as="div"` | — | `display="grid"`, `align="stretch"` | `as="div"`、`display="grid"` 不写 |
+| `<Separator>` | `orientation="horizontal"` | `size="1"` | 浅灰边框色 | 水平向与 size 1 不写 |
+| `<ScrollArea>` | `type="auto"` | `size="2"` | `scrollbars="both"` | auto 不写 |
+| `<Switch>` | `variant="surface"` | `size="2"` | 自动消费根 `accentColor` | surface / size 2 不写 |
+| `<Checkbox>` | `variant="surface"` | `size="2"` | 自动消费根 `accentColor` | surface / size 2 不写 |
+
+**两类必须显式声明的例外**：
+1. **该 prop 没有默认值**：`Text` 没有默认 `size`，不写等于**继承父级字号**（父级 `size="2"` 就是 14px），不是取默认，所以必须显式写。
+2. **响应式对象中的默认档**：`size={{ initial: '1', md: '2' }}` 中的 `1` 是默认档，但在响应式对象中承担断点基准语义，不可省略。
+
+判据与详细说明见 [practices.md §3.2](practices.md#32-只写偏离默认值的-prop)。
 
 ---
 
@@ -283,7 +367,7 @@ prop 集合里没有 `color`——这条边界是组件库自己划的，顺着�
 需要统一的白卡外观就用 `Card variant="surface"` + 一个自定义类，全项目只有这一处实现。
 自定义类只做三件事：内边距归零（各面板自己用 `p` / `px` / `py` 排）、描边与底色换成项目令牌。
 
-**圆角不在自定义类里写**：Card 默认 `size="2"` 自己算出 `--radius-4`，跟着 `Theme` 的
+**圆角不在自定义类里写**：Card 默认 `size="1"`（内边距 `--space-3` 即 12px，圆角 `--radius-4`），`size="2"` 的内边距是 `--space-4` (16px)，圆角同样算出 `--radius-4`，跟着 `Theme` 的
 `radius` 一起缩放。真要更大的圆角就传 `size`，别覆盖 `--base-card-border-radius`——
 `size` 管的是内边距档位，不该顺带成为圆角的第二个开关。
 
@@ -358,7 +442,7 @@ grep -rn 'border-radius' src --include=*.css | grep -v 'var(--radius'
 | 与兄弟元素的间距 | 父容器 `gap`（优先），或 `m*` prop | **不包** | 容器统一管节奏，改一处改全部 |
 | 无背景/描边的「缩进」 | `m*` prop | **不包** | 无可见边界时 padding 与 margin 渲染位置完全一致（下方有实测） |
 | 有背景/描边/圆角的**内边距** | `Box` / `Flex` 包，padding 加在容器 | **包** | 这个东西本来就是盒子，不是「文字」 |
-| 作为 flex 子项的收缩与截断 | 留 CSS（`flex` / `min-width: 0`） | **不包** | 包了截断反而失效，约束必须落在真正受限的那个元素上 |
+| 作为 flex 子项的收缩与截断 | 用 `<Box minWidth="0" maxWidth="100%">` 或 `<Box flexGrow="1" minWidth="0">` 包裹，Text 传 `truncate` | **包** | 5 大布局组件是尺寸与弹性的唯一合法持有者，严禁为 Text 写 CSS 布局类；Box 承载弹性与 `minWidth="0"`，Text 自动在其内截断 |
 
 第二行的依据：一个 `<Text as="div">` 的 `padding: 0 8px 8px` 换成 `margin: 0 8px 8px` 后——
 

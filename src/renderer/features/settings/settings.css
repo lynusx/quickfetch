@@ -8,16 +8,3 @@
   padding-left: var(--space-3);
   padding-right: var(--space-3);
 }
-
-/* 滑杆行的控件位吃掉右半整栏；其余行由 props 管 flex 比例 */
-.settings-row-slider .settings-row-control {
-  flex: 1 1 0;
-}
-
-.settings-row-value {
-  flex-shrink: 0;
-  min-width: 32px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  color: var(--gray-12);
-}

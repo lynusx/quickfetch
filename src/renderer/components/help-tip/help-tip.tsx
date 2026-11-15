@@ -1,7 +1,13 @@
 import type { FocusEvent, ReactNode } from 'react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { QuestionMarkCircledIcon } from '@radix-ui/react-icons'
-import { IconButton, Popover, Text, VisuallyHidden } from '@radix-ui/themes'
+import {
+  Box,
+  IconButton,
+  Popover,
+  Text,
+  VisuallyHidden,
+} from '@radix-ui/themes'
 
 import './help-tip.css'
 
@@ -94,28 +100,30 @@ export const HelpTip = ({ title, children }: HelpTipProps) => {
     >
       <VisuallyHidden id={descriptionId}>{children}</VisuallyHidden>
       <Popover.Trigger>
-        <IconButton
-          type="button"
-          variant="ghost"
-          color="gray"
-          size="1"
-          className="help-tip-trigger"
-          aria-label={`${title}说明`}
-          aria-describedby={descriptionId}
-          onPointerEnter={handlePointerEnter}
-          onPointerLeave={handlePointerLeave}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          onClick={(event) => {
-            // 阻止 Popover 自带的“再点一次就关闭”，点击只负责固定 / 取消固定
-            event.preventDefault()
-            clearTimer()
-            setOpen(true)
-            setPinned((value) => !value)
-          }}
-        >
-          <QuestionMarkCircledIcon width={13} height={13} />
-        </IconButton>
+        <Box asChild flexShrink="0">
+          <IconButton
+            type="button"
+            variant="ghost"
+            color="gray"
+            size="1"
+            className="help-tip-trigger"
+            aria-label={`${title}说明`}
+            aria-describedby={descriptionId}
+            onPointerEnter={handlePointerEnter}
+            onPointerLeave={handlePointerLeave}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            onClick={(event) => {
+              // 阻止 Popover 自带的“再点一次就关闭”，点击只负责固定 / 取消固定
+              event.preventDefault()
+              clearTimer()
+              setOpen(true)
+              setPinned((value) => !value)
+            }}
+          >
+            <QuestionMarkCircledIcon width={13} height={13} />
+          </IconButton>
+        </Box>
       </Popover.Trigger>
       <Popover.Content
         role="tooltip"

@@ -8,6 +8,7 @@ import {
 } from '@radix-ui/react-icons'
 import {
   Badge,
+  Box,
   Callout,
   Flex,
   IconButton,
@@ -244,7 +245,6 @@ const PlantMachinePicker = ({
       <Step index={1} done={configured}>
         <Field label={labels.rootLabel ?? '入口目录'} hint={labels.rootHint}>
           <TextField.Root
-            size="2"
             value={draft}
             placeholder={labels.rootPlaceholder}
             disabled={saving}
@@ -350,7 +350,6 @@ const PlantMachinePicker = ({
               }
             >
               <TextField.Root
-                size="2"
                 value={keyword}
                 placeholder={labels.searchPlaceholder}
                 spellCheck={false}
@@ -380,15 +379,17 @@ const PlantMachinePicker = ({
                             {machine.name}
                           </Text>
                           {badge ? (
-                            <Badge
-                              className="share-badge"
-                              variant="soft"
-                              color={SHARE_TONE_COLOR[badge.tone]}
-                              data-tone={badge.tone}
-                              title={`共享：${badge.label}`}
-                            >
-                              {badge.label}
-                            </Badge>
+                            <Box maxWidth="84px" overflow="hidden" ml="auto">
+                              <Badge
+                                className="share-badge"
+                                variant="soft"
+                                color={SHARE_TONE_COLOR[badge.tone]}
+                                data-tone={badge.tone}
+                                title={`共享：${badge.label}`}
+                              >
+                                {badge.label}
+                              </Badge>
+                            </Box>
                           ) : null}
                         </Flex>
                       ),

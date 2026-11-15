@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { CalendarIcon } from '@radix-ui/react-icons'
 import {
   Badge,
+  Box,
   Button,
   Flex,
   Grid,
@@ -112,19 +113,19 @@ export const DatePicker = ({
           disabled={disabled}
           aria-label={`选择日期，当前 ${displayText}`}
         >
-          <CalendarIcon width={14} height={14} />
-          <Text
-            size="2"
-            color={selectedDate ? undefined : 'gray'}
-            className="date-trigger-text"
-          >
-            {displayText}
-          </Text>
-          {relative ? (
-            <Badge size="1" color="indigo" variant="soft">
-              {relative}
-            </Badge>
-          ) : null}
+          <Box flexShrink="0" className="date-trigger-icon">
+            <CalendarIcon width={14} height={14} />
+          </Box>
+          <Box flexGrow="1">
+            <Text
+              size="2"
+              align="left"
+              color={selectedDate ? undefined : 'gray'}
+            >
+              {displayText}
+            </Text>
+          </Box>
+          {relative ? <Badge color="indigo">{relative}</Badge> : null}
         </Button>
       </Popover.Trigger>
 

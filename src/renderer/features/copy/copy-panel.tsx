@@ -260,7 +260,6 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
       <Flex wrap="wrap" align="center" gap="2">
         {!running && !paused ? (
           <Button
-            variant="solid"
             onClick={() => {
               if (conflict === 'overwrite' && (preview?.conflicts ?? 0) > 0) {
                 setConfirmOverwrite(true)

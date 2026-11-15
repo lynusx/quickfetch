@@ -103,13 +103,17 @@ export const ChoiceList = ({
               onClick={(event) => event.stopPropagation()}
               onCheckedChange={(next) => toggle(option.value, next === true)}
             />
-            <Text size="2" className="choice-label">
-              {option.label}
-            </Text>
-            {option.meta != null ? (
-              <Text size="1" className="choice-meta">
-                {option.meta}
+            <Box flexGrow="1" minWidth="0">
+              <Text size="2" truncate className="choice-label">
+                {option.label}
               </Text>
+            </Box>
+            {option.meta != null ? (
+              <Box flexShrink="0">
+                <Text size="1" color="gray" className="tabular">
+                  {option.meta}
+                </Text>
+              </Box>
             ) : null}
           </Flex>
         )
@@ -119,9 +123,11 @@ export const ChoiceList = ({
 
   if (scroll) {
     return (
-      <ScrollArea type="auto" scrollbars="vertical" className="choice-scroll">
-        <Box className="choice-scroll-inner">{content}</Box>
-      </ScrollArea>
+      <Box maxHeight="222px" className="choice-scroll">
+        <ScrollArea type="auto" scrollbars="vertical">
+          <Box className="choice-scroll-inner">{content}</Box>
+        </ScrollArea>
+      </Box>
     )
   }
 
@@ -175,13 +181,17 @@ export const ChoiceRadio = ({
                 }
                 onClick={(event) => event.stopPropagation()}
               />
-              <Text size="2" className="choice-label">
-                {option.label}
-              </Text>
-              {option.meta != null ? (
-                <Text size="1" className="choice-meta">
-                  {option.meta}
+              <Box flexGrow="1" minWidth="0">
+                <Text size="2" truncate className="choice-label">
+                  {option.label}
                 </Text>
+              </Box>
+              {option.meta != null ? (
+                <Box flexShrink="0">
+                  <Text size="1" color="gray" className="tabular">
+                    {option.meta}
+                  </Text>
+                </Box>
               ) : null}
             </Flex>
           )

@@ -61,13 +61,10 @@
 
 /* 说明文字用 gray-10：`Text color="gray"` 只到 11 阶，表达不了更弱的层级 */
 .upload-desc {
-  max-width: 520px;
   color: var(--gray-10);
 }
 
-/* Flex 没有 alignSelf prop，居中只能留在这里；间距与内边距走 props */
 .upload-cta {
-  align-self: center;
   border: 1px solid var(--gray-a6);
   border-radius: var(--radius-2);
   background: var(--app-surface);

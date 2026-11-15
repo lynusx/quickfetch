@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Flex, Text } from '@radix-ui/themes'
+import { Box, Flex, Text } from '@radix-ui/themes'
 
 import './empty-state.css'
 
@@ -33,9 +33,11 @@ export const EmptyState = ({ icon, title, description }: EmptyStateProps) => (
       {title}
     </Text>
     {description ? (
-      <Text as="p" size="1" className="empty-description">
-        {description}
-      </Text>
+      <Box maxWidth="380px">
+        <Text as="p" size="1" className="empty-description">
+          {description}
+        </Text>
+      </Box>
     ) : null}
   </Flex>
 )

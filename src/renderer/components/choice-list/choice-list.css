@@ -45,11 +45,6 @@
 }
 
 .choice-label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   color: var(--gray-11);
 }
 
@@ -58,15 +53,8 @@
   color: var(--accent-12);
 }
 
-.choice-meta {
-  flex-shrink: 0;
-  color: var(--gray-9);
-  font-variant-numeric: tabular-nums;
-}
-
-/* 选项多时由调用方传 `scroll`：限高与外观在这里，内边距见 .choice-scroll-inner */
+/* 选项多时由调用方传 `scroll`：外观在这里，限高走外层 Box maxHeight */
 .choice-scroll {
-  max-height: 222px;
   border: 1px solid var(--app-border);
   border-radius: var(--radius-3);
   background: var(--app-surface);

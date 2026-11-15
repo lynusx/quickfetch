@@ -299,7 +299,7 @@ export const FilterTypes = ({
                   <Flex wrap="wrap" gap="2" mb="3">
                     {types.length ? (
                       types.map((type) => (
-                        <Badge key={type} color="gray" variant="soft" size="2">
+                        <Badge key={type} color="gray" size="2">
                           <Flex align="center" gap="1">
                             <Text size="1">{type}</Text>
                             <IconButton
@@ -327,7 +327,6 @@ export const FilterTypes = ({
                   </Flex>
 
                   <TextField.Root
-                    size="2"
                     placeholder={placeholder}
                     value={newType}
                     onChange={(event) => setNewType(event.target.value)}

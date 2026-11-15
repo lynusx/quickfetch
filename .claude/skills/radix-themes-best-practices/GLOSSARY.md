@@ -37,3 +37,11 @@ _Avoid_: primitive 文档、底层文档、官方 API
 14 个原子组件——布局 5 个（`Box` / `Flex` / `Grid` / `Container` / `Section`）+ 排版 9 个（`Text` / `Heading` / `Link` / `Code` / `Kbd` / `Blockquote` / `Quote` / `Strong` / `Em`）。只负责结构与文字，不带业务语义。
 `Card` / `Badge` / `Table` / `Dialog` 等是**成品部件**：带语义与外观，用来解决具体场景，不是拼界面的默认单元。
 _Avoid_: 原子组件、基础组件、primitive（那是 Radix Primitives，另一套东西）
+
+**responsive object（响应式对象）**:
+以 `initial`（移动端基线，必填）配合 `xs` / `sm` / `md` / `lg` / `xl` 断点为 key 的 prop 对象语法（如 `columns={{ initial: '1', md: '3' }}`）。
+_Avoid_: base、响应式类名、Tailwind 前缀
+
+**leading trim（行高修剪）**:
+通过 `trim` prop 驱动的排版特性，消除文字行高在字型首尾带来的天然留白（half-leading），用于文字与图标或边框的像素级垂直居中对齐。
+_Avoid_: 负 margin、line-height 归一、文字贴边 hack

@@ -79,47 +79,50 @@ export const AppSidebar = () => {
         </Text>
       </Flex>
 
-      <ScrollArea
-        className="sidebar-scroll"
-        type="auto"
-        scrollbars="vertical"
-        role="navigation"
-        aria-label="主导航"
-      >
-        <Box px="3" pt="1" pb="4">
-          {NAV_GROUPS.map((group) => (
-            <Box className="nav-group" key={group.label}>
-              <Text
-                as="div"
-                size="1"
-                weight="medium"
-                mx="2"
-                mb="2"
-                className="nav-group-label"
-              >
-                {group.label}
-              </Text>
-              {group.items.map((item) => (
-                <NavLink key={item.to} to={item.to} className="nav-item">
-                  <Flex
-                    className="nav-icon"
-                    align="center"
-                    justify="center"
-                    width="28px"
-                    height="28px"
-                    flexShrink="0"
-                  >
-                    <item.icon width={15} height={15} />
-                  </Flex>
-                  <Text size="2" weight="medium" className="nav-text nav-label">
-                    {item.label}
-                  </Text>
-                </NavLink>
-              ))}
-            </Box>
-          ))}
-        </Box>
-      </ScrollArea>
+      <Box flexGrow="1" minHeight="0">
+        <ScrollArea
+          type="auto"
+          scrollbars="vertical"
+          role="navigation"
+          aria-label="主导航"
+        >
+          <Box px="3" pt="1" pb="4">
+            {NAV_GROUPS.map((group) => (
+              <Box className="nav-group" key={group.label}>
+                <Text
+                  as="div"
+                  size="1"
+                  weight="medium"
+                  mx="2"
+                  mb="2"
+                  className="nav-group-label"
+                >
+                  {group.label}
+                </Text>
+                {group.items.map((item) => (
+                  <NavLink key={item.to} to={item.to} className="nav-item">
+                    <Flex
+                      className="nav-icon"
+                      align="center"
+                      justify="center"
+                      width="28px"
+                      height="28px"
+                      flexShrink="0"
+                    >
+                      <item.icon width={15} height={15} />
+                    </Flex>
+                    <Box minWidth="0">
+                      <Text size="2" weight="medium" className="nav-label">
+                        {item.label}
+                      </Text>
+                    </Box>
+                  </NavLink>
+                ))}
+              </Box>
+            ))}
+          </Box>
+        </ScrollArea>
+      </Box>
 
       <Box className="sidebar-footer" p="3">
         <NavLink to={ROUTES.SETTINGS} className="nav-item">
@@ -133,9 +136,11 @@ export const AppSidebar = () => {
           >
             <GearIcon width={15} height={15} />
           </Flex>
-          <Text size="2" weight="medium" className="nav-text nav-label">
-            设置
-          </Text>
+          <Box minWidth="0">
+            <Text size="2" weight="medium" className="nav-label">
+              设置
+            </Text>
+          </Box>
         </NavLink>
 
         <Flex align="center" justify="between" gap="2" pt="2" pb="1" px="2">

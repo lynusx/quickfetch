@@ -13,18 +13,11 @@
   background: var(--gray-a2);
 }
 
-/* 文件路径可能很长：允许它在行内收缩，否则会把面板横向撑开 */
-.copy-progress-path {
-  min-width: 0;
-  max-width: 100%;
-}
-
 .success-icon {
   color: var(--green-9);
 }
 
 .failure-list {
-  max-height: 160px;
   border: 1px solid var(--app-border);
   border-radius: var(--radius-2);
   background: var(--app-surface);
@@ -36,8 +29,4 @@
 
 .failure-row:last-child {
   border-bottom: none;
-}
-
-.self-start {
-  align-self: flex-start;
 }

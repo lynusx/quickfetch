@@ -68,12 +68,12 @@
 | 少量互斥选项，挤在一行 | `SegmentedControl` |
 
 **反例**：用 `Button` 的选中态模拟单选框；用 `Switch` 表示需要提交的多选。
-**代价**：`RadioCards` / `CheckboxCards` 的卡片有最小尺寸与内边距，塞进窄侧栏会溢出；`SegmentedControl.Item` 需要 `value`。
+**代价**：`RadioCards` / `CheckboxCards` 默认是 `columns="repeat(auto-fit, minmax(200px, 1fr))"`，塞进窄侧栏需显式传入 `columns="1"`；`SegmentedControl.Item` 需要 `value`。
 
 ### 1.5 从多个值里选一个
 
 **场景**：下拉选择、筛选器、表单里的枚举字段。
-**默认**：选项 ≥ 7 或需要节省空间 → `Select.Root`；选项 ≤ 6 且希望一眼看全 → `RadioGroup` / `SegmentedControl`。
+**默认**：选项 ≥ 7 或需要节省空间 → `Select.Root`（传统下拉菜单需传 `<Select.Content position="popper">`）；选项 ≤ 6 且希望一眼看全 → `RadioGroup` / `SegmentedControl`。
 **反例**：把 30 个选项塞进 `RadioGroup`；用原生 `<select>` 配 CSS 覆盖。
 **代价**：`Select` **没有内置搜索**。要搜索就只能自封 Combobox（见 [missing-components.md](missing-components.md)），这是引入外部依赖或写交互代码的起点。
 
@@ -95,6 +95,13 @@
 
 **反例**：直接引入 Mantine / Antd / Element（主题体系互不感知）；或为了一个日期选择器自己写日历的键盘交互。
 **代价**：每一级都更贵——组合会让使用方多写几行；封装要维护 props 透传；headless 库要自己补齐无障碍与样式。
+
+### 1.8 属性与元数据清单
+
+**场景**：详情面板、配置汇总、指标审查等「键: 值」列表。
+**默认**：使用 `DataList`（`Root` + `Item` + `Label` + `Value`），通过 `DataList.Label width="120px"` 统一对齐。
+**反例**：用 `Flex direction="row"` 逐行拼接，或手写 CSS Grid 表格模拟键值对。
+**代价**：`DataList` 是专用的 `<dl>/<dt>/<dd>` 语义结构；如果只是两三处零散文字，用 `Flex` 即可。
 
 ---
 
@@ -159,7 +166,9 @@
 **场景**：要包一层、要排一行、要放一段文字——任何布局与文本的起点。
 **默认**：用 14 个 `building block（构建块）` 搭——布局 5 个（`Box` / `Flex` / `Grid` / `Container` / `Section`），文本 9 个（`Text` / `Heading` / `Link` / `Code` / `Kbd` / `Blockquote` / `Quote` / `Strong` / `Em`）。
 
-**搭不出来才写 CSS**，而且每条新增声明必须能指到三类之一：**令牌表达不了的属性**（`grid-template-columns`、`font-variant-numeric`）、**状态**（`:hover` / `[data-state]`）、**第三方覆盖层**。指不到就删——没有「先写上去，也许有用」。
+**搭不出来才写 CSS**，而且每条新增声明必须能指到三类之一：**令牌与 props 表达不了的属性**（如 `font-variant-numeric: tabular-nums`、特殊网格 `repeat(auto-fill, ...)`）、**状态**（`:hover` / `[data-state]`）、**第三方覆盖层**。指不到就删——没有「先写上去，也许有用」。
+
+**非布局组件的包裹规则**：非布局组件（`Slider`、`Text`、`Button`、`Badge`、`ScrollArea` 等）只有 `MarginProps`，没有 `LayoutProps`。当它们需要限制尺寸（`width`/`height`）、参与弹性分配（`flexGrow`/`flexShrink`）或控制收缩截断（`minWidth="0"`）时，**绝对禁止在 CSS 自定义类中编写布局属性**；一律在 JSX 中用 `<Box>` / `<Flex>` 显式包裹，并通过容器 props 传递尺寸与弹性。
 
 **原生标签的判据**：**Themes 没提供的，才用原生承担**——`img`、`video`、`audio`、`form`、`ul`、`details`、`input[type=file]` 都属于这类。路由链接需要原生 `<a>` 承担客户端跳转与 `aria-current`，但外壳必须是 `Link asChild` / `Button asChild`——那不是「用原生做布局」。
 
@@ -173,6 +182,17 @@
 
 **反例**：`<div>` 只为加 margin / padding；`<span>` 当标签；`<h3>` 当标题；`<b>` / `<i>` 代替 `Strong` / `Em`；用 `Card` 拼一切（`Card` 是成品部件，不是构建块）。判断标准是**它有没有承担布局或排版职责**——承担了就必须换成组件。
 **代价**：多一层组件会加深 DOM（`Flex` 本身就是 `div`）；判断「Themes 有没有」要查一次 [llms.txt](llms.txt) 的组件清单。这一次 grep 换掉的，是「把 `ul` 改成 `Flex`、再改回来」的来回。
+
+### 2.8 As-Is 优先 vs 构建块自建：拒绝暴力覆盖（Overriding Styles）
+
+**场景**：设计稿需要一个与 Radix 预设组件略有差异的界面元素（如带特殊虚线边框的文件触发区、尺寸极紧凑的状态条）。
+**默认**：严格执行三层递进原则（*Beyond simple style overrides, use components as-is or create your own using building blocks*）：
+1. **As-Is 原则**：如果使用现有成品组件，**全盘接受其预设尺寸、圆角与交互层级**，仅通过内置 prop（`variant` / `color` / `size` / `highContrast`）调节，不要对其写 CSS 强扭。
+2. **令牌级定制**：全站通用的视觉偏离优先在根层级覆盖变量（覆盖 `--color-*`、`--radius-*`、`--cursor-*`），而不是逐个覆盖组件类名。
+3. **构建块自建**：当需求与成品组件（`Button` / `Card` 等）的预设形态根本冲突时，**严禁写 CSS 暴力覆写内部 `.rt-*` 类名**（如覆写 `.rt-Button` 的 padding/height/border）。应直接使用 14 个构建块（`Box` / `Flex` / `Grid` / `Text`）+ Radix Primitives + 令牌从零搭一个新组件；若需要按键/链接交互，外包 `<Button asChild>` 或 `<Link asChild>`。
+
+**反例**：给 `<Button>` 加一个自定义类名，在 CSS 里写 8 行样式把它的内边距清空、改高度为 18px、加虚线边框，把它强行伪装成一个文件选择器框。
+**代价**：暴力覆写破坏了预设组件的特异性、Focus 环和 Hover/Active 状态机，极其脆弱且不可维护；用构建块搭虽然需要多写几行 JSX，但结构干净、完全受控且零样式冲突。
 
 ---
 
@@ -247,7 +267,7 @@ grep -rnE '\b(p|px|py|pt|pr|pb|pl)="[^"]*[0-9] +[0-9]' src --include=*.tsx
 
 ### 4.2 无障碍
 
-**默认**：每个可交互元素都有名称——可见文字，或 `aria-label`；图标按钮必须有 `aria-label`（官方措辞是 strongly recommended，本 skill 升格为必须——缺失是静默的可访问性失败）；`Dialog` / `AlertDialog` 必须有 `Title`；纯装饰图标 `aria-hidden`。
+**默认**：每个可交互元素都有名称——可见文字，或 `aria-label`；图标按钮必须有 `aria-label`（官方措辞是 strongly recommended，本 skill 升格为必须——缺失是静默的可访问性失败）；裸 SVG 图标用 `<AccessibleIcon label="...">` 提供读屏名称；破坏性或省略视觉标题的弹窗用 `<VisuallyHidden><Dialog.Title>...</Dialog.Title></VisuallyHidden>`；纯装饰图标 `aria-hidden`。
 **反例**：`<IconButton><XIcon /></IconButton>`；`<Dialog.Content>` 里没有 `Dialog.Title`。
 **代价**：给纯图标补名称会增加一行；漏掉的代价是读屏用户听到「button」。
 

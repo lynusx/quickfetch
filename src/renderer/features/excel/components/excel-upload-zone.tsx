@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
 import { TableIcon, UploadIcon } from '@radix-ui/react-icons'
-import { Flex, Spinner, Text } from '@radix-ui/themes'
+import { Box, Flex, Spinner, Text } from '@radix-ui/themes'
 
 import { useExcelUpload } from '../hooks/useExcelUpload'
 import { MAX_EXCEL_SIZE_LABEL } from '../constants'
@@ -94,17 +94,20 @@ const ExcelUploadZone = () => {
       <Text size="3" weight="bold">
         {statusText}
       </Text>
-      <Text size="1" className="upload-desc">
-        {file
-          ? `当前文件：${file.name}`
-          : `支持 .xlsx、.xls 格式，单次仅处理 1 个文件，最大 ${MAX_EXCEL_SIZE_LABEL}`}
-      </Text>
+      <Box maxWidth="520px">
+        <Text size="1" className="upload-desc">
+          {file
+            ? `当前文件：${file.name}`
+            : `支持 .xlsx、.xls 格式，单次仅处理 1 个文件，最大 ${MAX_EXCEL_SIZE_LABEL}`}
+        </Text>
+      </Box>
 
       {!isProcess ? (
         <Flex
           className="upload-cta"
           display="inline-flex"
           align="center"
+          alignSelf="center"
           gap="2"
           mt="1"
           py="1"

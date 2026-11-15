@@ -14,6 +14,9 @@ export const BrandMark = () => (
     className="brand-mark"
     align="center"
     justify="center"
+    width="38px"
+    height="38px"
+    flexShrink="0"
     aria-hidden="true"
   >
     {/* viewBox 收到符号自身的包围盒，保证 Q 在方块里占 72%，和 exe 图标一致 */}

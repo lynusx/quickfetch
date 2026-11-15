@@ -16,9 +16,7 @@ interface PanelProps {
  * prop 的部分（圆角、内边距）由 `.app-card` 用它的变量补齐。
  */
 export const Panel = ({ children, className }: PanelProps) => (
-  <Card variant="surface" className={cn('app-card', className)}>
-    {children}
-  </Card>
+  <Card className={cn('app-card', className)}>{children}</Card>
 )
 
 interface PanelHeaderProps {

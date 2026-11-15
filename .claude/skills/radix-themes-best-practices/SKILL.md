@@ -18,6 +18,7 @@ Radix Themes 是「组件 + 设计令牌 + 布局工具类」一体的 React UI 
 1. ❌ 混入 shadcn/ui、Tailwind、MUI、Ant Design 等**自带主题体系**的库——它们与 `<Theme>` 互不感知，主题色与明暗模式都不会联动
 2. ❌ 手写 hex / rgb 颜色——用令牌 `var(--accent-9)`、`var(--gray-a3)`
 3. ❌ 手搓已有组件——`Card`、`Badge`、`ScrollArea`、`Table`、`Separator`、`Callout`、`Progress` 全部都有
+4. ❌ 绕过 5 大布局容器在 CSS 中向叶子组件（`Text`、`Slider`、`Button`、`Badge` 等）书写布局声明（如 `width`、`min-width`、`max-width`、`flex`、`overflow` 等）——几何尺寸与弹性由 `Box`、`Flex`、`Grid`、`Container`、`Section` 承担，叶子组件通过外层 `Box` / `Flex` 显式包裹控制
 
 ## 选型三问
 
@@ -31,16 +32,20 @@ Radix Themes 是「组件 + 设计令牌 + 布局工具类」一体的 React UI 
 ### ① props 管布局，CSS 管外观
 
 ```tsx
-// ✅ 方向、间距、尺寸、对齐、overflow、flex 比例 → props
+// ✅ 方向、间距、尺寸、对齐、overflow、flex 比例、网格列数与模板 → props
 <Flex direction="column" gap="3" p="4" minWidth="0" overflow="hidden" flexGrow="1">
+<Grid columns="3" gap="2">
+<Grid columns={{ initial: '1', sm: '2', md: '3' }} gap="3">
 ```
 ```css
-/* ✅ 边框、背景、阴影、伪类、后代选择器、列模板 → CSS */
+/* ✅ 边框、背景、阴影、伪类、后代选择器、特殊高级模板（如 repeat(auto-fill, ...)） → CSS */
 .panel { border: 1px solid var(--gray-a5); background: var(--gray-1); }
 .panel:hover { border-color: var(--gray-a7); }
 ```
 
-**为什么**：同一个属性写两处时，项目 CSS 后加载会**静默吃掉 prop**，改 prop 没有任何反应，而类型检查不会报错。这就是 `double-write（双写）`——本 skill 的首要失败模式。机制与五层来源见 [rules.md §1](references/rules.md#1-样式的五层来源与优先级)。
+**为什么**：同一个属性写两处时，项目 CSS 后加载会**静默吃掉 prop**，改 prop 没有任何反应，而类型检查不会报错。这就是 `double-write（双写）`——本 skill 的首要失败模式。网格列模板优先用 `Grid columns` prop，只有 `repeat(auto-fill, ...)` 等少数高级语法才留 CSS。机制与五层来源见 [rules.md §1](references/rules.md#1-样式的五层来源与优先级)。
+
+**注意**：Radix Themes 库中**仅有 5 个基础布局组件**（`Box`、`Flex`、`Grid`、`Container`、`Section`）实现了 `LayoutProps`（尺寸、弹性、定位、溢出与对齐）。`Text`、`Slider`、`Button` 等非布局组件仅有 `MarginProps`，严禁通过给它们写自定义 CSS 类来注入 `min-width`、`max-width`、`flex` 或 `width`——必须在外层套 `Box` 或 `Flex` 并传 props 控制。详见 [rules.md §3.4](references/rules.md#34-几何边界与尺寸包裹原则layout-bounding--geometry-wrappers)。
 
 布局与文字先由 **14 个 `building block（构建块）`** 承担（5 布局 + 9 排版）；CSS 只写它们表达不了的三类，见 [practices.md §2.7](references/practices.md#27-用-14-个构建块搭界面css-是例外)。
 
@@ -78,6 +83,7 @@ Radix Themes 是「组件 + 设计令牌 + 布局工具类」一体的 React UI 
 ```
 
 **为什么**：`p="2 4"` 被原样写进 `--p: 2 4`，展开成 `padding: 2 4`——缺单位、整条声明被浏览器丢弃。
+响应式对象（`columns={{ initial: '1', md: '3' }}`）必须以 `initial` 为基准，**严禁写 `base`**。→ [rules.md §3.4](references/rules.md#34-响应式-prop-语法与断点规则)
 
 ### ⑤ 只写偏离默认值的 prop
 
@@ -215,8 +221,10 @@ grep -E '^\s{2}[a-zA-Z]+: \{' node_modules/@radix-ui/themes/src/components/scrol
 ### 改之前
 
 - [ ] 这个元素上，是否**同时**有 `.rt-r-*` 类与自定义 class 声明了同一属性？
-- [ ] 要放进 `p` / `gap` 的值是**单个档位**吗？
+- [ ] 非布局组件（如 `Slider`、`Text`、`Button`）需要限制尺寸或控制 flex 比例时，是否已用 `<Box>` / `<Flex>` 包裹？是否避免了在 CSS 里写 `min-width`/`max-width`/`flex`？
+- [ ] 要放进 `p` / `gap` 的值是**单个档位**吗？响应式对象以 `initial` 为基准了吗（禁写 `base`）？
 - [ ] 要写的 prop 在组件页上找不到时，查过 [§11 继承清单](references/components.md#11-继承-prop-面)了吗？
+- [ ] `Tooltip` 包裹的元素是 `disabled` 吗？禁用按钮需外包一层带有 `tabIndex={0}` 的 span/Box。
 - [ ] 换控件前量过尺寸档位吗？`Button` 只有 24 / 32 / 40，`Badge` 最小 12px
 
 ### 改之后
@@ -236,6 +244,12 @@ grep -rnE '<(div|span|p|h[1-6])\b' src --include=*.tsx
 
 # ⑤ 主题 prop 写在了后代（先 grep，再人工排除根文件与注释行）
 grep -rnE '(<Theme|accentColor=|radius=|scaling=|appearance=)' src --include=*.tsx
+
+# ⑥ 错误的响应式 base 键名（有输出就是 bug）
+grep -rnE '\{\{[^}]*\bbase\s*:' src --include=*.tsx
+
+# ⑦ CSS 中的布局属性泄漏（检查是否有类声明了本该由 Box/Flex 承担的布局属性）
+grep -rnE '^\s*(min-width|max-width|flex|flex-grow|flex-shrink|flex-basis)\s*:' src --include=*.css
 ```
 
 跑完再跑项目自带的类型检查、lint、格式化与构建。上面任何一条有输出，逐项处理：改，或在注释里写明偏离理由。

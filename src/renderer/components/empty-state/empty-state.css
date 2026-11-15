@@ -13,6 +13,5 @@
 
 /* 说明文字用 gray-10：`Text color="gray"` 只到 11 阶，表达不了更弱的层级 */
 .empty-description {
-  max-width: 380px;
   color: var(--gray-10);
 }

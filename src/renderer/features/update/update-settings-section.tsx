@@ -154,9 +154,7 @@ export const UpdateSettingsSection = () => {
               : '正在识别安装方式'
         }`}
       >
-        <Badge color={PHASE_COLOR[phase]} variant="soft">
-          {PHASE_LABEL[phase]}
-        </Badge>
+        <Badge color={PHASE_COLOR[phase]}>{PHASE_LABEL[phase]}</Badge>
       </SettingsRow>
 
       <SettingsRow

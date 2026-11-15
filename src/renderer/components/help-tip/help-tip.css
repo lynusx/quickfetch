@@ -1,8 +1,7 @@
 /* 说明卡：HelpTip。 */
 
-/* flex-shrink 与交互态在 IconButton 上没有对应 prop，留在 CSS。 */
+/* 交互态在 IconButton 上没有对应 prop，留在 CSS。 */
 .help-tip-trigger {
-  flex-shrink: 0;
   color: var(--gray-9);
   transition: color var(--app-transition);
 }

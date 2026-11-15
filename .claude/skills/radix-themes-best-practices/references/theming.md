@@ -35,6 +35,19 @@
 
 `<ThemePanel />` 是开发期调参浮层（默认打开），能实时改上面这些值并「复制配置」。**上线前移除**——官方把它当开发工具，但线上没人该看到它。
 
+### 1.1 根 Theme 六大维度全树传递与派生网络
+
+根 `<Theme>` 组件（DOM 挂载为 `.radix-themes`）并非单纯的 React Context，而是**整套 CSS 变量设计令牌的发生器与分发器**。它向 DOM 树向下级联分发 6 个维度的层叠系统：
+
+| 维度 | 根节点下发的变量与机制 | 后代继承与派生行为 | 实践约束 |
+|---|---|---|---|
+| **Color** (颜色) | `--color-background`, `--gray-1`~`12`, `--accent-1`~`12` | ① `.radix-themes` 根节点设置 `color: var(--gray-12)`，后代正文文字**默认自动继承高对比文字色**；<br>② `Button`、`Badge`、`Switch`、`Slider`、`Radio` 等控件**默认自动消费根 accentColor**；<br>③ `Card` 与 `Table` 默认底色派生自 `--color-panel`。 | 不要给每个 `<Text>` 重复传 `color`（主正文不用传，次级文字才传 `color="gray"`）；不要给控件重复传 `color="indigo"`。 |
+| **Typography** (排版) | `--default-font-family`, `--code-font-family`, `--heading-font-family` | ① 字体栈沿 DOM 树自然级联；<br>② `Strong`、`Em`、`Quote` 无 `size` prop，原生通过 `font-size: 1em` 继承父级文字字号；<br>③ `<Text>` 没有默认 size（显式继承父级字号），因此 `<Text>` 必须显式声明 size。 | 换全站字体覆盖 `--default-font-family` 变量即可，严禁在组件 class 上写 `font-family`。 |
+| **Spacing** (间距) | `--space-1` ~ `--space-9` (4px ~ 64px) | 全树变量可达。布局构建块（`Box`、`Flex`、`Grid`）的 `gap` 与 `p` 消费这些变量；受 `scaling` 统一比例缩放。 | 严禁手写固定间距（如 `gap: 12px`），使用档位 prop（如 `gap="3"`）。 |
+| **Radius** (圆角) | `--radius-1` ~ `--radius-6`, `--radius-full` | 根 `radius`（默认 `medium`）自动向整棵子树派生各阶圆角。所有组件（`Button`、`Card`、`Badge`、`TextField` 等）自动引用对应阶位。 | 后代严禁传 `radius="medium"` 等默认值；统一调整圆角在根节点配一次。 |
+| **Shadows** (阴影) | `--shadow-1` ~ `--shadow-6` | 全局下发。`Card variant="classic"` 以及浮层组件（`Dialog`、`Popover`、`DropdownMenu` 等）内部自动消费对应的阴影阶位。 | 严禁针对组件手动写 `box-shadow` 覆盖层，全走主题阴影。 |
+| **Cursors** (光标) | `--cursor-button`, `--cursor-checkbox`, `--cursor-link`, `--cursor-disabled` 等 | 沿树级联。所有按钮、复选框、单选、开关默认遵循原生桌面标准（`default` 箭头）。 | 全局改手型在 `:root` 覆盖 `--cursor-button: pointer;`，禁止针对组件类名写 `cursor: pointer`。 |
+
 ---
 
 ## 2. 根节点只写偏离默认值的 prop
@@ -124,6 +137,53 @@ border-radius: var(--radius-2);
 - 断点像素值
 
 **推论**：`scaling="110%"` 后，1px 边框仍是 1px，但所有间距变大 10%——观感上「边框变淡了」。Radix 把 scaling 定位成「用户舒适度微调」而非「整体缩放」，接受这个观感通常更省事。
+
+---
+
+## 4.1 Breakpoints 六档断点体系
+
+Radix Themes 采用移动端优先（mobile-first）响应式系统，内建 6 档断点。在 props 传入响应式对象（如 `columns={{ initial: '1', md: '3' }}`）时，会映射为对应的断点媒体查询。
+
+| 断点 Key | 最小宽度 (min-width) | 典型设备 |
+|---|---|---|
+| `initial` | 0px | 手机竖屏 / 默认移动端基准（**必填，不能写 base**） |
+| `xs` | 520px | 大屏手机 / 小型折叠屏 |
+| `sm` | 768px | 平板竖屏 |
+| `md` | 1024px | 平板横屏 / 紧凑笔记本 |
+| `lg` | 1280px | 桌面显示器 |
+| `xl` | 1640px | 超宽大屏 |
+
+在 CSS 中，Radix 样式表基于这些断点下发 `.rt-r-*` 类。自定义 CSS 如需与 Radix 断点保持严格一致，使用标准媒体查询如 `@media (min-width: 1024px)` 对应 `md` 档。
+
+---
+
+## 4.2 Cursors 光标体系与令牌
+
+Radix Themes 的交互元素光标默认遵循**现代操作系统原生桌面规范**（与 macOS、Windows 原生控件一致），而不是传统 Web 习惯：
+
+| 令牌名 | 默认值 | 作用组件 | 为什么默认是 default |
+|---|---|---|---|
+| `--cursor-button` | `default` | `Button`、`IconButton` | 桌面原生按钮是箭头指针；只有超链接才呈现手指指针 |
+| `--cursor-checkbox` | `default` | `Checkbox` | 原生复选框 |
+| `--cursor-radio` | `default` | `Radio` | 原生单选框 |
+| `--cursor-switch` | `default` | `Switch` | 原生开关 |
+| `--cursor-slider-thumb` | `default` | `Slider` 滑块 | 原生滑块 |
+| `--cursor-menu-item` | `default` | 下拉菜单 / 上下文菜单项 | 原生菜单项 |
+| `--cursor-link` | `pointer` | `Link` | 语义为跳转链接 |
+| `--cursor-disabled` | `not-allowed` | 所有禁用状态控件 | 禁用提示 |
+
+**如何统一为 Web 式手型光标**：
+若产品要求按钮、复选框在 hover 时呈现手型（`pointer`），**严禁针对 `.rt-Button` 或业务 class 暴力写 `cursor: pointer`**（这会导致特异性污染并破坏禁用态的 `not-allowed`）。正确做法是在根样式表（如 `src/renderer/index.css`）中覆盖对应变量：
+
+```css
+/* ✅ 全局正解：覆盖光标令牌，自动联动所有按钮且保留 disabled 状态 */
+:root {
+  --cursor-button: pointer;
+  --cursor-checkbox: pointer;
+  --cursor-switch: pointer;
+  --cursor-menu-item: pointer;
+}
+```
 
 ---
 
@@ -255,7 +315,7 @@ border-radius: var(--radius-2);
 | 组件默认 prop | `accentColor="indigo"` `radius="medium"` `scaling="100%"` | 与默认值逐字相同 |
 | 已被 reset 归零的盒模型 | `.card-title { margin: 0 }` | `.rt-Text` / `.rt-Heading` 本来就是 `margin: 0` |
 | 已由根继承的文字色 | `.card-title { color: var(--gray-12) }` | `.radix-themes` 根本来就是 `gray-12` |
-| 已由组件算出的圆角 | `--base-card-border-radius: var(--radius-4)` | `Card` 默认 `size="2"` 算出来正是它 |
+| 已由组件算出的圆角 | `--base-card-border-radius: var(--radius-4)` | `Card` 默认 `size="1"`（以及 `size="2"`）算出来正是它 |
 
 **反向边界**：`color: var(--gray-10)` 让说明文字更弱，**不是**冗余——`Text color="gray"` 只到 11 阶，10 阶表达不了。判据永远是实测，不是「看起来像默认值」。
 
@@ -286,3 +346,6 @@ Radix 组件自己用 `--focus-8` 画环，位置各不相同（Button 在元素
 | `scaling` 范围 | 「间距、字号、行高」 | 还包括**圆角**；但不包括 border、shadow、容器宽度 |
 | `grayColor="auto"` 映射 | 只说「自动配互补灰」 | 穷举 switch，见 §5 的表 |
 | 嵌套 Theme 的 gray | 未提 | 继承父级**已解析**灰阶，不会重新匹配 |
+| `Card` 默认尺寸 | 视觉示例多为 size 2 | 默认 `size="1"`（padding 为 12px，圆角为 `--radius-4`）；size 2 padding 为 16px，圆角同为 `--radius-4` |
+| `Grid` 的 `columns` prop | 文档示例写数字与 CSS 字符串 | 纯数字（如 `"3"`）自动由 `parseGridValue` 展开为 `repeat(3, minmax(0, 1fr))`，原生支持数字、CSS 模板与断点对象 |
+| 控件光标（Cursors） | 未单独解释默认值来源 | 遵循原生桌面端规范，默认 `--cursor-button: default`；全局改手型改令牌，不改类名 |

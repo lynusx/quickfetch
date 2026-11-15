@@ -1,4 +1,4 @@
-# 布局模式：后台 / 工具类界面的十种拼法
+# 布局模式：后台 / 工具类界面的十二种拼法
 
 这份文件只回答一件事：**这个界面该用哪些组件、怎么拼。**
 「该选哪个组件、要不要封成业务组件、什么时候破例」见 [practices.md](practices.md)。
@@ -23,6 +23,9 @@
 | 8 | 滚动面板 | 内容超出高度、需要独立滚动 |
 | 9 | 弹窗 | 确认、表单、详情 |
 | 10 | 分栏 | 左列表 + 右详情，或导航 + 内容 |
+| 11 | 属性与元数据列表 | 详情页、侧栏参数、信息卡片 |
+| 12 | 零抖动骨架屏与原地加载 | 异步数据拉取、卡片/表单加载态 |
+| 13 | 尺寸与弹性包裹 | 叶子组件（Slider、Text 截断、ScrollArea、Badge）控制尺寸与弹性 |
 
 ---
 
@@ -401,6 +404,149 @@ const TONE_COLOR = { default: undefined, accent: 'indigo', success: 'green', dan
 - `1fr` 的默认最小值是 `auto`，内容宽于容器时列会被撑开。**能收缩的列一律写 `minmax(0, 1fr)`**。
 - 固定宽度那一侧也用 `minmax(280px, 360px)`：窗口窄时不至于把右侧压没。
 - `align="start"` 让两栏顶部对齐；否则高度不等的两栏会被拉平，视觉上「左栏底部一大堆空白」。
+
+---
+
+## 11. 属性与元数据列表
+
+**需求**：在详情面板或抽屉中展示规范的「标签: 值」多行信息，标签固定宽度对齐，值支持文本、徽标与代码，移动端自动折叠。
+
+```tsx
+// ✅ DataList 专有语义；统一用 DataList.Label width 对齐
+<Card variant="surface">
+  <DataList.Root orientation={{ initial: 'vertical', sm: 'horizontal' }} size="2">
+    <DataList.Item align="center">
+      <DataList.Label width="100px" color="gray">任务状态</DataList.Label>
+      <DataList.Value><Badge color="green" variant="soft">运行中</Badge></DataList.Value>
+    </DataList.Item>
+    <DataList.Item align="center">
+      <DataList.Label width="100px" color="gray">工作目录</DataList.Label>
+      <DataList.Value><Text truncate>/var/log/quickfetch/run.log</Text></DataList.Value>
+    </DataList.Item>
+    <DataList.Item align="center">
+      <DataList.Label width="100px" color="gray">节点标识</DataList.Label>
+      <DataList.Value><Code variant="ghost">NODE_09_SOUTH</Code></DataList.Value>
+    </DataList.Item>
+  </DataList.Root>
+</Card>
+```
+
+```tsx
+// ❌ 用 Flex 逐行手拼，写死 CSS flex-basis 或内联 style 控制宽度
+<Flex direction="column" gap="2">
+  <Flex align="center">
+    <Text style={{ width: 100 }}>任务状态</Text>
+    <Badge color="green">运行中</Badge>
+  </Flex>
+</Flex>
+```
+
+**为什么**：
+- `DataList` 渲染原生 `<dl>`、`<dt>`、`<dd>`，在读屏器和无障碍测试中具备完整的键值语义。
+- `DataList.Label` 的 `width` prop 可直接统一列宽，不写 CSS。
+- 响应式 `orientation` 可以用单个 prop 实现移动端（上下）到桌面端（左右）的自适应，不需要断点 CSS。
+
+---
+
+## 12. 零抖动骨架屏与原地加载
+
+**需求**：页面或卡片数据异步加载时展示骨架占位，加载完成平滑呈现真实内容，无布局跳动（Zero Layout Shift）。
+
+```tsx
+// ✅ Skeleton 原地包裹：loading=true 自动测量子元素尺寸并占位
+<Card variant="surface">
+  <Flex direction="column" gap="3">
+    <Skeleton loading={isLoading}>
+      <Heading size="3" trim="both">{data?.title ?? '占位标题文本'}</Heading>
+    </Skeleton>
+    <Skeleton loading={isLoading}>
+      <Text size="2" color="gray">{data?.description ?? '占位描述文本内容占位'}</Text>
+    </Skeleton>
+    <Flex justify="end">
+      <Spinner loading={isSubmitting}>
+        <Button onClick={handleSubmit} disabled={isLoading}>保存配置</Button>
+      </Spinner>
+    </Flex>
+  </Flex>
+</Card>
+```
+
+```tsx
+// ❌ 条件三元分支渲染独立尺寸的 Skeleton：尺寸必定与真实文本不一致，导致二次重排跳跃
+<Card variant="surface">
+  {isLoading ? (
+    <Skeleton width="180px" height="24px" />
+  ) : (
+    <Heading size="3">{data.title}</Heading>
+  )}
+</Card>
+```
+
+**为什么**：
+- Radix Themes 的 `Skeleton` 在 `loading={true}` 时直接利用子元素（Slot）的真实行高、字号计算外观，不会产生像素级落差。
+- `Spinner` 在包裹子组件且 `loading={true}` 时，子元素以 `visibility: hidden` 占位保留完整盒模型空间，并在中心绝对定位居中转轮，杜绝了按钮在 loading 时变宽变窄的抖动。
+
+---
+
+## 13. 尺寸与弹性包裹（叶子组件布局拓扑）
+
+**需求**：叶子组件（`Slider`、`Text`、`Button`、`ScrollArea`、`Badge`）需要控制弹性比例、固定尺寸、限高限宽或安全截断。
+
+```tsx
+// ✅ 模式 A：Slider 填满行内剩余弹性空间，尾部固定数值宽度
+<Flex align="center" gap="4">
+  <Text size="2">并发线程数</Text>
+  <Box flexGrow="1" flexShrink="1" flexBasis="0" minWidth="0">
+    <Slider value={[val]} min={1} max={16} onValueChange={...} />
+  </Box>
+  <Box flexShrink="0" minWidth="32px">
+    <Text size="2" weight="medium" align="right" className="tabular">{val}</Text>
+  </Box>
+</Flex>
+
+// ✅ 模式 B：Flex 行内的长文本安全收缩截断（杜绝撑开面板横向滚动）
+<Flex align="center" gap="2">
+  <Text size="1" color="gray">路径：</Text>
+  <Box minWidth="0" maxWidth="100%">
+    <Text size="1" color="gray" truncate className="mono" title={path}>{path}</Text>
+  </Box>
+</Flex>
+
+// ✅ 模式 C：ScrollArea 局部限高与边框包裹
+<Box maxHeight="240px" className="app-scroll-boundary">
+  <ScrollArea type="auto" scrollbars="vertical">
+    {items.map(...)}
+  </ScrollArea>
+</Box>
+
+// ✅ 模式 D：Badge 限制最大宽度与截断
+<Box maxWidth="84px" overflow="hidden" ml="auto">
+  <Badge color="blue" truncate>{status}</Badge>
+</Box>
+```
+
+```css
+/* ❌ 错误：跳过 5 大布局容器，直接向叶子组件类注入布局声明 */
+.slider-container {
+  flex: 1 1 0;
+}
+.slider-value {
+  flex-shrink: 0;
+  min-width: 32px;
+}
+.copy-progress-path {
+  min-width: 0;
+  max-width: 100%;
+}
+.history-scroll {
+  max-height: 240px;
+}
+```
+
+**为什么**：
+- Radix Themes 中只有 `Box`、`Flex`、`Grid`、`Container`、`Section` 拥有 `LayoutProps`。叶子组件（`Text` 等）只有 `MarginProps`，本身并不承担几何尺寸与弹性。
+- 把尺寸或弹性直接挂到叶子组件的 CSS 类上，属于典型的 CSS 布局泄漏，脱离了 Radix props 系统且无法利用断点响应。
+- 用 `<Box>` / `<Flex>` 显式包裹，不仅类型安全、支持响应式对象，而且布局拓扑一目了然。
 
 ---
 

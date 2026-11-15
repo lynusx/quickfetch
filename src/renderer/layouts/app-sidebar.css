@@ -7,12 +7,6 @@
   user-select: none;
 }
 
-/* ScrollArea 不转发 flexGrow/minHeight，弹性只能留在这里 */
-.sidebar-scroll {
-  flex: 1;
-  min-height: 0;
-}
-
 .nav-group + .nav-group {
   margin-top: var(--space-5);
 }
@@ -83,10 +77,6 @@
 .nav-item[aria-current='page'] .nav-icon {
   background: var(--accent-a4);
   color: var(--accent-11);
-}
-
-.nav-text {
-  min-width: 0;
 }
 
 .nav-label {

@@ -200,15 +200,17 @@ const CopyProgress = ({
             </Text>
           ) : null}
 
-          <Text
-            size="1"
-            color="gray"
-            truncate
-            className="mono copy-progress-path"
-            title={progress.currentPath}
-          >
-            {progress.currentPath}
-          </Text>
+          <Box minWidth="0" maxWidth="100%">
+            <Text
+              size="1"
+              color="gray"
+              truncate
+              className="mono"
+              title={progress.currentPath}
+            >
+              {progress.currentPath}
+            </Text>
+          </Box>
         </Flex>
 
         {task.status === 'completed' && progress.targetDir ? (
@@ -233,12 +235,11 @@ const CopyProgress = ({
         ) : null}
 
         {task.failures.length > 0 ? (
-          <Flex direction="column" gap="1">
+          <Flex direction="column" gap="1" align="start">
             <Button
               variant="ghost"
               color="red"
               size="1"
-              className="self-start"
               onClick={onToggleFailures}
             >
               {showFailures
@@ -246,31 +247,34 @@ const CopyProgress = ({
                 : `查看失败明细（${task.failures.length}）`}
             </Button>
             {showFailures ? (
-              <ScrollArea
-                type="auto"
-                scrollbars="vertical"
-                className="failure-list"
-              >
-                {task.failures.map((failure) => (
-                  <Box
-                    className="failure-row"
-                    key={`${failure.path}-${failure.to}`}
-                    p="2"
-                  >
-                    <Text
-                      size="1"
-                      truncate
-                      className="mono"
-                      title={failure.path}
+              <Box maxHeight="160px" width="100%" className="failure-list">
+                <ScrollArea type="auto" scrollbars="vertical">
+                  {task.failures.map((failure) => (
+                    <Box
+                      className="failure-row"
+                      key={`${failure.path}-${failure.to}`}
+                      p="2"
                     >
-                      {failure.path}
-                    </Text>
-                    <Text size="1" color="red" truncate title={failure.reason}>
-                      {failure.reason}
-                    </Text>
-                  </Box>
-                ))}
-              </ScrollArea>
+                      <Text
+                        size="1"
+                        truncate
+                        className="mono"
+                        title={failure.path}
+                      >
+                        {failure.path}
+                      </Text>
+                      <Text
+                        size="1"
+                        color="red"
+                        truncate
+                        title={failure.reason}
+                      >
+                        {failure.reason}
+                      </Text>
+                    </Box>
+                  ))}
+                </ScrollArea>
+              </Box>
             ) : null}
           </Flex>
         ) : null}

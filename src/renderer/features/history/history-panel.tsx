@@ -184,9 +184,11 @@ const HistoryPanel = ({
               py="2"
               px="3"
             >
-              <Text as="div" size="1" className="history-toolbar-hint">
-                每条记录包含全部图片路径，可恢复查看或再次复制；保留条数在设置页调整。
-              </Text>
+              <Box flexGrow="1" minWidth="0">
+                <Text as="p" size="1" color="gray">
+                  每条记录包含全部图片路径，可恢复查看或再次复制；保留条数在设置页调整。
+                </Text>
+              </Box>
               {visible.length > 0 ? (
                 <Button
                   variant="soft"
@@ -224,12 +226,8 @@ const HistoryPanel = ({
             ) : null}
 
             {!loading && visible.length > 0 ? (
-              <Box className="history-list">
-                <ScrollArea
-                  type="auto"
-                  scrollbars="vertical"
-                  className="history-scroll"
-                >
+              <Box className="history-list" maxHeight="300px">
+                <ScrollArea type="auto" scrollbars="vertical">
                   {visible.map((item) => {
                     const meta = SCAN_STATUS_META[item.status]
                     const busy = loadingTaskId === item.id
@@ -251,7 +249,7 @@ const HistoryPanel = ({
                           flexGrow="1"
                           minWidth="0"
                         >
-                          <Flex className="history-time" align="center" gap="2">
+                          <Flex className="tabular" align="center" gap="2">
                             <Text size="1" color="gray">
                               {formatTime(item.createdAt)}
                             </Text>
@@ -264,9 +262,7 @@ const HistoryPanel = ({
                             </Badge>
                             {item.status === 'completed' &&
                             item.totalImages === 0 ? (
-                              <Badge color="amber" variant="soft" size="1">
-                                未命中
-                              </Badge>
+                              <Badge color="amber">未命中</Badge>
                             ) : null}
                           </Flex>
                           <button
@@ -275,25 +271,27 @@ const HistoryPanel = ({
                             title={`${item.params.machines.join('、')}\n${summarize(item)}`}
                             onClick={() => handleRestore(item)}
                           >
-                            <Text size="1" weight="medium">
+                            <Text size="1" weight="medium" truncate>
                               {summarize(item)}
                             </Text>
                           </button>
                         </Flex>
 
-                        <Flex
-                          direction="column"
-                          align="end"
-                          className="history-stats"
-                        >
-                          <Text as="div" size="1" color="gray">
-                            {item.totalImages} 张 · {item.hitMachines}/
-                            {item.machineCount} 台
-                          </Text>
-                          <Text as="div" size="1" color="gray">
-                            {formatDuration(item.elapsedMs)}
-                          </Text>
-                        </Flex>
+                        <Box flexShrink="0">
+                          <Flex
+                            direction="column"
+                            align="end"
+                            className="tabular"
+                          >
+                            <Text as="div" size="1" color="gray" align="right">
+                              {item.totalImages} 张 · {item.hitMachines}/
+                              {item.machineCount} 台
+                            </Text>
+                            <Text as="div" size="1" color="gray" align="right">
+                              {formatDuration(item.elapsedMs)}
+                            </Text>
+                          </Flex>
+                        </Box>
 
                         <IconButton
                           variant="ghost"

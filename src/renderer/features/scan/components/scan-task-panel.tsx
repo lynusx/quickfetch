@@ -257,8 +257,10 @@ export const ScanTaskPanel = ({
           </Flex>
 
           {!ready && !busy && missing?.length ? (
-            <Flex className="inline-hint" align="start" gap="2">
-              <InfoCircledIcon width={13} height={13} />
+            <Flex align="start" gap="2">
+              <Box flexShrink="0" mt="1" className="inline-hint-icon">
+                <InfoCircledIcon width={13} height={13} />
+              </Box>
               <Text size="1" color="gray">
                 还需要选择{missing.join('、')}，选齐后才能开始扫描
               </Text>
@@ -351,7 +353,8 @@ export const ScanTaskPanel = ({
                       size="1"
                       color="gray"
                       highContrast
-                      className="data-row-machine"
+                      truncate
+                      className="mono"
                       title={row.machine}
                     >
                       {row.machine}
@@ -368,14 +371,16 @@ export const ScanTaskPanel = ({
                         className="status-dot"
                         data-tone={DOT_TONE[row.tone] || undefined}
                       />
-                      <Text
-                        size="1"
-                        weight={row.tone === 'danger' ? 'medium' : undefined}
-                        color={STATUS_TEXT_COLOR[row.tone] ?? 'gray'}
-                        className="data-row-message"
-                      >
-                        {row.statusText}
-                      </Text>
+                      <Box minWidth="0">
+                        <Text
+                          size="1"
+                          weight={row.tone === 'danger' ? 'medium' : undefined}
+                          color={STATUS_TEXT_COLOR[row.tone] ?? 'gray'}
+                          truncate
+                        >
+                          {row.statusText}
+                        </Text>
+                      </Box>
                     </Flex>
                     <Text
                       size="1"
@@ -383,7 +388,7 @@ export const ScanTaskPanel = ({
                       weight="medium"
                       color="gray"
                       highContrast
-                      className="data-row-value"
+                      className="tabular"
                     >
                       {row.imagesText}
                     </Text>

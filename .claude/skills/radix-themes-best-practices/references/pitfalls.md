@@ -21,6 +21,11 @@
 | 9 | 嵌套 Theme 后颜色更怪了 | 半自动 |
 | 10 | 验证时数字对不上 | 靠流程 |
 | 11 | 想要的 prop 在 Themes 页找不到，于是自己实现 | 半自动 |
+| 12 | `Tooltip` 悬浮在 `disabled` 元素上不出现 | 半自动 |
+| 13 | `Select` 下拉菜单覆盖在按钮正上方 | 半自动 |
+| 14 | 按钮 hover 不是手型光标，手写类名覆盖 | ✅ |
+| 15 | 响应式断点写成 `base` 或 Tailwind 前缀导致失效 | ✅ |
+| 16 | 与预设组件对抗：写大段 CSS 暴力覆盖内部结构 | ✅ |
 
 ---
 
@@ -45,7 +50,8 @@
 **改法**：一个属性只有一个来源。
 
 - 布局属性（`display` / `flex-*` / `gap` / `padding` / `width` / 对齐）写 props，从 CSS 删掉。
-- CSS 只留 props 表达不了的：`:hover`、`[data-state]`、`border`、`background`、`font-family`、`grid-template-columns`、`max-width` 的响应式组合。
+- 列数与网格模板优先使用 `Grid` 的 `columns` prop（原生支持 `"3"`、`"100px 1fr"` 与响应式对象）；表格列宽优先使用 `Table.Root layout="fixed"` + `Table.Cell width`。
+- CSS 只留 props 表达不了的：`:hover`、`[data-state]`、`border`、`background`、`font-family`、`repeat(auto-fill, ...)`、`max-width` 的响应式组合。
 
 **迁移前必做**：先量**原生效值**。`gap: 8px` 对应 `gap="2"`，不是 `gap="1"`。删 CSS 的依据是「换成 prop 后计算值不变」，不是「看起来差不多」。
 
@@ -269,7 +275,7 @@ grep -rnE 'color:\s*var\(--(gray|accent)-[0-9]+\)' src --include=*.css
 }
 ```
 
-**圆角不要在这里写**：`Card` 默认 `size="2"` 自己算出 `--radius-4`，跟着 `Theme` 的 `radius` 一起缩放。真要更大的圆角就传 `size`，别覆盖 `--base-card-border-radius`。
+**圆角不要在这里写**：`Card` 默认 `size="1"`（以及 `size="2"`）自己算出 `--radius-4`，跟着 `Theme` 的 `radius` 一起缩放。真要更大的圆角就传 `size`，别覆盖 `--base-card-border-radius`。
 
 **预期差异**：`surface` 的描边是 `::after` 上的 inset ring，**不占布局**。从手写 `border` 换过来时，卡片会矮 1–2px、内容内缩少 1px。这是正常的。
 
@@ -459,6 +465,191 @@ grep -rnE "addEventListener\('(keydown|pointerdown|mousedown)'|getBoundingClient
 
 ---
 
+## 12. `Tooltip` 悬浮在 `disabled` 元素上不出现
+
+**症状**：给禁用的按钮或输入框加了 `<Tooltip content="未授权">`，鼠标悬浮或聚焦时 Tooltip 没有任何反应。
+
+**原因**：原生浏览器规范中，处于 `disabled` 状态的 HTML 表单元素不会发射指针事件（pointer events），导致 `Tooltip` 无法接收到 `onPointerEnter` / `onFocus` 事件。
+
+**改法**：在禁用元素外包裹一层能接收事件的非禁用容器（如 `span` 或 `Box`），并赋予 `tabIndex={0}` 以支持键盘聚焦：
+
+```tsx
+// ❌ 禁用按钮直接作为 Tooltip 唯一子节点：指针事件被吞
+<Tooltip content="当前无权操作">
+  <Button disabled>提交</Button>
+</Tooltip>
+
+// ✅ 外包非禁用容器承接指针与聚焦事件
+<Tooltip content="当前无权操作">
+  <Box asChild display="inline-block" tabIndex={0}>
+    <span>
+      <Button disabled style={{ pointerEvents: 'none' }}>提交</Button>
+    </span>
+  </Box>
+</Tooltip>
+```
+
+**怎么查**：
+```bash
+# 检查 Tooltip 是否直接包了 disabled 控件
+grep -rn -B 1 -A 2 'disabled' src --include=*.tsx | grep -B 2 'Tooltip'
+```
+
+---
+
+## 13. `Select` 下拉菜单覆盖在按钮正上方
+
+**症状**：点击 `Select.Trigger` 后，下拉菜单不是像常规 Web 控件那样在下方展开，而是正对着当前选中项直接盖在按钮上方，遮挡了触发器。
+
+**原因**：`Select.Content` 的 `position` 默认值为 `"item-aligned"`（macOS/iOS 原生 Picker 习惯）。
+
+**改法**：显式声明 `position="popper"`，并配合 `side="bottom"`：
+
+```tsx
+// ✅ 传统 Web 风格下拉
+<Select.Root value={val} onValueChange={setVal}>
+  <Select.Trigger />
+  <Select.Content position="popper" side="bottom" sideOffset={4}>
+    <Select.Item value="1">选项一</Select.Item>
+  </Select.Content>
+</Select.Root>
+```
+
+**怎么查**：
+```bash
+# 找出未配置 position="popper" 的 Select.Content
+grep -rn '<Select.Content' src --include=*.tsx | grep -v 'position="popper"'
+```
+
+---
+
+## 14. 按钮 hover 不是手型光标，手写类名覆盖
+
+**症状**：项目要求所有按钮在 hover 时呈现手型（`pointer`），开发者编写了 `.my-button { cursor: pointer; }` 或覆盖 `.rt-Button`，导致控制台类名膨胀且禁用的 `not-allowed` 状态被暴力覆盖。
+
+**原因**：Radix Themes 默认遵循现代操作系统桌面规范，所有按钮与复选框采用 `--cursor-button: default`。
+
+**改法**：**不要写类名样式**，在全局根样式表（如 `src/renderer/index.css`）覆盖 Radix 令牌，既全局生效又保留 disabled 时的 `not-allowed`：
+
+```css
+/* ✅ 令牌层统一控制 */
+:root {
+  --cursor-button: pointer;
+  --cursor-checkbox: pointer;
+  --cursor-switch: pointer;
+}
+```
+
+**怎么查**：
+```bash
+# 查找是否有针对按钮或自定义类硬写 cursor: pointer
+grep -rnE '^\s*cursor:\s*pointer' src --include=*.css
+```
+
+---
+
+## 15. 响应式断点写成 `base` 或 Tailwind 前缀导致失效
+
+**症状**：写了响应式对象 `columns={{ base: '1', md: '3' }}` 或类名 `className="md:grid-cols-3"`，但在移动端没有任何样式，或者类型报错。
+
+**原因**：Radix Themes 的断点 key 全集是 `initial`、`xs`、`sm`、`md`、`lg`、`xl`。移动端基线**必须是 `initial`**，不认识 Chakra 风格的 `base`，也不接 Tailwind 语法。
+
+**改法**：
+```tsx
+// ❌ 错误
+<Grid columns={{ base: '1', md: '3' }} className="sm:gap-2">
+
+// ✅ 正确
+<Grid columns={{ initial: '1', md: '3' }} gap={{ initial: '2', md: '4' }}>
+```
+
+**怎么查**：
+```bash
+# 检查是否混入了 base key
+grep -rnE '\{\{[^}]*\bbase\s*:' src --include=*.tsx
+```
+
+---
+
+## 16. 与预设组件对抗：写大段 CSS 暴力覆盖内部结构
+
+**症状**：为了实现一个特殊视觉形态，给 `<Button>`、`<Badge>`、`<Card>` 挂了自定义 class，并在 CSS 里编写 `padding: ... !important; height: ...; border-style: dashed;` 等大段样式覆盖库自带外观。
+
+**原因**：忽视了 Radix 官方推荐的样式分流哲学（*Beyond simple style overrides, use components as-is or create your own using building blocks*）。对高层成品组件做破坏性覆盖会破坏库内置的 Focus 环、Hover/Active 滤镜、无障碍反馈及特异性约束。
+
+**改法**：
+1. **As-Is**：若使用成品组件，全盘接受其预设尺寸与边框体系，只通过 `variant` / `size` / `color` 等 prop 调节。
+2. **构建块自组**：若形态完全偏离，改用 14 个构建块（`Box` / `Flex` / `Grid` / `Text`）+ 令牌组装；需要交互时外包 `<Button asChild>`：
+
+```tsx
+// ❌ 错误：用 Button 强行改造成虚线上传卡片
+<Button className="upload-dropzone">点击上传文件</Button>
+/* CSS: .upload-dropzone { height: 120px !important; border: 2px dashed var(--gray-a6); padding: 0 !important; } */
+
+// ✅ 正确：用构建块自组，外包 Button asChild 保持无障碍按键行为
+<Button asChild variant="ghost" className="upload-dropzone-button">
+  <Flex
+    direction="column"
+    align="center"
+    justify="center"
+    gap="2"
+    p="6"
+    className="upload-dropzone-box"
+  >
+    <UploadIcon />
+    <Text size="2" weight="medium">点击或拖拽文件到此处上传</Text>
+  </Flex>
+</Button>
+```
+
+**怎么查**：
+```bash
+# 检查是否有针对 Radix 预设组件内部类名或挂点覆盖高度、内边距
+grep -rnE '(\.rt-Button|\.rt-Card|\.rt-Badge)[^{]*\{[^}]*(padding|height|border-style)' src --include=*.css
+```
+
+---
+
+## 17. 绕过 5 大布局容器，通过 CSS 类向非布局组件注入布局属性
+
+**症状**：给 `<Text>`、`<Slider>`、`<Button>`、`<Badge>` 等非布局组件挂自定义 class，并在 CSS 里写 `min-width: 0; max-width: 100%;`、`flex: 1 1 0;`、`flex-shrink: 0;`、`width: ...;` 或 `align-self: flex-start;` 等布局属性。
+
+**原因**：忽视了 Radix Themes 中**仅有 5 个基础布局组件**（`Box`、`Flex`、`Grid`、`Container`、`Section`）实现了 `LayoutProps`。叶子组件（`Text` 等）只有 `MarginProps`，本身并不承担几何尺寸与弹性。开发者为了图省事，不套 `Box` / `Flex`，而是手写自定义 CSS 类向叶子注入布局属性，破坏了「props 管布局，CSS 管外观」的单一真相原则。
+
+**改法**：
+使用 `<Box>` 或 `<Flex>` 显式包裹叶子组件，所有尺寸、弹性与几何边界一律由包裹容器的 props 控制：
+
+```tsx
+// ❌ 错误：在 CSS 里给 Text 注入 min-width/max-width 做收缩截断
+<Text size="1" truncate className="copy-progress-path">{path}</Text>
+/* CSS: .copy-progress-path { min-width: 0; max-width: 100%; } */
+
+// ✅ 正确：外包 Box，props 表达几何边界与截断收缩
+<Box minWidth="0" maxWidth="100%">
+  <Text size="1" truncate>{path}</Text>
+</Box>
+
+// ❌ 错误：在 CSS 里为 Slider 或数值列手写 flex 弹性
+.settings-row-slider .settings-row-control { flex: 1 1 0; }
+.settings-row-value { flex-shrink: 0; min-width: 32px; text-align: right; }
+
+// ✅ 正确：Slider 外层包 Box 传弹性 props，数值外层包固定尺寸 Box
+<Box flexGrow="1" flexShrink="1" flexBasis="0" minWidth="0">
+  <Slider value={[val]} />
+</Box>
+<Box flexShrink="0" minWidth="32px">
+  <Text size="2" weight="medium" align="right" className="tabular">{val}</Text>
+</Box>
+```
+
+**怎么查**：
+```bash
+# 检查 CSS 中是否向非布局类注入了尺寸与弹性属性
+grep -rnE '^\s*(min-width|max-width|flex|flex-grow|flex-shrink|flex-basis|align-self)\s*:' src --include=*.css
+```
+
+---
+
 ## 附：一页速查
 
 | 现象 | 最可能的原因 | 一句话改法 |
@@ -474,3 +665,9 @@ grep -rnE "addEventListener\('(keydown|pointerdown|mousedown)'|getBoundingClient
 | 嵌套后灰阶不对 | 继承已解析灰阶 | 显式 `grayColor="auto"` |
 | 数字对不上 | 抄的旧 CSS | 用 `getComputedStyle` 量 |
 | 又手写了一层交互 | 继承 prop 面没查 | 看 [components.md §11](components.md#11-继承-prop-面) |
+| Tooltip 在禁用按钮上失效 | 禁用元素无指针事件 | 外包一层带有 tabIndex 的 span/Box |
+| Select 盖在按钮正上方 | 默认 item-aligned | 加 `position="popper"` |
+| 按钮 hover 箭头想要手型 | 默认遵循桌面规范 | 覆盖变量 `--cursor-button: pointer;` |
+| 响应式断点无效或报错 | 写了 base 或 Tailwind 类 | 统一用 `initial` 与六档标准断点 |
+| 暴力覆盖组件内边距与高度 | 违背 As-Is 原则 | 要么 as-is，要么用构建块自组 |
+| 非布局组件在 CSS 里写宽高弹性 | 绕过 5 大布局容器 | 外层包 `<Box>` / `<Flex>` 并由 props 控制 |
