@@ -1,0 +1,8 @@
+/* 空状态：Empty。布局由 Flex / Box props 表达，文本色由 Text props 表达，
+   本文件只保留图标容器外观。 */
+
+.empty-media[data-variant='icon'] {
+  border-radius: var(--radius-3);
+  background: var(--gray-a3);
+  color: var(--gray-9);
+}

@@ -40,19 +40,19 @@ export const PanelHeader = ({
             className="panel-icon"
             align="center"
             justify="center"
-            width="22px"
-            height="22px"
+            width="24px"
+            height="24px"
             flexShrink="0"
           >
             {icon}
           </Flex>
         ) : null}
-        <Heading as="h2" size="2">
+        <Heading as="h2" size="3" weight="medium">
           {title}
         </Heading>
       </Flex>
       {description ? (
-        <Text as="p" size="1" className="panel-description" mt="1">
+        <Text as="p" size="1" color="gray" mt="1">
           {description}
         </Text>
       ) : null}

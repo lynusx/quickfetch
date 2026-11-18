@@ -1,8 +1,9 @@
-import { CheckCircledIcon } from '@radix-ui/react-icons'
+import { CircleCheck } from 'lucide-react'
 import {
   Badge,
   Box,
   Button,
+  Code,
   Flex,
   Progress,
   ScrollArea,
@@ -140,7 +141,7 @@ const CopyProgress = ({
         <Flex align="baseline" justify="between" gap="3" mb="2">
           <Flex align="center" gap="2">
             {running ? <Spinner size="1" /> : null}
-            <Text size="1" weight="medium" className="progress-label">
+            <Text size="1" weight="medium" color="gray">
               完成进度
             </Text>
           </Flex>
@@ -201,26 +202,35 @@ const CopyProgress = ({
           ) : null}
 
           <Box minWidth="0" maxWidth="100%">
-            <Text
+            <Code
+              variant="ghost"
               size="1"
               color="gray"
               truncate
-              className="mono"
               title={progress.currentPath}
             >
               {progress.currentPath}
-            </Text>
+            </Code>
           </Box>
         </Flex>
 
         {task.status === 'completed' && progress.targetDir ? (
           <Flex align="center" gap="1">
-            <CheckCircledIcon width={14} height={14} className="success-icon" />
+            <CircleCheck
+              size={14}
+              strokeWidth={1.75}
+              className="success-icon"
+            />
             <Text size="1" color="gray">
               已写入{' '}
-              <Text className="mono" title={progress.targetDir}>
+              <Code
+                variant="ghost"
+                color="gray"
+                highContrast
+                title={progress.targetDir}
+              >
                 {progress.targetDir}
-              </Text>
+              </Code>
             </Text>
           </Flex>
         ) : null}
@@ -228,9 +238,9 @@ const CopyProgress = ({
         {task.manifestPath ? (
           <Text size="1" color="gray" truncate>
             清单：
-            <Text ml="1" className="mono">
+            <Code variant="ghost" color="gray" highContrast ml="1">
               {task.manifestPath}
-            </Text>
+            </Code>
           </Text>
         ) : null}
 
@@ -248,21 +258,23 @@ const CopyProgress = ({
             </Button>
             {showFailures ? (
               <Box maxHeight="160px" width="100%" className="failure-list">
-                <ScrollArea type="auto" scrollbars="vertical">
+                <ScrollArea type="auto" size="1" scrollbars="vertical">
                   {task.failures.map((failure) => (
                     <Box
                       className="failure-row"
                       key={`${failure.path}-${failure.to}`}
                       p="2"
                     >
-                      <Text
+                      <Code
+                        variant="ghost"
                         size="1"
+                        color="gray"
+                        highContrast
                         truncate
-                        className="mono"
                         title={failure.path}
                       >
                         {failure.path}
-                      </Text>
+                      </Code>
                       <Text
                         size="1"
                         color="red"

@@ -1,4 +1,4 @@
-import { ExclamationTriangleIcon } from '@radix-ui/react-icons'
+import { TriangleAlert } from 'lucide-react'
 import { Callout, Strong } from '@radix-ui/themes'
 
 /**
@@ -20,7 +20,7 @@ export const UnconfiguredNotice = ({
 }: UnconfiguredNoticeProps) => (
   <Callout.Root color="amber" size="1">
     <Callout.Icon>
-      <ExclamationTriangleIcon width={14} height={14} />
+      <TriangleAlert size={14} strokeWidth={1.75} />
     </Callout.Icon>
     <Callout.Text>
       <Strong>{title}：</Strong>
@@ -33,7 +33,7 @@ export const UnconfiguredNotice = ({
 export const NoMachinesNotice = () => (
   <Callout.Root color="amber" size="1">
     <Callout.Icon>
-      <ExclamationTriangleIcon width={14} height={14} />
+      <TriangleAlert size={14} strokeWidth={1.75} />
     </Callout.Icon>
     <Callout.Text>
       <Strong>入口里没有可用机台：</Strong>

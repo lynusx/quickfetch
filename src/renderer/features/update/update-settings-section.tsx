@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ExclamationTriangleIcon, InfoCircledIcon } from '@radix-ui/react-icons'
+import { Info, TriangleAlert } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -241,7 +241,7 @@ export const UpdateSettingsSection = () => {
         {portable && phase === 'available' ? (
           <Callout.Root color="amber" mt="1">
             <Callout.Icon>
-              <InfoCircledIcon width={16} height={16} />
+              <Info size={16} strokeWidth={1.75} />
             </Callout.Icon>
             <Callout.Text>
               当前为免安装版，无法自动安装。请下载 zip，关闭应用后覆盖原目录；
@@ -253,7 +253,7 @@ export const UpdateSettingsSection = () => {
         {installed && phase === 'downloaded' && !postponed ? (
           <Callout.Root color="green" mt="1">
             <Callout.Icon>
-              <InfoCircledIcon width={16} height={16} />
+              <Info size={16} strokeWidth={1.75} />
             </Callout.Icon>
             <Callout.Text>
               <Flex align="center" justify="between" gap="3" wrap="wrap">
@@ -278,7 +278,7 @@ export const UpdateSettingsSection = () => {
         {state?.blockedByTasks && state.blockedReason ? (
           <Callout.Root color="amber" mt="1">
             <Callout.Icon>
-              <ExclamationTriangleIcon width={16} height={16} />
+              <TriangleAlert size={16} strokeWidth={1.75} />
             </Callout.Icon>
             <Callout.Text>{state.blockedReason}</Callout.Text>
           </Callout.Root>
@@ -287,7 +287,7 @@ export const UpdateSettingsSection = () => {
         {phase === 'error' && state?.error ? (
           <Callout.Root color="red" role="alert" mt="1">
             <Callout.Icon>
-              <ExclamationTriangleIcon width={16} height={16} />
+              <TriangleAlert size={16} strokeWidth={1.75} />
             </Callout.Icon>
             <Callout.Text>{state.error}</Callout.Text>
           </Callout.Root>

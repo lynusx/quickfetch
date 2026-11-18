@@ -154,6 +154,35 @@ const runEntryAction = async (
 }
 
 /**
+ * 力禧特 / 利珀的刷新流程：先重新识别入口，再自动串联重新探测共享。
+ *
+ * 整个过程保持 saving=true，第一步落盘后立即更新机台列表，
+ * 第二步探测完成后再回写最新共享缓存。
+ */
+const runRefreshWithReprobe = async (
+  set: SettingsSet,
+  category: 'lxt' | 'pl',
+  request: () => Promise<EntrySetupResult>,
+): Promise<EntrySetupResult | null> => {
+  set({ saving: true, error: null })
+
+  try {
+    const result = await request()
+    set({ settings: result.settings })
+
+    const reprobed = await window.electronAPI.reprobeShares(category)
+    set({ settings: reprobed })
+
+    return { ...result, settings: reprobed }
+  } catch (error) {
+    set({ error: toErrorMessage(error, '重新识别入口并探测共享失败') })
+    return null
+  } finally {
+    set({ saving: false })
+  }
+}
+
+/**
  * 根目录与机台列表由主进程持久化在 userData/settings.json，
  * 这里只做一层内存镜像，不再走 localStorage —— 主进程扫描时读的是磁盘上的配置。
  */
@@ -283,10 +312,8 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
       ),
 
     refreshLxt: () =>
-      runEntryAction(
-        set,
-        () => window.electronAPI.refreshLxtMachines(),
-        '重新识别入口失败',
+      runRefreshWithReprobe(set, 'lxt', () =>
+        window.electronAPI.refreshLxtMachines(),
       ),
 
     setupPl: (entryRoot) =>
@@ -297,10 +324,8 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
       ),
 
     refreshPl: () =>
-      runEntryAction(
-        set,
-        () => window.electronAPI.refreshPlMachines(),
-        '重新识别入口失败',
+      runRefreshWithReprobe(set, 'pl', () =>
+        window.electronAPI.refreshPlMachines(),
       ),
 
     setupAoi: (entryRoot) =>

@@ -49,7 +49,7 @@ const AoiSideField = ({ machines }: { machines: AoiMachine[] }) => {
       hint="只筛机台列表、不改扫描路径；切到某一侧会清掉另一侧已选的机台。"
     >
       <ChoiceRadio
-        columns={3}
+        layout="inline"
         value={side}
         onValueChange={(value) => setSide(value as AoiSide)}
         options={options}
@@ -69,7 +69,7 @@ const AoiImageKindField = () => {
       hint="整体是整张扫描图（.bmp），局部是异常区域的裁图（.jpg）；两者是机台上的两个同级目录。"
     >
       <ChoiceRadio
-        columns={2}
+        layout="inline"
         value={imageKind}
         onValueChange={(value) => setImageKind(value as AoiImageKind)}
         options={(['whole', 'partial'] as AoiImageKind[]).map((value) => ({
@@ -118,9 +118,6 @@ const AoiMachinePicker = ({ machines, onChanged }: AoiMachinePickerProps) => {
       filter={useAoiFilterStore}
       onSetup={setupAoi}
       onRefresh={refreshAoi}
-      // 森标 AOI 的第二层按图片类型二选一（SaveImages / SaveSmallImages），
-      // 没有共享名可探测，也就没有「未探测」徽标可言
-      showShareBadge={false}
       beforeMachineList={<AoiSideField machines={machines} />}
       afterMachineList={<AoiImageKindField />}
       machineFilter={machineFilter}

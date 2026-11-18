@@ -1,0 +1,3 @@
+# Consolidate Scan Task and Copy into Single-Column Flow
+
+Previously, the right content area stacked three disjoint panels ('Scan Task', 'Copy to Local', and 'Scan History') featuring duplicate machine lists (one for scan results and a 3-column grid for copy selection) and repetitive instructional labels. We consolidated the right content area into a single vertical stream inside a Radix Themes `Card`, merging scan results with in-place copy selection into a single-column `Table`, inlining target directory configuration and copy progress, and collapsing history to the bottom to eliminate visual duplication and let layout structure explain functionality.

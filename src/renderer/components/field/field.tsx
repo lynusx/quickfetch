@@ -24,31 +24,31 @@ export const Field = ({
   children,
 }: FieldProps) => (
   <Flex direction="column" gap="2">
-    <Flex align="center" justify="between" gap="3" minHeight="22px">
+    <Flex align="center" justify="between" gap="3" wrap="wrap" minHeight="32px">
       <Flex align="center" gap="2" minWidth="0">
         {icon ? (
           <Box as="span" className="field-label-icon">
             {icon}
           </Box>
         ) : null}
-        <Text size="1" weight="medium">
+        <Text size="2" weight="medium">
           {label}
         </Text>
         {count != null ? (
-          <Text size="1" weight="medium" className="field-count">
+          <Text size="2" weight="medium" color="gray" className="tabular">
             {count}
           </Text>
         ) : null}
       </Flex>
       {actions ? (
-        <Flex align="center" gap="1" flexShrink="0">
+        <Flex align="center" gap="2" wrap="wrap" flexShrink="0">
           {actions}
         </Flex>
       ) : null}
     </Flex>
     {children}
     {hint ? (
-      <Text as="p" size="1" className="field-hint">
+      <Text as="p" size="1" color="gray">
         {hint}
       </Text>
     ) : null}

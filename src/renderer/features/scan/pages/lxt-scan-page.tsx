@@ -3,10 +3,6 @@ import { useEffect } from 'react'
 import LxtFilterPanel from '../components/lxt-filter-panel'
 import LxtMachinePicker from '../components/lxt-machine-picker'
 import PlantScanPage from '../components/plant-scan-page'
-import {
-  NoMachinesNotice,
-  UnconfiguredNotice,
-} from '../components/scan-notices'
 import { NETWORK_HINT } from '@shared/networkHint'
 import { usePlantScanPage } from '../hooks/usePlantScanPage'
 import { selectLxt, useSettingsStore } from '@/features/settings'
@@ -37,24 +33,17 @@ const LxtScanPage = () => {
   return (
     <PlantScanPage
       category="lxt"
-      notices={
-        !configured ? (
-          <UnconfiguredNotice
-            title="先配置力禧特EL入口"
-            description="在左侧选择入口目录，应用会解析其中的快捷方式并识别各厂区机台"
-          />
-        ) : active.length === 0 ? (
-          <NoMachinesNotice />
-        ) : undefined
-      }
+      configured={configured}
+      hasMachines={active.length > 0}
       networkHint={`${NETWORK_HINT}；点「继续」即可接着扫，已扫到的结果不会丢`}
       ready={ready}
       missing={missing}
       getParams={getParams}
       filterSignature={filterSignature}
       getSignature={getSignature}
-      picker={<LxtMachinePicker machines={lxt.machines} />}
-      filterPanel={<LxtFilterPanel />}
+      scopeForm={
+        <LxtFilterPanel picker={<LxtMachinePicker machines={lxt.machines} />} />
+      }
     />
   )
 }

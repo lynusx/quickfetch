@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { CheckIcon, CircleBackslashIcon } from '@radix-ui/react-icons'
+import { Ban, Check } from 'lucide-react'
 import { Button } from '@radix-ui/themes'
 
 interface BulkActionsProps {
@@ -45,26 +45,30 @@ export const BulkActions = ({
     {onClear ? (
       <Button
         type="button"
-        variant="ghost"
+        variant="soft"
         color="gray"
-        size="1"
         disabled={clearDisabled}
         onClick={onClear}
       >
-        {clearIcon ? <CircleBackslashIcon width={13} height={13} /> : null}
+        {clearIcon ? <Ban size={14} strokeWidth={1.75} /> : null}
         清空
       </Button>
     ) : null}
 
     <Button
       type="button"
-      variant="ghost"
+      variant="soft"
       color="gray"
-      size="1"
       disabled={toggleDisabled}
       onClick={onToggleAll}
     >
-      {toggleIcon ? <CheckIcon width={13} height={13} /> : null}
+      {toggleIcon ? (
+        allSelected ? (
+          <Ban size={14} strokeWidth={1.75} />
+        ) : (
+          <Check size={14} strokeWidth={1.75} />
+        )
+      ) : null}
       {allSelected ? cancelLabel : selectLabel}
     </Button>
 

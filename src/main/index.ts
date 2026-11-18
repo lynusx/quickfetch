@@ -53,8 +53,8 @@ const WINDOW_CHROME_HEIGHT = 40
  *
  * - macOS：hiddenInset 保留原生红绿灯，去掉系统标题
  * - Windows：hidden + titleBarOverlay 只画右上角按钮，去掉图标与标题。
- *   覆盖层颜色对应浅色主题的 --app-canvas（slate gray-2，见 index.css）与 --gray-12；
- *   主进程读不到 CSS 变量，这里用字面量。
+ *   覆盖层底色设为全透明（#00000000），直接透出下层渲染层的 `.app-topbar`（--app-canvas），
+ *   避免 Display P3 广色域色差或与相邻区域的背景拼接缝；图标色对应 --gray-12。
  */
 const windowChrome: BrowserWindowConstructorOptions =
   process.platform === 'darwin'
@@ -62,7 +62,7 @@ const windowChrome: BrowserWindowConstructorOptions =
     : {
         titleBarStyle: 'hidden',
         titleBarOverlay: {
-          color: '#f9f9fb',
+          color: '#00000000',
           symbolColor: '#1c2024',
           height: WINDOW_CHROME_HEIGHT,
         },

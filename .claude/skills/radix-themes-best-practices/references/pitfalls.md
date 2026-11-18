@@ -26,6 +26,10 @@
 | 14 | 按钮 hover 不是手型光标，手写类名覆盖 | ✅ |
 | 15 | 响应式断点写成 `base` 或 Tailwind 前缀导致失效 | ✅ |
 | 16 | 与预设组件对抗：写大段 CSS 暴力覆盖内部结构 | ✅ |
+| 17 | 绕过 Typography 的 color prop 在 CSS 中书写 11/12 阶颜色 | ✅ |
+| 18 | 误以为 Text 无等宽能力，在 CSS 声明 font-family: var(--code-font-family) | ✅ |
+| 19 | 绕过 align prop 在 CSS 中手写 text-align | ✅ |
+| 20 | 忽视 ScrollArea 原生 size prop，手写 ::-webkit-scrollbar 定制滚动条 | ✅ |
 
 ---
 
@@ -650,6 +654,124 @@ grep -rnE '^\s*(min-width|max-width|flex|flex-grow|flex-shrink|flex-basis|align-
 
 ---
 
+## 17. 绕过 Typography color prop 在 CSS 中书写 11/12 阶文本颜色（CSS 颜色泄漏与双写）
+
+**症状**：给 `Text` / `Heading` 加上自定义 class，只为了在 CSS 里声明 `color: var(--gray-12);` 或 `color: var(--gray-11);`。
+
+**原因**：
+1. **默认基准被无谓重写**：Radix Themes 中 `Text` / `Heading` 默认文本色由根主题直接下发（即 `--gray-12`），不需要任何类名或 prop。在 CSS 里写 `color: var(--gray-12)` 纯属冗余覆盖。
+2. **忽视原生次级色 prop**：11 阶辅助色已有 `color="gray"`（精准映射 `--gray-a11` / `--gray-11`），绕过 prop 去自定义 CSS 类会导致双写（如果后续在 TSX 里改 `color="red"` 会被后加载的 CSS 静默吃掉）。
+3. **制造 CSS 泄漏与死类名**：引入无业务语义的空壳类名（如 `.help-tip-title`、`.progress-label`），破坏了「字号是 size，颜色是 color，间距是 props」的单一真相原则。
+
+**改法**：
+彻底删掉纯为 11/12 阶文本颜色服务的 CSS 类，TSX 中直接使用原生 props 或开箱即用：
+
+```tsx
+// ❌ 错误：创建空壳类名只为写 11/12 阶颜色
+<Text size="2" weight="bold" className="help-tip-title">{title}</Text>
+<Text size="1" className="help-tip-text">{desc}</Text>
+<Text size="1" weight="medium" className="progress-label">完成进度</Text>
+
+// ✅ 正确：12 阶无需类名，11 阶用 color="gray"
+<Text size="2" weight="bold">{title}</Text>
+<Text size="1" color="gray">{desc}</Text>
+<Text size="1" weight="medium" color="gray">完成进度</Text>
+```
+
+**怎么查**：
+```bash
+# 检查 CSS 中是否存在向文本类书写 gray-11 或 gray-12 声明
+grep -rnE 'color:\s*var\(--gray-(11|12)\)' src --include=*.css
+```
+
+---
+
+## 18. 误以为 Text 无等宽能力，在 CSS 声明 `font-family: var(--code-font-family)`
+
+**症状**：为了让路径、哈希或机台代码等宽，在外部容器或自定义 CSS 类上声明 `font-family: var(--code-font-family);`，并试图由内部 `Text` 继承。
+
+**原因**：
+忽视了 9 大排版构建块中的 `<Code>` 与 `<Kbd>`。Radix Themes 将等宽字体（`var(--code-font-family)`）直接绑定在 `<Code>` / `<Kbd>` 组件上，而不是给 `Text` 增加 `fontFamily` prop。手写 CSS 属于典型的「跨过已有排版构建块去手搓」。
+
+**改法**：
+- 纯文本等宽（无背景描边）：使用 `<Code size="1" variant="ghost">`。
+- 徽标/标签式等宽：使用 `<Code size="1" variant="soft">`。
+- 彻底删掉 CSS 里的 `font-family: var(--code-font-family);`。
+
+```tsx
+// ❌ 错误：在 CSS 注入等宽字体
+<Flex className="path-strip"><Text size="1" color="gray">{path}</Text></Flex>
+/* CSS: .path-strip { font-family: var(--code-font-family); } */
+
+// ✅ 正确：直接使用 Code 构建块
+<Flex className="path-strip">
+  <Code size="1" variant="ghost" color="gray" truncate>{path}</Code>
+</Flex>
+```
+
+**怎么查**：
+```bash
+grep -rnE 'font-family:\s*var\(--code-font-family\)' src --include=*.css
+```
+
+---
+
+## 19. 绕过 align prop 在 CSS 中手写 `text-align`
+
+**症状**：在 CSS 里写 `text-align: center;` 或 `text-align: right;` 来控制文本居中或对齐。
+
+**原因**：
+排版组件（`Text` / `Heading`）自带 `align="left" | "center" | "right"` prop。在 CSS 自定义类中写 `text-align` 会形成双写并破坏单一真相来源。
+
+**改法**：
+删掉 CSS 里的 `text-align`，在 JSX 中直接为 `Text` 传递 `align` prop：
+
+```tsx
+// ❌ 错误：在 CSS 自定义类写 text-align
+.empty-state { text-align: center; }
+
+// ✅ 正确：由 Text 自身的 align prop 表达
+<Text size="2" weight="medium" align="center">{title}</Text>
+```
+
+**怎么查**：
+```bash
+grep -rnE 'text-align:\s*(center|right|left)' src --include=*.css
+```
+
+---
+
+## 20. 忽视 ScrollArea 原生 size prop，手写 `::-webkit-scrollbar` 定制滚动条
+
+**症状**：在 CSS 中编写 `::-webkit-scrollbar`、`::-webkit-scrollbar-thumb` 去控制全局或局部容器的滚动条宽度与颜色。
+
+**原因**：
+误以为 Radix Themes 无法调节滚动条样式。实际上 Radix 的 `<ScrollArea>` 基于 `@radix-ui/react-scroll-area` 实现了跨平台的虚拟滚动条：
+- 滚动条宽度与滑块粗细原生由 `size` prop 控制（`size="1"` 为 4px/3px 紧凑型，`size="2"` 为 8px/6px 标准型，`size="3"` 为 12px/10px 宽松型）；
+- 滑块底色与 hover 态完全由主题系统与令牌驱动（自动适配明暗模式与主题色联动）；
+- 伪类 `::-webkit-scrollbar` 仅对 WebKit 原生滚动条生效，破坏了组件库的一致性与高对比度无障碍支持。
+
+**改法**：
+彻底删除 CSS 里的 `::-webkit-scrollbar` 声明，需要滚动的区域统一使用 `<ScrollArea>`，并传入 `size` prop：
+
+```tsx
+// ❌ 错误：手写 WebKit 滚动条样式
+.app-shell ::-webkit-scrollbar { width: 10px; }
+.app-shell ::-webkit-scrollbar-thumb { background: var(--gray-a4); }
+
+// ✅ 正确：局部列表传 size="1"，主页面传 size="2"
+<ScrollArea type="auto" size="1" scrollbars="vertical">
+  {items}
+</ScrollArea>
+```
+
+**怎么查**：
+```bash
+grep -rnE '::-webkit-scrollbar' src --include=*.css
+```
+
+---
+
 ## 附：一页速查
 
 | 现象 | 最可能的原因 | 一句话改法 |
@@ -671,3 +793,7 @@ grep -rnE '^\s*(min-width|max-width|flex|flex-grow|flex-shrink|flex-basis|align-
 | 响应式断点无效或报错 | 写了 base 或 Tailwind 类 | 统一用 `initial` 与六档标准断点 |
 | 暴力覆盖组件内边距与高度 | 违背 As-Is 原则 | 要么 as-is，要么用构建块自组 |
 | 非布局组件在 CSS 里写宽高弹性 | 绕过 5 大布局容器 | 外层包 `<Box>` / `<Flex>` 并由 props 控制 |
+| 文本颜色手写 CSS 类 | 绕过 Typography color prop | 12 阶删掉 CSS，11 阶改用 `color="gray"` |
+| 文本想等宽却在 CSS 写字体 | 忽视 Code 排版构建块 | 换用 `<Code variant="ghost">`，删 CSS 字体 |
+| 文本对齐手写 CSS | 绕过 Typography align prop | 删掉 CSS，改用 `<Text align="center">` |
+| 滚动条手写 CSS 定制 | 忽视 ScrollArea size prop | 删掉 `::-webkit-scrollbar`，改用 `<ScrollArea size="1" \| "2">` |

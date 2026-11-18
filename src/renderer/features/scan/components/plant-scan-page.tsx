@@ -1,52 +1,60 @@
 import type { ReactNode } from 'react'
-import { DownloadIcon, MagnifyingGlassIcon } from '@radix-ui/react-icons'
-import { Box, Flex, Grid } from '@radix-ui/themes'
+import { useState } from 'react'
+import { ChevronUp, Play, Search, TriangleAlert } from 'lucide-react'
+import {
+  Badge,
+  Button,
+  Callout,
+  Flex,
+  Separator,
+  Spinner,
+  Strong,
+  Text,
+} from '@radix-ui/themes'
 
-import { CopyPanel } from '@/features/copy'
 import { HistoryPanel } from '@/features/history'
 import { PageShell } from '@/components/page-shell/page-shell'
 import { Panel, PanelBody, PanelHeader } from '@/components/panel'
+import { ScanEntryRootBar, ScanEntrySetupCard } from './scan-entry-root-bar'
 import { ScanStatusBadge } from './scan-status-badge'
 import { ScanTaskPanel } from './scan-task-panel'
+import { ScopeSummaryBar } from './scope-summary-bar'
 import { useScanSession } from '../hooks/useScanSession'
 import { useToast } from '@/hooks/useToast'
-import type { ScanCategory, ScanTaskParams } from '@shared/ipc'
+import type { ScanCategory, ScanHistoryItem, ScanTaskParams } from '@shared/ipc'
 import { SCAN_CATEGORY_LABEL } from '@shared/scanCategories'
 import '../scan.css'
 
 interface PlantScanPageProps {
   category: ScanCategory
-  /** EL 与入口类页面的说明不同；不传时用入口类默认文案 */
-  description?: string
+  configured: boolean
+  hasMachines: boolean
   networkHint: string
-  /** 页面自己的提示条（未配置入口、入口没有机台）；不传就不占位 */
-  notices?: ReactNode
   ready: boolean
   missing?: string[]
   getParams: () => Omit<ScanTaskParams, 'category'>
   /**
    * 当前扫描范围的指纹。任一项变化就收起上一轮的结果，
-   * 避免"切了日期，右边还挂着上一次的结论"。
+   * 避免"切了日期，下方还挂着上一次的结论"。
    */
   filterSignature: string
   /** 按 store 当前状态重算指纹；历史恢复后用它推进基线 */
   getSignature: () => string
-  picker: ReactNode
-  filterPanel: ReactNode
+  /** 扫描范围表单内容（按时间 → 厂区/机台 → 类型顺序排布） */
+  scopeForm: ReactNode
 }
 
 const PlantScanPage = ({
   category,
-  description = '按入口目录中的快捷方式识别机台，按日期、班次与类型收集图片，并批量复制到本地。',
+  configured,
+  hasMachines,
   networkHint,
-  notices,
   ready,
   missing,
   getParams,
   filterSignature,
   getSignature,
-  picker,
-  filterPanel,
+  scopeForm,
 }: PlantScanPageProps) => {
   const { showToast } = useToast()
 
@@ -71,69 +79,175 @@ const PlantScanPage = ({
     getSignature,
   })
 
+  const taskId = task?.id ?? null
+  const [prevTaskId, setPrevTaskId] = useState<string | null>(taskId)
+  const [scopeExpanded, setScopeExpanded] = useState<boolean>(taskId === null)
+
+  if (taskId !== prevTaskId) {
+    setPrevTaskId(taskId)
+    setScopeExpanded(taskId === null)
+  }
+
+  const handleRestore = (item: ScanHistoryItem) => {
+    setScopeExpanded(false)
+    void restoreHistory(item)
+  }
+
   const canStart = ready && !busy && !creating && !other
+  const needsSetup = !configured || !hasMachines
+  const showSetupCard = needsSetup && !task
 
   return (
     <PageShell
       title={SCAN_CATEGORY_LABEL[category]}
-      description={description}
+      contentMaxWidth="1040px"
       badge={task ? <ScanStatusBadge status={task.status} /> : null}
-    >
-      <Grid className="workbench-grid" gap="4" align="start">
-        <Panel>
-          <PanelHeader
-            icon={<MagnifyingGlassIcon width={13} height={13} />}
-            title="扫描范围"
-            description="按顺序选好入口目录、机台、时间与类型"
-          />
-          <PanelBody>
-            {picker}
-            <Box className="panel-section" mt="4" pt="4">
-              {filterPanel}
-            </Box>
-          </PanelBody>
-        </Panel>
-
-        <Flex direction="column" gap="4" minWidth="0">
-          <ScanTaskPanel
-            task={task}
-            creating={creating}
-            busy={busy}
-            ready={ready}
-            missing={missing}
-            canStart={canStart}
-            error={error}
-            other={other}
-            otherLabel={otherLabel}
-            networkHint={networkHint}
-            notices={notices}
-            onStart={() => void start()}
-            onPause={() => void pause()}
-            onResume={() => void resume()}
-            onCancel={() => void cancel()}
-            onClear={clearResult}
-          />
-
-          <Panel>
-            <PanelHeader
-              icon={<DownloadIcon width={13} height={13} />}
-              title="复制到本地"
-              description="按机台勾选，平铺或分组写入目标目录"
-            />
-            <PanelBody>
-              <CopyPanel category={category} showToast={showToast} />
-            </PanelBody>
-          </Panel>
-
+      actions={
+        <>
+          {!showSetupCard ? (
+            <ScanEntryRootBar category={category} disabled={busy || creating} />
+          ) : null}
           <HistoryPanel
             category={category}
-            onRestore={(item) => void restoreHistory(item)}
+            onRestore={handleRestore}
             showToast={showToast}
             activeId={task?.id ?? null}
             activeStatus={task?.status ?? null}
           />
+        </>
+      }
+    >
+      {showSetupCard ? (
+        <ScanEntrySetupCard
+          category={category}
+          noMachines={configured && !hasMachines}
+        />
+      ) : (
+        <Flex direction="column" gap="4">
+          {/* 上半区：配置期展示展开态参数矩阵，执行/结果期折叠为单行摘要条 */}
+          {scopeExpanded || !task ? (
+            <Panel>
+              <PanelHeader
+                icon={<Search size={15} strokeWidth={1.75} />}
+                title="扫描范围"
+                actions={
+                  <>
+                    {busy ? (
+                      <Badge color="blue" size="1">
+                        扫描中 · 仅查看
+                      </Badge>
+                    ) : null}
+                    {task ? (
+                      <Button
+                        type="button"
+                        variant="soft"
+                        color="gray"
+                        onClick={() => setScopeExpanded(false)}
+                      >
+                        收起
+                        <ChevronUp size={14} strokeWidth={1.75} />
+                      </Button>
+                    ) : null}
+                  </>
+                }
+              />
+              <PanelBody>
+                <Flex direction="column" gap="4">
+                  <Flex
+                    direction="column"
+                    gap="4"
+                    className="scope-matrix-grid"
+                    data-readonly={busy ? 'true' : undefined}
+                    aria-disabled={busy || undefined}
+                  >
+                    {scopeForm}
+                  </Flex>
+
+                  {!task && other && otherLabel ? (
+                    <Callout.Root color="blue" size="1">
+                      <Callout.Icon>
+                        <TriangleAlert size={14} strokeWidth={1.75} />
+                      </Callout.Icon>
+                      <Callout.Text>
+                        <Strong>另一类扫描正在进行：</Strong> {otherLabel}
+                      </Callout.Text>
+                    </Callout.Root>
+                  ) : null}
+
+                  {!task && error ? (
+                    <Callout.Root color="red" size="1">
+                      <Callout.Icon>
+                        <TriangleAlert size={14} strokeWidth={1.75} />
+                      </Callout.Icon>
+                      <Callout.Text>
+                        <Strong>启动扫描失败：</Strong> {error}
+                      </Callout.Text>
+                    </Callout.Root>
+                  ) : null}
+
+                  {!busy ? (
+                    <>
+                      <Separator size="4" />
+                      <Flex
+                        align="center"
+                        justify="between"
+                        gap="3"
+                        wrap="wrap"
+                      >
+                        <Text size="2" color="gray">
+                          {!ready && missing?.length
+                            ? `请先选择：${missing.join('、')}`
+                            : '范围已就绪'}
+                        </Text>
+                        <Button
+                          type="button"
+                          size="2"
+                          disabled={!canStart}
+                          onClick={() => void start()}
+                        >
+                          {creating ? (
+                            <Spinner size="1" />
+                          ) : (
+                            <Play size={14} strokeWidth={1.75} />
+                          )}
+                          {task ? '重新扫描' : '开始扫描'}
+                        </Button>
+                      </Flex>
+                    </>
+                  ) : null}
+                </Flex>
+              </PanelBody>
+            </Panel>
+          ) : (
+            <ScopeSummaryBar
+              category={category}
+              busy={busy}
+              onExpand={() => setScopeExpanded(true)}
+            />
+          )}
+
+          {/* 下半区：仅在已有扫描任务时渲染单列任务流与吸底复制栏 */}
+          {task ? (
+            <ScanTaskPanel
+              category={category}
+              task={task}
+              creating={creating}
+              busy={busy}
+              canStart={canStart}
+              error={error}
+              other={other}
+              otherLabel={otherLabel}
+              networkHint={networkHint}
+              showToast={showToast}
+              onStart={() => void start()}
+              onPause={() => void pause()}
+              onResume={() => void resume()}
+              onCancel={() => void cancel()}
+              onClear={clearResult}
+            />
+          ) : null}
         </Flex>
-      </Grid>
+      )}
     </PageShell>
   )
 }

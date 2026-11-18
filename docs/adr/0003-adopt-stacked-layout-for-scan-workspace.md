@@ -1,0 +1,3 @@
+# Adopt Stacked Layout for Scan Workspace
+
+Previously, scan pages used a two-column grid (left panel for machines and filter options, right panel for scan execution and history), which suffered from severe visual asymmetry and layout breakdown when many defect types or dozens of machines were present. We restructured the workspace into a top-down stacked flow: a compact 3-column Scope Parameter Matrix with bounded `ScrollArea`s sits on top to keep configuration within predictable vertical bounds, while the lower Single-Column Task Stream features structured `DataList` metrics and a max-height `ScrollArea` around the results `Table` to guarantee first-screen visibility and responsive comfort across both 14-inch laptops and desktop monitors.

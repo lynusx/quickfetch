@@ -1,0 +1,3 @@
+# Migrate Icon Library from Radix Icons to Lucide React
+
+We replaced `@radix-ui/react-icons` with `lucide-react` across all renderer components and removed `@radix-ui/react-icons` from `package.json` to gain a broader, actively maintained vector icon set without introducing wrapper abstractions. Because Lucide icons render on a 24×24 grid with a default `strokeWidth` of `2` that appears heavier than Radix Themes' 1px borders at 12–16px sizes, all icon usages standardize on Lucide's `size` prop with `strokeWidth={1.75}` for visual parity with Radix Themes while keeping direct tree-shakable imports.

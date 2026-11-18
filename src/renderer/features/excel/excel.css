@@ -1,18 +1,10 @@
 /* Excel 特性样式。 */
 
-/* 根节点是原生 <label>（点击触发文件选择），拿不到 Flex 的布局 props；
-   text-align 作用于 inline 的 span 子节点，也只能留在容器上。 */
+/* 布局由外层 Flex asChild 接管，这里只留边框、背景、光标与过渡态 */
 .upload-zone {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  padding: var(--space-7) var(--space-5);
   border: 1px dashed var(--gray-a7);
   border-radius: var(--radius-4);
   background: var(--app-surface);
-  text-align: center;
   cursor: pointer;
   outline: none;
   transition:
@@ -36,11 +28,6 @@
   background: var(--gray-a2);
 }
 
-.upload-zone[data-compact='true'] {
-  padding: var(--space-5);
-  gap: var(--space-2);
-}
-
 .upload-zone[data-compact='true'] .upload-icon {
   width: 38px;
   height: 38px;
@@ -59,11 +46,6 @@
 
 /* 标题不加样式：`.rt-Text` 自带 margin 0，文字色继承主题根的 gray-12 */
 
-/* 说明文字用 gray-10：`Text color="gray"` 只到 11 阶，表达不了更弱的层级 */
-.upload-desc {
-  color: var(--gray-10);
-}
-
 .upload-cta {
   border: 1px solid var(--gray-a6);
   border-radius: var(--radius-2);
@@ -71,10 +53,8 @@
   box-shadow: 0 1px 1px var(--gray-a3);
 }
 
-/* 文字色随容器 hover 变化，只能靠后代选择器；Text 的 color prop 无法响应祖先状态 */
-.upload-cta-label {
-  color: var(--gray-12);
-}
+/* 文字色随容器 hover 变化，只能靠后代选择器；Text 的 color prop 无法响应祖先状态。
+   默认态不写 color，Text 自身已是 gray-12；仅在 hover 时覆盖为 accent-11。 */
 
 .upload-zone:hover .upload-cta {
   border-color: var(--accent-a7);
@@ -82,10 +62,6 @@
 
 .upload-zone:hover .upload-cta-label {
   color: var(--accent-11);
-}
-
-.guide-text {
-  color: var(--gray-10);
 }
 
 /* `.file-meta` 的 display / 列模板 / gap 由 `<Grid columns="3" gap="2">` 表达，
@@ -97,30 +73,12 @@
   background: var(--gray-a2);
 }
 
-.file-meta-label {
-  color: var(--gray-10);
-}
-
-.table-shell {
-  border: 1px solid var(--app-border);
-  border-radius: var(--radius-3);
-  overflow: hidden;
-}
-
-.table-shell .rt-TableRootTable {
-  background: var(--app-surface);
-}
-
 .sheet-cell-nowrap {
   white-space: nowrap;
 }
 
 .sheet-cell-number {
   font-variant-numeric: tabular-nums;
-}
-
-.sheet-cell-muted {
-  color: var(--gray-9);
 }
 
 /* 有上分隔线，文字必须被推离这条线——这是「有可见边界的盒子」，

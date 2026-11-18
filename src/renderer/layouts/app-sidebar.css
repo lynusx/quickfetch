@@ -1,22 +1,5 @@
-/* 应用侧边栏：AppSidebar。布局走 props，本文件只保留交互态与
-   props 表达不了的窗口拖拽区。 */
-
-.sidebar-brand {
-  /* 品牌行没有交互元素，和顶带一起作为窗口拖拽区 */
-  -webkit-app-region: drag;
-  user-select: none;
-}
-
-.nav-group + .nav-group {
-  margin-top: var(--space-5);
-}
-
-/* 分组标签：缩进与下间距走 margin prop（`mx` / `mb`）——这里没有背景与描边，
-   padding 与 margin 的渲染位置完全一致，不必为此再套一层盒子。
-   `color` 用 gray-9：`Text color="gray"` 只到 11 阶，表达不了更弱的层级。 */
-.nav-group-label {
-  color: var(--gray-9);
-}
+/* 应用导航项：AppSidebar。侧边栏骨架与折叠过渡已移至 components/sidebar/sidebar.css，
+   本文件只保留 NavLink 交互态与图标高亮。 */
 
 /* 导航项必须渲染成 <a>（React Router 的 NavLink 提供 aria-current 与客户端跳转），
    拿不到 Flex 的布局 props，所以这几条布局声明只能留在这里，不算双写；
@@ -35,8 +18,9 @@
     color var(--app-transition);
 }
 
-.nav-item + .nav-item {
-  margin-top: var(--space-1);
+.nav-item[data-collapsed='true'] {
+  justify-content: center;
+  padding: var(--space-1);
 }
 
 .nav-item:hover {
@@ -82,10 +66,6 @@
 .nav-label {
   display: block;
   white-space: nowrap;
-}
-
-.sidebar-footer {
-  border-top: 1px solid var(--app-border);
 }
 
 /* 有新版本时的提示入口：与版本号同一行，不抢主操作区 */

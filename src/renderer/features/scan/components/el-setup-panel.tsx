@@ -19,12 +19,11 @@ const ElSetupPanel = () => {
 
   return (
     <PlantMachinePicker
-      machines={elPickableMachines(el.machines ?? [])}
+      machines={elPickableMachines(el.machines ?? [], el.entryRoot)}
       entryRoot={el.entryRoot}
       saving={saving}
       error={error}
       filter={useElFilterStore}
-      showShareBadge={false}
       onSetup={async (root) => {
         await saveRoot(root)
         return null
@@ -43,7 +42,7 @@ const ElSetupPanel = () => {
         pickTitle: '请选择 DC 根目录',
         refreshLabel: '重新识别机台',
         emptyText: 'DC 根目录下没有可用机台，请点刷新重新识别',
-        unconfiguredText: '配置根目录后，这里会出现厂区与机台列表',
+        unconfiguredText: '在顶部配置根目录后，这里会出现厂区与机台列表',
         recognizingText: '正在识别机台…',
       }}
     />

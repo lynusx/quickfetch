@@ -1,12 +1,6 @@
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
-import {
-  ClipboardCopyIcon,
-  Cross2Icon,
-  DownloadIcon,
-  ExclamationTriangleIcon,
-  TableIcon,
-} from '@radix-ui/react-icons'
+import { ClipboardCopy, Download, Table2, TriangleAlert, X } from 'lucide-react'
 import {
   Badge,
   Box,
@@ -19,7 +13,13 @@ import {
   Text,
 } from '@radix-ui/themes'
 
-import { EmptyState } from '@/components/empty-state/empty-state'
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/empty'
 import { Panel, PanelBody, PanelHeader } from '@/components/panel'
 import SheetFilterPanel from './sheet-filter-panel'
 import SheetTablePreview from './sheet-table-preview'
@@ -36,7 +36,7 @@ const FileMetaItem = ({
   value: ReactNode
 }) => (
   <Flex className="file-meta-item" direction="column" gap="1" py="2" px="3">
-    <Text as="div" size="1" className="file-meta-label">
+    <Text as="div" size="1" color="gray">
       {label}
     </Text>
     <Text as="div" size="1" weight="medium" truncate className="tabular">
@@ -98,7 +98,7 @@ const ExcelViewer = () => {
     return (
       <Panel>
         <PanelHeader
-          icon={<TableIcon width={13} height={13} />}
+          icon={<Table2 size={13} strokeWidth={1.75} />}
           title={file.name}
           description="文件解析失败"
           actions={<Badge color="red">错误</Badge>}
@@ -107,7 +107,7 @@ const ExcelViewer = () => {
           <Flex direction="column" gap="4">
             <Callout.Root color="red" role="alert">
               <Callout.Icon>
-                <ExclamationTriangleIcon width={16} height={16} />
+                <TriangleAlert size={16} strokeWidth={1.75} />
               </Callout.Icon>
               <Callout.Text>
                 <Text weight="medium">{file.name}</Text>：
@@ -119,7 +119,7 @@ const ExcelViewer = () => {
 
             <Flex justify="end">
               <Button variant="soft" color="gray" onClick={() => setFile(null)}>
-                <Cross2Icon width={14} height={14} />
+                <X size={14} strokeWidth={1.75} />
                 清除文件
               </Button>
             </Flex>
@@ -134,9 +134,8 @@ const ExcelViewer = () => {
       {/* 文件信息 */}
       <Panel>
         <PanelHeader
-          icon={<TableIcon width={13} height={13} />}
+          icon={<Table2 size={13} strokeWidth={1.75} />}
           title={file.name}
-          description="单文件解析，默认读取第 1 个工作表"
           actions={
             <>
               <Badge color={statusMeta.color} variant={statusMeta.variant}>
@@ -149,7 +148,7 @@ const ExcelViewer = () => {
                 aria-label="清除文件"
                 onClick={() => setFile(null)}
               >
-                <Cross2Icon width={14} height={14} />
+                <X size={14} strokeWidth={1.75} />
               </IconButton>
             </>
           }
@@ -182,13 +181,19 @@ const ExcelViewer = () => {
       ) : null}
 
       {file.status === 'completed' ? (
-        <Grid className="workbench-grid" gap="4" align="start">
+        <Grid
+          columns={{
+            initial: '1',
+            lg: 'minmax(320px, 400px) minmax(0, 1fr)',
+          }}
+          gap="4"
+          align="start"
+        >
           {/* 左侧筛选 */}
           <Panel>
             <PanelHeader
-              icon={<TableIcon width={13} height={13} />}
+              icon={<Table2 size={13} strokeWidth={1.75} />}
               title="筛选条件"
-              description="线别与不良项可组合筛选，留空表示不过滤"
             />
             <PanelBody>
               <SheetFilterPanel />
@@ -199,7 +204,7 @@ const ExcelViewer = () => {
           <Box minWidth="0">
             <Panel>
               <PanelHeader
-                icon={<TableIcon width={13} height={13} />}
+                icon={<Table2 size={13} strokeWidth={1.75} />}
                 title={sheet?.name || '数据预览'}
                 description={
                   sheet
@@ -215,7 +220,7 @@ const ExcelViewer = () => {
                       disabled={!sheet || isCopy}
                       onClick={() => sheet && handleCopyToClipboard(sheet)}
                     >
-                      <ClipboardCopyIcon width={14} height={14} />
+                      <ClipboardCopy size={14} strokeWidth={1.75} />
                       {isCopy ? '已复制' : '复制'}
                     </Button>
                     <Button
@@ -228,7 +233,7 @@ const ExcelViewer = () => {
                       {isExport ? (
                         <Spinner size="1" />
                       ) : (
-                        <DownloadIcon width={14} height={14} />
+                        <Download size={14} strokeWidth={1.75} />
                       )}
                       {isExport ? '导出中…' : '导出 Excel'}
                     </Button>
@@ -236,17 +241,21 @@ const ExcelViewer = () => {
                 }
               />
               <PanelBody>
-                <Box className="table-shell">
-                  {sheet ? (
-                    <SheetTablePreview sheet={sheet} mode="result" />
-                  ) : (
-                    <EmptyState
-                      icon={<TableIcon width={18} height={18} />}
-                      title="暂无可显示的数据"
-                      description="调整左侧筛选条件后再试。"
-                    />
-                  )}
-                </Box>
+                {sheet ? (
+                  <SheetTablePreview sheet={sheet} mode="result" />
+                ) : (
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <Table2 size={18} strokeWidth={1.75} />
+                      </EmptyMedia>
+                      <EmptyTitle>暂无可显示的数据</EmptyTitle>
+                      <EmptyDescription>
+                        调整左侧筛选条件后再试。
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                )}
               </PanelBody>
             </Panel>
           </Box>

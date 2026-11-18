@@ -1,7 +1,13 @@
-import { TableIcon } from '@radix-ui/react-icons'
+import { Table2 } from 'lucide-react'
 import { Box, Table, Text } from '@radix-ui/themes'
 
-import { EmptyState } from '@/components/empty-state/empty-state'
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/empty'
 import type { ExcelSheet } from '../types'
 
 interface SheetTablePreviewProps {
@@ -16,11 +22,15 @@ const MAX_COLS = 10
 const SheetTablePreview = ({ sheet, mode }: SheetTablePreviewProps) => {
   if (sheet.data.length === 0) {
     return (
-      <EmptyState
-        icon={<TableIcon width={18} height={18} />}
-        title="暂无可显示的数据"
-        description="调整筛选条件后再试。"
-      />
+      <Empty>
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <Table2 size={18} strokeWidth={1.75} />
+          </EmptyMedia>
+          <EmptyTitle>暂无可显示的数据</EmptyTitle>
+          <EmptyDescription>调整筛选条件后再试。</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     )
   }
 
@@ -67,8 +77,8 @@ const SheetTablePreview = ({ sheet, mode }: SheetTablePreviewProps) => {
               </Table.ColumnHeaderCell>
             ))}
             {showColTruncation && (
-              <Table.ColumnHeaderCell className="sheet-cell-nowrap sheet-cell-muted">
-                还有 {sheet.colCount - MAX_COLS} 列
+              <Table.ColumnHeaderCell className="sheet-cell-nowrap">
+                <Text color="gray">还有 {sheet.colCount - MAX_COLS} 列</Text>
               </Table.ColumnHeaderCell>
             )}
           </Table.Row>
@@ -85,7 +95,9 @@ const SheetTablePreview = ({ sheet, mode }: SheetTablePreviewProps) => {
                 </Table.Cell>
               ))}
               {showColTruncation && (
-                <Table.Cell className="sheet-cell-muted">…</Table.Cell>
+                <Table.Cell>
+                  <Text color="gray">…</Text>
+                </Table.Cell>
               )}
             </Table.Row>
           ))}

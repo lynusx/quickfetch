@@ -1,22 +1,16 @@
-/* 字段：Field / Step。布局（display/flex/gap/padding/min-width）一律走 props，
-   本文件只保留字体、颜色、背景等 props 无法表达的样式。 */
+/* 字段：Field / Step。布局走 props，说明文字由 Text color="gray" 表达，
+   本文件只保留图标外观与步骤徽标样式。 */
 
 .field-label-icon {
   display: inline-flex;
   color: var(--gray-9);
 }
 
-/* 提示文字用 gray-10：`Text color="gray"` 只到 11 阶，表达不了更弱的层级。
-   margin 不写：`.rt-Text` 已是 0。 */
-.field-hint {
-  color: var(--gray-10);
-}
-
 /* 步骤编号：让「先选机台、再选日期」的顺序一眼可见 */
 .step-index {
   border-radius: 50%;
   background: var(--gray-a3);
-  color: var(--gray-10);
+  color: var(--gray-11);
   font-variant-numeric: tabular-nums;
 }
 

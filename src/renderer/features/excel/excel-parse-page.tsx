@@ -1,11 +1,5 @@
 import { Badge, Box, Flex, Grid, Text } from '@radix-ui/themes'
-import {
-  ClipboardCopyIcon,
-  InfoCircledIcon,
-  MagnifyingGlassIcon,
-  TableIcon,
-  UploadIcon,
-} from '@radix-ui/react-icons'
+import { ClipboardCopy, Info, Search, Table2, Upload } from 'lucide-react'
 
 import { PageShell } from '@/components/page-shell/page-shell'
 import { Panel, PanelBody, PanelHeader } from '@/components/panel'
@@ -18,22 +12,22 @@ import './excel.css'
 
 const GUIDE = [
   {
-    icon: UploadIcon,
+    icon: Upload,
     title: '上传文件',
     text: `拖拽或点击选择单个 .xlsx / .xls 文件，最大 ${MAX_EXCEL_SIZE_LABEL}。`,
   },
   {
-    icon: TableIcon,
+    icon: Table2,
     title: '解析数据',
     text: '自动解析第 1 个工作表，按设备 ID 分组统计。',
   },
   {
-    icon: MagnifyingGlassIcon,
+    icon: Search,
     title: '筛选数据',
     text: '按线别与不良项组合筛选，结果实时刷新。',
   },
   {
-    icon: ClipboardCopyIcon,
+    icon: ClipboardCopy,
     title: '导出数据',
     text: '复制到剪切板，或另存为 xlsx 文件。',
   },
@@ -50,7 +44,6 @@ const ExcelParsePage = () => {
           Beta
         </Badge>
       }
-      description="解析单个 Excel 文件，按设备 ID 分组后，支持按线别与不良项筛选，并导出为 xlsx。"
     >
       <ExcelUploadZone />
 
@@ -61,9 +54,8 @@ const ExcelParsePage = () => {
       ) : (
         <Panel>
           <PanelHeader
-            icon={<InfoCircledIcon width={13} height={13} />}
+            icon={<Info size={13} strokeWidth={1.75} />}
             title="使用说明"
-            description="上传、解析、筛选、导出，四步完成"
           />
           <PanelBody>
             <Grid columns="repeat(auto-fit, minmax(220px, 1fr))" gap="4">
@@ -71,12 +63,12 @@ const ExcelParsePage = () => {
                 <Step key={item.title} index={index + 1}>
                   <Box>
                     <Flex align="center" gap="2">
-                      <item.icon width={13} height={13} />
+                      <item.icon size={13} strokeWidth={1.75} />
                       <Text size="1" weight="medium">
                         {item.title}
                       </Text>
                     </Flex>
-                    <Text as="p" size="1" className="guide-text" mt="1">
+                    <Text as="p" size="1" color="gray" mt="1">
                       {item.text}
                     </Text>
                   </Box>

@@ -1,0 +1,33 @@
+/* 侧边栏原语：Sidebar。宽度与折叠过渡、窗口拖拽区例外由本文件承载，
+   内部排布与文本颜色由 Radix props 表达。 */
+
+.sidebar-root {
+  width: var(--app-sidebar-width);
+  flex-basis: var(--app-sidebar-width);
+  transition:
+    width var(--app-transition),
+    flex-basis var(--app-transition);
+}
+
+.sidebar-root[data-state='collapsed'] {
+  width: 68px;
+  flex-basis: 68px;
+}
+
+.sidebar-header {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+/* 顶栏里的折叠按钮必须是可点击区，不能被窗口拖拽区吃掉 */
+.sidebar-trigger {
+  -webkit-app-region: no-drag;
+}
+
+.sidebar-group + .sidebar-group {
+  margin-top: var(--space-5);
+}
+
+.sidebar-footer {
+  border-top: 1px solid var(--app-border);
+}

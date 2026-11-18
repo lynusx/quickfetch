@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
-import { ExclamationTriangleIcon } from '@radix-ui/react-icons'
+import { TriangleAlert } from 'lucide-react'
 import {
   Box,
   Button,
@@ -43,7 +43,6 @@ import {
   DEFAULT_HISTORY_LIMIT,
   HISTORY_LIMIT_RANGE,
 } from '@shared/historyLimit'
-import './settings.css'
 
 /** 分组方式的实际目录形态，光看名字不知道会建几层 */
 const LAYOUT_SAMPLE: Record<CopyLayout, string> = {
@@ -292,7 +291,7 @@ const SettingsPage = () => {
       {error ? (
         <Callout.Root color="red" role="alert" mb="4">
           <Callout.Icon>
-            <ExclamationTriangleIcon width={16} height={16} />
+            <TriangleAlert size={16} strokeWidth={1.75} />
           </Callout.Icon>
           <Callout.Text>
             <Text weight="medium">保存失败</Text>：{error}
@@ -303,7 +302,7 @@ const SettingsPage = () => {
       <SettingsGroup id="scan-copy" title="扫描与复制">
         <SettingsRow label="分组方式" help={LAYOUT_HELP}>
           <SegmentedControl.Root
-            className="settings-segmented"
+            size="1"
             aria-label="分组方式"
             value={preferences.copyLayout}
             onValueChange={(value) =>
@@ -320,7 +319,7 @@ const SettingsPage = () => {
 
         <SettingsRow label="同名文件" help={CONFLICT_HELP}>
           <SegmentedControl.Root
-            className="settings-segmented"
+            size="1"
             aria-label="同名文件"
             value={preferences.copyConflict}
             onValueChange={(value) =>

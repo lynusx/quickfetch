@@ -1,99 +1,49 @@
-/* 扫描特性样式：扫描页与任务面板。布局走 props，本文件只保留
-   网格列模板、边框、背景、字体与交互态。 */
-
-.panel-section {
-  border-top: 1px solid var(--app-border);
-}
+/* 扫描特性样式：扫描页与任务面板。布局与文本颜色由 Radix props 表达，
+   本文件只保留边框、背景、路径输入字体、只读交互态与吸底复制栏磨砂层。 */
 
 .skipped-box {
-  padding: var(--space-2);
   border: 1px solid var(--gray-a4);
   border-radius: var(--radius-3);
   background: var(--gray-a2);
 }
 
 .skipped-box summary {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
   cursor: pointer;
-  color: var(--gray-10);
   user-select: none;
 }
 
-.skipped-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  margin-top: var(--space-2);
+.scope-matrix-grid[data-readonly='true'] {
+  opacity: 0.72;
+  pointer-events: none;
 }
 
-.path-strip {
-  border: 1px solid var(--gray-a3);
+.sticky-copy-bar {
+  z-index: 2;
+}
+
+.sticky-copy-card {
+  background: color-mix(in srgb, var(--app-surface) 92%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-4);
+}
+
+.copy-done-icon {
+  color: var(--green-11);
+}
+
+.copy-failure-list {
+  border: 1px solid var(--red-a5);
   border-radius: var(--radius-2);
-  background: var(--gray-a2);
-  /* Text 没有 font-family prop，等宽只能留在容器上由子元素继承 */
+  background: var(--red-a2);
+  overflow: hidden;
+}
+
+.copy-failure-row + .copy-failure-row {
+  border-top: 1px solid var(--red-a4);
+}
+
+/* 目录输入框显示绝对路径，使用等宽字体 */
+.dir-input {
+  width: 100%;
   font-family: var(--code-font-family);
-  overflow: hidden;
-}
-
-.path-strip span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.data-list {
-  border: 1px solid var(--app-border);
-  border-radius: var(--radius-3);
-  overflow: hidden;
-  background: var(--app-surface);
-}
-
-.data-list-head,
-.data-row {
-  grid-template-columns: minmax(96px, 150px) 1fr 76px;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-}
-
-.data-list-head {
-  background: var(--gray-a2);
-  border-bottom: 1px solid var(--app-border);
-  color: var(--gray-9);
-}
-
-.data-row {
-  border-bottom: 1px solid var(--gray-a3);
-  color: var(--gray-11);
-  transition: background-color var(--app-transition);
-}
-
-.data-row:last-child {
-  border-bottom: none;
-}
-
-.data-row:hover {
-  background: var(--gray-a2);
-}
-
-.inline-hint-icon {
-  color: var(--amber-9);
-}
-
-/**
- * 机台行尾的共享探测徽标。
- *
- * 三态必须能一眼分开，所以用颜色而不是文字位置：
- * 灰=未探测、蓝=已探到、红=探过但没有。字号、行高与字距都交给 `Badge size`，
- * 截断由外层 Box 承担，这里只补内边距。
- */
-.share-badge {
-  padding: 0 var(--space-1);
-}
-
-/* 「未探测」要比另外两态更弱：Badge 的 gray-soft 用 gray-11，压回 gray-9 */
-.share-badge[data-tone='muted'] {
-  color: var(--gray-9);
 }

@@ -1,0 +1,113 @@
+@import 'react-day-picker/style.css';
+
+/*
+ * 以下 .rdp-* 规则是对 react-day-picker 第三方 DOM 的样式覆盖层。
+ * 这些元素由库自行渲染，无法使用 Radix Text 组件，
+ * 因此 font-size / line-height 只能在 CSS 层声明，使用 Radix 令牌而非写死数值。
+ */
+.app-calendar.rdp-root {
+  --rdp-accent-color: var(--accent-9);
+  --rdp-accent-background-color: var(--accent-3);
+  --rdp-day-height: 32px;
+  --rdp-day-width: 32px;
+  --rdp-day_button-border-radius: var(--radius-2);
+  --rdp-day_button-border: none;
+  --rdp-day_button-height: 32px;
+  --rdp-day_button-width: 32px;
+  --rdp-selected-border: none;
+  --rdp-today-color: var(--accent-11);
+  font-family: var(--default-font-family);
+  color: var(--gray-12);
+  margin: 0;
+  user-select: none;
+}
+
+.app-calendar .rdp-caption_label {
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- react-day-picker 内部 DOM 无法用 Radix Text */
+  font-size: var(--font-size-2);
+  line-height: var(--line-height-2);
+  font-weight: var(--font-weight-bold);
+  color: var(--gray-12);
+}
+
+.app-calendar .rdp-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.app-calendar .rdp-button_next,
+.app-calendar .rdp-button_previous {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-2);
+  color: var(--gray-11);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.app-calendar .rdp-button_next:hover,
+.app-calendar .rdp-button_previous:hover {
+  background-color: var(--gray-4);
+  color: var(--gray-12);
+}
+
+.app-calendar .rdp-weekday {
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- react-day-picker 内部 DOM 无法用 Radix Text */
+  font-size: var(--font-size-1);
+  line-height: var(--line-height-1);
+  font-weight: var(--font-weight-medium);
+  color: var(--gray-9);
+  width: 32px;
+  height: 28px;
+  text-align: center;
+}
+
+.app-calendar .rdp-day_button {
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- react-day-picker 内部 DOM 无法用 Radix Text */
+  font-size: var(--font-size-1);
+  line-height: var(--line-height-1);
+  color: var(--gray-12);
+  cursor: pointer;
+  border-radius: var(--radius-2);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-calendar .rdp-day_button:hover {
+  background-color: var(--gray-4);
+}
+
+.app-calendar .rdp-selected .rdp-day_button {
+  background-color: var(--accent-9) !important;
+  color: var(--accent-contrast) !important;
+  font-weight: var(--font-weight-bold);
+}
+
+.app-calendar .rdp-today:not(.rdp-selected) .rdp-day_button {
+  font-weight: var(--font-weight-bold);
+  color: var(--accent-11);
+  background-color: var(--accent-a2);
+}
+
+.app-calendar .rdp-outside .rdp-day_button {
+  color: var(--gray-8);
+  opacity: 0.6;
+}
+
+.app-calendar .rdp-disabled .rdp-day_button {
+  color: var(--gray-7);
+  cursor: not-allowed;
+  opacity: 0.4;
+}

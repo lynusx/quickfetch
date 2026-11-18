@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
-import { TableIcon, UploadIcon } from '@radix-ui/react-icons'
+import { Table2, Upload } from 'lucide-react'
 import { Box, Flex, Spinner, Text } from '@radix-ui/themes'
 
 import { useExcelUpload } from '../hooks/useExcelUpload'
@@ -64,71 +64,81 @@ const ExcelUploadZone = () => {
         : '拖拽或点击上传 Excel 文件'
 
   return (
-    <label
-      className="upload-zone"
-      data-drag={isDrag || undefined}
-      data-busy={isProcess || undefined}
-      data-compact={file ? true : undefined}
-      role="button"
-      tabIndex={isProcess ? -1 : 0}
-      aria-disabled={isProcess}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          openPicker()
-        }
-      }}
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
+    <Flex
+      asChild
+      direction="column"
+      align="center"
+      justify="center"
+      gap={file ? '2' : '3'}
+      py={file ? '5' : '7'}
+      px="5"
     >
-      <Flex className="upload-icon" align="center" justify="center">
-        {isProcess ? (
-          <Spinner size="3" />
-        ) : (
-          <TableIcon width={24} height={24} />
-        )}
-      </Flex>
-
-      <Text size="3" weight="bold">
-        {statusText}
-      </Text>
-      <Box maxWidth="520px">
-        <Text size="1" className="upload-desc">
-          {file
-            ? `当前文件：${file.name}`
-            : `支持 .xlsx、.xls 格式，单次仅处理 1 个文件，最大 ${MAX_EXCEL_SIZE_LABEL}`}
-        </Text>
-      </Box>
-
-      {!isProcess ? (
-        <Flex
-          className="upload-cta"
-          display="inline-flex"
-          align="center"
-          alignSelf="center"
-          gap="2"
-          mt="1"
-          py="1"
-          px="3"
-        >
-          <UploadIcon width={13} height={13} />
-          <Text size="1" weight="medium" className="upload-cta-label">
-            {file ? '选择新文件' : '选择 Excel 文件'}
-          </Text>
+      <label
+        className="upload-zone"
+        data-drag={isDrag || undefined}
+        data-busy={isProcess || undefined}
+        data-compact={file ? true : undefined}
+        role="button"
+        tabIndex={isProcess ? -1 : 0}
+        aria-disabled={isProcess}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            openPicker()
+          }
+        }}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
+        <Flex className="upload-icon" align="center" justify="center">
+          {isProcess ? (
+            <Spinner size="3" />
+          ) : (
+            <Table2 size={24} strokeWidth={1.75} />
+          )}
         </Flex>
-      ) : null}
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-        hidden
-        onChange={handleFileInputChange}
-        disabled={isProcess}
-      />
-    </label>
+        <Text size="3" weight="bold" align="center">
+          {statusText}
+        </Text>
+        <Box maxWidth="520px">
+          <Text size="1" color="gray" align="center">
+            {file
+              ? `当前文件：${file.name}`
+              : `支持 .xlsx、.xls 格式，单次仅处理 1 个文件，最大 ${MAX_EXCEL_SIZE_LABEL}`}
+          </Text>
+        </Box>
+
+        {!isProcess ? (
+          <Flex
+            className="upload-cta"
+            display="inline-flex"
+            align="center"
+            alignSelf="center"
+            gap="2"
+            mt="1"
+            py="1"
+            px="3"
+          >
+            <Upload size={13} strokeWidth={1.75} />
+            <Text size="1" weight="medium" className="upload-cta-label">
+              {file ? '选择新文件' : '选择 Excel 文件'}
+            </Text>
+          </Flex>
+        ) : null}
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+          hidden
+          onChange={handleFileInputChange}
+          disabled={isProcess}
+        />
+      </label>
+    </Flex>
   )
 }
 

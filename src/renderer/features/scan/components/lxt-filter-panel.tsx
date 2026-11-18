@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 import PlantFilterPanel, {
   FilterDateShift,
   FilterSlots,
@@ -7,12 +9,14 @@ import { usePlantFilterDefaults } from './plant-filter-defaults'
 import { useLxtFilterStore } from '../stores/lxtFilterStore'
 import { selectLxt, useSettingsStore } from '@/features/settings'
 
+interface LxtFilterPanelProps {
+  picker: ReactNode
+}
+
 /**
- * 力禧特扫描范围。
- *
- * 与利珀共用同一套 section，力禧特没有等级层；类型清单从配置里取。
+ * 力禧特扫描范围：日期/班次 → 时段 → 厂区/机台 → 类型。
  */
-const LxtFilterPanel = () => {
+const LxtFilterPanel = ({ picker }: LxtFilterPanelProps) => {
   const lxt = useSettingsStore(selectLxt)
   const addType = useSettingsStore((state) => state.addType)
   const removeType = useSettingsStore((state) => state.removeType)
@@ -22,11 +26,12 @@ const LxtFilterPanel = () => {
 
   return (
     <PlantFilterPanel>
-      <FilterDateShift filter={useLxtFilterStore} index={3} />
-      <FilterSlots filter={useLxtFilterStore} index={4} />
+      <FilterDateShift filter={useLxtFilterStore}>
+        <FilterSlots filter={useLxtFilterStore} />
+      </FilterDateShift>
+      {picker}
       <FilterTypes
         filter={useLxtFilterStore}
-        index={5}
         types={lxt.typeCatalog}
         catalogReady={catalogReady}
         onAddType={(type) => void addType('lxt', type)}

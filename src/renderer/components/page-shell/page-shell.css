@@ -25,8 +25,3 @@
 .page-shell-header[data-stuck='true'] {
   border-bottom: 1px solid var(--app-border);
 }
-
-/* 引导句沿用原页头说明的版式 */
-.page-shell-description {
-  color: var(--gray-10);
-}

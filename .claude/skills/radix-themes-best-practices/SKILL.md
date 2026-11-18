@@ -9,9 +9,26 @@ Radix Themes 是「组件 + 设计令牌 + 布局工具类」一体的 React UI 
 
 这份 skill 的目标是让你用最少的代码**一次写对**，并交出简单、高效、可维护的布局：简单 = 不造抽象、不写覆盖；高效 = 能在 props 里表达的不写 CSS；可维护 = 复用组件与令牌、不留例外。写完能自检，出问题能自己查。
 
-内容分两层：**三条红线与六条判断①–④⑥防的是静默失败，必须遵守**；其余内容（判断⑤、实践、模式、清单）是**默认推荐**——可以偏离，在注释里写明理由即可。[references/](references/) 按需读，[GLOSSARY.md](GLOSSARY.md) 是唯一术语来源。
+内容分两层：**五条红线与六条判断①–④⑥防的是静默失败，必须遵守**；其余内容（判断⑤、实践、模式、清单）是**默认推荐**——可以偏离，在注释里写明理由即可。[references/](references/) 按需读，[GLOSSARY.md](GLOSSARY.md) 是唯一术语来源。
 
-## 三条红线
+## 核心原则：As-Is 原则与 14 构建块主权（Beyond Simple Overrides）
+
+> **官方最高准则**：*“Beyond simple style overrides, we recommend using the components as-is, or create your own versions using the same building blocks.”*
+
+Radix Themes 的核心哲学是**拒绝暴力覆盖**。面对任何界面需求，永远只有两条正道：
+1. **As-Is 原则（原样使用）**：全盘接受成品组件（`Button`、`Card`、`Badge`、`Select` 等）预设的几何高度、内边距与交互层级，仅通过其声明的 props（`size` / `variant` / `color` / `highContrast` / `radius`）调节，绝不写 CSS 强扭内部 `.rt-*` 样式。
+2. **构建块从零自组（Building Blocks Composition）**：当需求与成品组件预设形态根本冲突时，**严禁写 CSS 暴力覆写**，而是直接使用 **14 个原子构建块**（5 布局 + 9 排版）+ Radix Primitives + 主题令牌从零装配专属组件；需要按键/链接行为时外包 `<Button asChild>` 或 `<Link asChild>`。
+
+### 14 基础构建块能力主权表（Building Blocks Sovereignty Table）
+
+这 14 个基础构建块原生提供的排版与布局 props 是**第一且唯一的真相来源**，绝对禁止绕过 props 在 CSS 中另起炉灶：
+
+| 构建块类型 | 组件清单（14 个） | 原生能力全集（走 Props） | CSS 绝对禁区（严禁手写 CSS） |
+| --- | --- | --- | --- |
+| **5 大布局容器** | `Box`, `Flex`, `Grid`, `Container`, `Section` | `display`, `direction`, `gap`, `p`/`px`/`py`, `m`/`mx`/`my`, `align`, `justify`, `columns`, `rows`, `minWidth`, `maxWidth`, `overflow`, `flexGrow`, `flexShrink`, `flexBasis`, `position`, `inset` | 严禁在 CSS 中声明 `margin` / `padding` / `display: flex/grid` / `gap` / `flex` 比例 / `columns` |
+| **9 大排版组件** | `Text`, `Heading`, `Link`, `Code`, `Kbd`, `Blockquote`, `Quote`, `Strong`, `Em` | • **`size` 三件套**：同时下发 font-size、line-height 与 letter-spacing<br>• **`font-family` 预设**：`Text`/`Heading` 默认常规无衬线；`Code`/`Kbd` **原生自带等宽**（`--code-font-family`）<br>• **`weight`**：字重（`light`/`regular`/`medium`/`bold`）<br>• **`color` / `highContrast`**：颜色阶梯（12 阶基准、11 阶次级）<br>• **`align`**：对齐（`left`/`center`/`right`）<br>• **`trim`**：行高留白修剪（`normal`/`start`/`end`/`both`）<br>• **`truncate` / `wrap`**：省略截断与折行平衡 | **严禁在 CSS 中声明 `font-size`、`line-height`、`letter-spacing`、`font-family`、`text-align`**，以及 11/12 阶的 `color` |
+
+## 五条红线
 
 生成代码时不得出现：
 
@@ -19,6 +36,7 @@ Radix Themes 是「组件 + 设计令牌 + 布局工具类」一体的 React UI 
 2. ❌ 手写 hex / rgb 颜色——用令牌 `var(--accent-9)`、`var(--gray-a3)`
 3. ❌ 手搓已有组件——`Card`、`Badge`、`ScrollArea`、`Table`、`Separator`、`Callout`、`Progress` 全部都有
 4. ❌ 绕过 5 大布局容器在 CSS 中向叶子组件（`Text`、`Slider`、`Button`、`Badge` 等）书写布局声明（如 `width`、`min-width`、`max-width`、`flex`、`overflow` 等）——几何尺寸与弹性由 `Box`、`Flex`、`Grid`、`Container`、`Section` 承担，叶子组件通过外层 `Box` / `Flex` 显式包裹控制
+5. ❌ 绕过 Typography（`Text`、`Heading`、`Link`、`Code`）的 `color` / `highContrast` prop 在 CSS 中向文本书写颜色——在 Radix Colors 规范中，11/12 阶是唯二专为排版文本设计的「Accessible text」梯队，9/10 阶专属于 Solid 实体背景。严禁向文本赋予 9/10 阶颜色（会导致 WCAG AA 对比度不达标并造成 CSS 泄漏）；弱化层级通过 `size="1"`、字重（如标题 `medium`/`bold` 对比正文 `regular` 或需要极弱时用 `light`）与 `color="gray"` 建立。
 
 ## 选型三问
 
@@ -49,16 +67,20 @@ Radix Themes 是「组件 + 设计令牌 + 布局工具类」一体的 React UI 
 
 布局与文字先由 **14 个 `building block（构建块）`** 承担（5 布局 + 9 排版）；CSS 只写它们表达不了的三类，见 [practices.md §2.7](references/practices.md#27-用-14-个构建块搭界面css-是例外)。
 
-### ② 文字进 `Text` / `Heading`
+### ② 文字进 `Text` / `Heading`，颜色走 prop
 
 ```tsx
 // ❌
 <Flex color="var(--gray-10)">一段说明</Flex>
-// ✅
+// ❌ 绕过 prop 去写 CSS 覆盖 11/12 阶颜色或重复默认色
+<Text size="1" className="help-text">说明</Text>
+/* .help-text { color: var(--gray-11); } 或 color: var(--gray-12); */
+
+// ✅ 12 阶基准色开箱即用（无需 CSS/prop），11 阶次级色走 color prop
 <Flex><Text size="1" color="gray">一段说明</Text></Flex>
 ```
 
-**为什么**：`color` / `weight` / `size` / `align` 是排版语义，只有排版组件有对应 prop；容器替文字做样式，一旦有多个子节点就分不清谁该是什么颜色。
+**为什么**：`color` / `weight` / `size` / `align` 是排版语义，只有排版组件有对应 prop；容器替文字做样式，一旦有多个子节点就分不清谁该是什么颜色。同时，Typography 已内置 12 阶基准色（默认）与 11 阶次级色（`color="gray"`），绕过它们在 CSS 里声明颜色会导致类名泄漏与双写（见 [rules.md §5](references/rules.md#5-颜色)）。
 
 ### ③ 字号只从 `size`
 

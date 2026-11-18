@@ -1,0 +1,96 @@
+/* 抽屉：Drawer。基于 Radix Dialog.Content，将居中弹窗贴边停靠到视口边缘，
+   并补充滑入动效与头尾分隔线。 */
+
+@keyframes drawer-slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes drawer-slide-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes drawer-slide-in-bottom {
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* 抽屉滑入动效期间阻止 Radix 外层滚动容器闪出横向滚动条 */
+.rt-BaseDialogScroll:has(.drawer-content) {
+  overflow: hidden;
+}
+
+/* 覆盖 Radix Dialog.Content 的居中定位与默认内边距，
+   相对于已避让顶带的 .rt-BaseDialogScroll 定位，确保阴影被遮罩层裁剪在顶带下方 */
+.drawer-content.rt-DialogContent {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--app-surface);
+}
+
+.drawer-content.rt-DialogContent[data-side='right'] {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  height: 100%;
+  max-height: 100%;
+  border-radius: var(--radius-4) 0 0 var(--radius-4);
+  border-left: 1px solid var(--app-border);
+  box-shadow: -8px 0 24px var(--black-a3);
+  animation: drawer-slide-in-right 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.drawer-content.rt-DialogContent[data-side='left'] {
+  top: 0;
+  left: 0;
+  bottom: 0;
+  height: 100%;
+  max-height: 100%;
+  border-radius: 0 var(--radius-4) var(--radius-4) 0;
+  border-right: 1px solid var(--app-border);
+  box-shadow: 8px 0 24px var(--black-a3);
+  animation: drawer-slide-in-left 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.drawer-content.rt-DialogContent[data-side='bottom'] {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: min(82vh, 100%);
+  border-radius: var(--radius-4) var(--radius-4) 0 0;
+  border-top: 1px solid var(--app-border);
+  box-shadow: 0 -8px 24px var(--black-a3);
+  animation: drawer-slide-in-bottom 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.drawer-close {
+  z-index: 1;
+}
+
+.drawer-header {
+  border-bottom: 1px solid var(--app-border);
+}
+
+.drawer-footer {
+  border-top: 1px solid var(--app-border);
+}

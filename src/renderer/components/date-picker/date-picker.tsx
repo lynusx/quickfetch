@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CalendarIcon } from '@radix-ui/react-icons'
+import { Calendar as CalendarIcon } from 'lucide-react'
 import {
   Badge,
   Box,
@@ -10,9 +10,8 @@ import {
   Separator,
   Text,
 } from '@radix-ui/themes'
-import { zhCN } from 'date-fns/locale'
-import { DayPicker } from 'react-day-picker'
 
+import { Calendar } from '@/components/calendar'
 import './date-picker.css'
 
 export interface DatePickerProps {
@@ -114,7 +113,7 @@ export const DatePicker = ({
           aria-label={`选择日期，当前 ${displayText}`}
         >
           <Box flexShrink="0" className="date-trigger-icon">
-            <CalendarIcon width={14} height={14} />
+            <CalendarIcon size={14} strokeWidth={1.75} />
           </Box>
           <Box flexGrow="1">
             <Text
@@ -168,12 +167,11 @@ export const DatePicker = ({
           <Separator size="4" />
 
           {/* 日历面板 */}
-          <DayPicker
+          <Calendar
             mode="single"
             selected={selectedDate}
             onSelect={handleSelect}
             defaultMonth={selectedDate ?? new Date()}
-            locale={zhCN}
           />
         </Flex>
       </Popover.Content>

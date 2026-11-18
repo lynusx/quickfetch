@@ -23,8 +23,9 @@
 - 样式文件：`@radix-ui/themes/styles.css`
 - 每个共享组件一个目录；渲染层组件目录名、组件文件与样式文件统一 kebab-case（如 `components/panel/panel.tsx` + `components/panel/panel.css`、`layouts/app-layout.tsx`）；`index.ts` 只做多组件导出，不放组件实现。全局基线、令牌、共享工具类与 sonner 覆盖在 `src/renderer/index.css`。不要新建 `styles/app.css` 之类的汇总文件
 - 组件统一从 `@radix-ui/themes` 导入（如 `Button`, `Flex`, `Grid`, `Box`, `Text`, `Heading`, `Card`, `Badge`, `Dialog`, `Callout`, `Progress`, `Table` 等）
-- 图标统一使用 `@radix-ui/react-icons`
+- 图标统一使用 `lucide-react`（直接使用图标组件，传 `size` 与 `strokeWidth={1.75}`，不混用 `@radix-ui/react-icons`）
 - 禁止混用其他组件库与全局 CSS reset；自定义颜色使用 Radix 设计令牌（如 `var(--accent-9)`、`var(--gray-3)`）
+- `@radix-ui/themes` 中不存在的组件（如 `Drawer`、`Empty`、`Calendar` + `DatePicker`、`Sidebar`），优先参考 `shadcn/ui` 的组合式 API 与无头底层，在 `src/renderer/components/<name>/` 中用 Radix Themes 原语与设计令牌移植实现，不引入 Tailwind CSS
 - 类别勾选统一使用基于 Radix Themes 原生组件的 `ChoiceList`（多选）与 `ChoiceRadio`（单选）
 
 ## 这个项目的几条硬约束

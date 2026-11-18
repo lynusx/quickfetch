@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 import PlantFilterPanel, {
   FilterDateShift,
   FilterTypes,
@@ -6,13 +8,14 @@ import { usePlantFilterDefaults } from './plant-filter-defaults'
 import { useAoiFilterStore } from '../stores/aoiFilterStore'
 import { selectAoi, useSettingsStore } from '@/features/settings'
 
+interface AoiFilterPanelProps {
+  picker: ReactNode
+}
+
 /**
- * 森标 AOI 扫描范围。
- *
- * 与力禧特/利珀共用同一套 section，差别是没有时段层：路径是
- * 日期 → 8.5/20.5 → 类型，界面仍按语义显示白班/夜班。
+ * 森标 AOI 扫描范围：日期/班次 → 厂区/检测面/机台/图片类型 → 类型。
  */
-const AoiFilterPanel = () => {
+const AoiFilterPanel = ({ picker }: AoiFilterPanelProps) => {
   const aoi = useSettingsStore(selectAoi)
   const addType = useSettingsStore((state) => state.addType)
   const removeType = useSettingsStore((state) => state.removeType)
@@ -22,10 +25,10 @@ const AoiFilterPanel = () => {
 
   return (
     <PlantFilterPanel>
-      <FilterDateShift filter={useAoiFilterStore} index={3} />
+      <FilterDateShift filter={useAoiFilterStore} />
+      {picker}
       <FilterTypes
         filter={useAoiFilterStore}
-        index={4}
         types={aoi.typeCatalog}
         catalogReady={catalogReady}
         onAddType={(type) => void addType('aoi', type)}

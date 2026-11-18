@@ -1,11 +1,6 @@
-/* 设置行：布局由 props 表达，这里只留分隔线与说明文字色。
-   标签不设 `margin` / `color`：`.rt-Text` 已是 margin 0，根节点已是 gray-12。 */
+/* 设置行：布局由 props 表达，说明文字由 Text color="gray" 表达，
+   这里只留行间分隔线。 */
 
 .settings-row + .settings-row {
   border-top: 1px solid var(--app-border);
-}
-
-/* 说明文字用 gray-10：`Text color="gray"` 只到 11 阶，表达不了更弱的层级 */
-.settings-row-description {
-  color: var(--gray-10);
 }

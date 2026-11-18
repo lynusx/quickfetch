@@ -1,5 +1,4 @@
 import PlantMachinePicker from './plant-machine-picker'
-import { ReprobeSharesButton } from './reprobe-shares-button'
 import { useLxtFilterStore } from '../stores/lxtFilterStore'
 import { selectLxt, useSettingsStore } from '@/features/settings'
 import type { LxtMachine } from '@shared/ipc'
@@ -22,7 +21,6 @@ const LxtMachinePicker = ({ machines, onChanged }: LxtMachinePickerProps) => {
   const error = useSettingsStore((state) => state.error)
   const setupLxt = useSettingsStore((state) => state.setupLxt)
   const refreshLxt = useSettingsStore((state) => state.refreshLxt)
-  const reprobeShares = useSettingsStore((state) => state.reprobeShares)
 
   return (
     <PlantMachinePicker
@@ -34,17 +32,12 @@ const LxtMachinePicker = ({ machines, onChanged }: LxtMachinePickerProps) => {
       filter={useLxtFilterStore}
       onSetup={setupLxt}
       onRefresh={refreshLxt}
-      machineListActions={
-        <ReprobeSharesButton
-          saving={saving}
-          onReprobe={() => reprobeShares('lxt')}
-        />
-      }
       labels={{
         rootPlaceholder: '\\\\10.108.x.x\\share\\力禧特',
         rootHint:
           '每个含 .lnk 的子文件夹算一个厂区，机台地址来自快捷方式的目标',
         searchPlaceholder: '搜索机台，如 7 或 LX',
+        refreshLabel: '重新识别入口并探测共享',
       }}
       onChanged={onChanged}
     />

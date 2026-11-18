@@ -61,22 +61,30 @@ props 生成的 `.rt-r-*` 与自定义 class 同级，**项目 CSS 在 Radix 之
 /* ✅ 这些全部删掉，由 <Flex direction="column" gap="2"> 表达 */
 ```
 
-### 2.2 必须留在 CSS 的
+### 2.2 样式覆盖的三层裁决矩阵（The 3-Tier Decision Matrix）
+
+官方 Styling 规范明确指出：*“Beyond simple style overrides, we recommend using the components as-is, or create your own versions using the same building blocks”*。
+
+面对任何界面样式需求，严格按三层矩阵裁决，**禁止越级**：
+
+| 层级 | 判定标准 | 合法手段与场景 | 严禁行为（违规红线） |
+| --- | --- | --- | --- |
+| **Tier 1: 简单样式覆盖（Simple Overrides）** | 调整主题级基线或组件声明的显式变量 | • 根级或局部覆盖主题变量（`--color-*`、`--radius-*`、`--cursor-button`）<br>• 传原生 props（`size`、`variant`、`color`、`highContrast`、`radius`）<br>• 官方组件显式暴露的局部 CSS 变量（如 `--base-card-*`）<br>• 状态伪类与交互（`:hover`、`:focus-visible`、`[data-state]`、`transition`） | ❌ 严禁在 CSS 中覆盖组件的内部实现类（如针对 `.rt-Button`、`.rt-SelectTrigger` 手写样式）<br>❌ 严禁在 CSS 中重写已由 prop 控制的几何与排版属性 |
+| **Tier 2: As-Is 开箱即用（Use As-Is）** | 成品组件（Button、Badge、Dialog、Select、Card 等）的默认形态 | • 全盘接受预设尺寸、高度、padding、圆角与层次<br>• 依靠 `size` 档位缩放（如 `size="1"` 紧凑型、`size="3"` 强调型）<br>• 依靠 `asChild` 挂载交互宿主（如 `<Button asChild><Link to="...">`） | ❌ 严禁通过自定义 CSS 类强行抹除/扭曲成品组件的预设内边距与高度（如把 Button 改成 18px 高度并清空 padding 去伪装成小胶囊） |
+| **Tier 3: 14 构建块从零自组（Building Blocks Composition）** | 成品组件形态与设计需求根本冲突（Beyond Simple Overrides） | • 使用 **14 个原子构建块**（`Box`/`Flex`/`Grid` + `Text`/`Code`）搭建外壳与骨架<br>• 引入 `@radix-ui/react-*` Primitives 解决键盘导航、焦点管理与可访问性<br>• 用主题令牌 `var(--accent-9)`、`var(--gray-a3)` 上色<br>• 需要按钮/链接语义时，外包 `<Button asChild>` 或 `<Link asChild>` | ❌ 严禁引入第三方重量级 UI 库（Mantine/Antd/Tailwind）<br>❌ 严禁暴力覆盖成品组件内部结构 |
+
+### 2.3 必须留在 CSS 的
 
 `border` / `background` / `box-shadow` / `transition`、伪类与 `[data-state]`、`:has()`、
 后代/子/兄弟选择器、组件显式暴露的局部 CSS 变量定制（如 `--base-card-*`）、`Popover.Content` 的 `overflow`、`IconButton` 的 `flex-shrink`。
 
 **状态强调的字重**（选中加粗、异常行加粗）也留在 CSS——它表达的是状态差异，不是排版基线。
 
-> **样式覆盖的红线（Beyond Overrides）**：
-> 官方 Styling 规范明确指出：“Beyond simple style overrides, we recommend using the components as-is, or create your own versions using the same building blocks”。
-> 严禁针对 `.rt-Button`、`.rt-Card` 等内部类名编写复杂选择器去暴力重置高度、内边距或边框（这会破坏库自身的特异性与可访问性）。要么 **as-is 开箱即用**，要么使用 **14 个构建块（Box/Flex/Grid/Text）+ Primitives 从零组装**（详见 [practices.md §2.8](practices.md#28-as-is-优先-vs-构建块自建拒绝暴力覆盖)）。
-
 > **注意：不要把能用 prop 表达的网格与表格扔进 CSS**：
 > - `Grid` 的 `columns` 原生支持数字（`"3"` 即 `repeat(3, minmax(0, 1fr))`）、自定义模板（`"120px 1fr"`）和响应式对象。只有 `repeat(auto-fill, ...)` 或特殊的 `grid-template-areas` 才需要写进 CSS。
 > - `Table.Root` 支持 `layout="fixed"`，`Table.Cell` / `ColumnHeaderCell` 支持 `width` / `minWidth`，不必手写类名控制列宽。
 
-### 2.3 不转发布局 props 的组件
+### 2.4 不转发布局 props 的组件
 
 | 组件         | 只能怎么调                                                       |
 | ------------ | ---------------------------------------------------------------- |
@@ -85,6 +93,29 @@ props 生成的 `.rt-r-*` 与自定义 class 同级，**项目 CSS 在 Radix 之
 | `Card` | 圆角与内边距由 `size` 决定（源码 `--base-card-*`），要改就覆盖这些变量 |
 
 这类组件用注释说明原因，**不要为此换组件**。
+
+### 2.4.1 ScrollArea 滚动条能力主权（严禁手写 `::-webkit-scrollbar`）
+
+`ScrollArea` 原生自带跨平台虚拟滚动条（基于 `@radix-ui/react-scroll-area`），完全受控于主题系统与原生 props。**严禁在 CSS 中通过 `::-webkit-scrollbar` 或自定义选择器暴力覆盖滚动条样式与宽度**。
+
+| Prop | 档位与取值 | 行为与场景 |
+| --- | --- | --- |
+| **`size`** | `"1"`（紧凑型，轨道宽度 4px，滑块 3px）<br>`"2"`（标准型，轨道宽度 8px，滑块 6px）<br>`"3"`（宽松型，轨道宽度 12px，滑块 10px） | 控制滚动条的厚度与槽位空间。<br>• 局部列表、下拉选择、侧栏导航、卡片内容一律推荐 **`size="1"`**<br>• 应用主骨架（PageShell）推荐 **`size="2"`** |
+| **`type`** | `"hover"`（悬浮显示，默认）<br>`"scroll"`（滚动交互中显示）<br>`"auto"`（溢出自动显示，桌面系统惯用）<br>`"always"`（始终保持可见） | 控制滚动条的出现与隐藏时机，无需手写 opacity / transition |
+| **`scrollbars`** | `"vertical"`（竖向）<br>`"horizontal"`（横向）<br>`"both"`（双向，默认） | 明确限定滚动方向，避免不期望的横向抖动 |
+| **`radius`** | `"none"` / `"small"` / `"medium"` / `"large"` / `"full"` | 控制滚动条滑块的圆角，默认随全局 Theme radius 自动继承 |
+
+```tsx
+// ❌ 错误：手写 WebKit 滚动条样式或在 CSS 中自定义滚动条宽度
+/* index.css */
+.app-shell ::-webkit-scrollbar { width: 10px; }
+.app-shell ::-webkit-scrollbar-thumb { background: var(--gray-a4); }
+
+// ✅ 正确：由 ScrollArea 原生 props 完整表达，跨平台一致且自动适配深浅色
+<ScrollArea type="auto" size="1" scrollbars="vertical">
+  {content}
+</ScrollArea>
+```
 
 ---
 
@@ -161,7 +192,11 @@ Radix Themes 的绝大多数布局、尺寸与可见性 prop（`columns`、`gap`
 
 ---
 
-## 4. 字号只由 `size` 决定
+## 4. Typography 排版能力闭环（Size 三件套、Font-family 与对齐）
+
+Radix Themes 的 9 大排版构建块（`Text` / `Heading` / `Link` / `Code` / `Kbd` / `Blockquote` / `Quote` / `Strong` / `Em`）完整封装了全部基础文字排版能力，**绝对禁止绕过组件 props 在 CSS 中自定义字号、字体、行高、字距或对齐**。
+
+### 4.1 `size` 封装三件套（font-size + line-height + letter-spacing）
 
 Radix 的 type scale 里，一个 `size` 同时定义 font-size、line-height 与 letter-spacing 三件套
 （[官方 type scale](https://www.radix-ui.com/themes/docs/theme/typography#type-scale)）。
@@ -172,7 +207,42 @@ Radix 的 type scale 里，一个 `size` 同时定义 font-size、line-height �
 写了必定盖掉 prop，且因为项目 CSS 后加载，是静默生效，看代码看不出来。
 没有 `size` 的组件先补 `size`，不要用 CSS 手搓一套字号。字重走 `weight`，不写 `font-weight`。
 
-### 4.1 `Text` 和 `Heading` 的同一 `size` 不等价
+### 4.2 等宽字体原生走 `<Code>` / `<Kbd>`（严禁手写 `font-family: var(--code-font-family)`）
+
+项目常见盲区：**误以为「`Text` 没有 `font-family` prop，等宽只能在容器或 CSS 自定义类上写」**。
+这是对排版构建块的重大误解：
+1. **排版构建块自带语义分工**：标准文本走 `Text` / `Heading`（默认无衬线字体）；代码、文件路径、目录、哈希、机台编号走 `<Code>` / `<Kbd>`（**原生自带 `--code-font-family`**）。
+2. **纯文字等宽无背景**：使用 `<Code variant="ghost">`，它只应用等宽字体与单字排版，完全不带默认背景与描边。
+3. **标签/徽标式等宽**：使用 `<Code variant="soft">` 或 `<Code variant="outline">`。
+4. **绝对禁止**在 CSS 中写 `font-family: var(--code-font-family);` 注入给普通 `div` 或 `Text`，一律使用 `<Code>` 替代。
+
+```tsx
+// ❌ 错误：在 CSS 自定义类中手写等宽字体
+<Flex className="path-strip"><Text size="1">{path}</Text></Flex>
+/* CSS: .path-strip { font-family: var(--code-font-family); } */
+
+// ✅ 正确：直接使用 Code 构建块，零额外 CSS
+<Flex className="path-strip">
+  <Code size="1" variant="ghost" color="gray" truncate>{path}</Code>
+</Flex>
+```
+
+### 4.3 文本对齐原生走 `align` prop（严禁在 CSS 手写 `text-align`）
+
+`Text`、`Heading` 以及 `Blockquote` 均原生支持 `align` prop：
+- `align="left"`（默认）
+- `align="center"`：文本居中
+- `align="right"`：文本靠右（适合表格数值、统计数字）
+
+```tsx
+// ❌ 错误：在 CSS 里写 text-align: center
+.empty-state { text-align: center; }
+
+// ✅ 正确：由排版组件的 align prop 表达
+<Text size="2" weight="medium" align="center">{title}</Text>
+```
+
+### 4.4 `Text` 和 `Heading` 的同一 `size` 不等价
 
 `Heading` 行高走 `--heading-line-height-N`，size 2–5 比 `Text` 紧 2px
 （18 vs 20、22 vs 24、24 vs 26、26 vs 28），size 1 / 6–9 相同。
@@ -207,7 +277,37 @@ Radix 的 type scale 里，一个 `size` 同时定义 font-size、line-height �
 
 ## 5. 颜色
 
-### 5.1 颜色下沉到 `Text`
+### 5.1 文本排版颜色规范（Accessible Text Sovereignty）
+
+`Text` / `Heading` / `Link` / `Code` 等 Typography 组件拥有专属的 `color` 与 `highContrast` prop。在 Radix Colors 规范中，**11 阶与 12 阶是唯二专为文字排版设计的 Accessible text 梯队**；**9 阶与 10 阶专属于 Solid 实体组件背景**。严禁向文本赋予 9/10 阶颜色（会导致 WCAG AA 4.5:1 对比度不达标并造成 CSS 泄漏）：
+
+| 层级 | 语义与场景 | 实现途径 | CSS 书写规则 |
+| --- | --- | --- | --- |
+| **12 阶（基准主要色）** | 正文主体、标题、主要强调 | 默认开箱即用（无 prop / 无 CSS 类）或 `highContrast` | **严禁写 CSS**（`.rt-Text` / 根已是 `--gray-12`，手写纯属泄漏与双写） |
+| **11 阶（次级辅助色）** | 辅助说明、次级标签、弱化提示、占位符 | `color="gray"`（精准映射 `--gray-a11` / `--gray-11`）或具名色 `color="indigo"` | **严禁写 CSS**（必须走 `color` prop，符合 WCAG AA 4.5:1 可访问标准） |
+| **层级弱化手段** | 需要比正文更弱的辅助说明、单位或元信息 | **组合使用 `size="1"`、字重（`weight="regular"` 或极弱时 `weight="light"`）与 `color="gray"`** | **严禁手写 CSS 篡改颜色**（用排版构建块原生能力拉开视知觉差异，拒绝非法灰阶） |
+| **动态状态色** | 链接 hover、导航激活、卡片 hover 联动变色 | 留存 CSS，`:hover` / `[data-state]` / `[aria-current]` | **必须留 CSS**（静态 prop 无法感知祖先与伪类状态） |
+
+```tsx
+// ❌ 典型反例：绕过 Typography prop 在 CSS 里定义 11/12 阶颜色，造成无用类与 CSS 泄漏
+<Text size="2" weight="bold" className="help-tip-title">{title}</Text>
+<Text size="1" className="help-tip-text">{desc}</Text>
+<Text size="1" weight="medium" className="progress-label">完成进度</Text>
+```
+```css
+/* ❌ 这些声明必须全部删除：title 本来就是 12 阶；text 和 progress-label 属于 11 阶，必须走 prop */
+.help-tip-title { color: var(--gray-12); }
+.help-tip-text { color: var(--gray-11); }
+.progress-label { color: var(--gray-11); }
+```
+```tsx
+// ✅ 正确做法：开箱即用 + color prop，零额外 CSS 类名
+<Text size="2" weight="bold">{title}</Text>
+<Text size="1" color="gray">{desc}</Text>
+<Text size="1" weight="medium" color="gray">完成进度</Text>
+```
+
+### 5.2 颜色下沉到 `Text`
 
 `Text` 有 `color` prop，颜色就是它的事——和间距下沉到 `Flex` 同理。
 容器上的 `color` / `font-*` / `text-align` 一律下沉到内部 `Text`；
@@ -216,19 +316,17 @@ Radix 的 type scale 里，一个 `size` 同时定义 font-size、line-height �
 只为 CSS 状态色服务的挂点（`data-state` / `data-tone`）随之删除，
 改用「语气 → 颜色」的映射表集中翻译，改一个语气只改一行。
 
-### 5.2 两个已知边界（不是偷懒，量过才算）
+### 5.3 两个已知边界（不是偷懒，量过才算）
 
-1. **给不到 9 / 10 阶。** 具名色 = 11 阶，加 `highContrast` = 12 阶，中间没有档位。
-   需要 gray-10 / gray-9 的文字（如弱化标签、数字单位）只能留 CSS。
-   `Badge` 的色名同样只到 11 阶，要压到 9 阶属同类例外。
-2. **没有「跟随主题强调色」的选项。** `color` 只接受具名色名，需要强调色时只能写死具体色名——
+1. **没有「跟随主题强调色」的选项。** `color` 只接受具名色名，需要强调色时只能写死具体色名——
    改 `accentColor` 必须同步改所有写死该色名的地方。
+2. **文字颜色不开放 9 / 10 阶。** 这是 Radix 官方的有意设计：9 / 10 阶在浅色底上对比度不足 4.5:1，不可用于阅读文本。若需要更弱的层级感，必须改用排版属性（如 `size="1"`、`weight="light"`），严禁手写 CSS 篡改为 9/10 阶。
 
 另有一个观感事实：`Text color="indigo"` 渲染的是 `--indigo-a11`（alpha 版），
 实测 `rgba(0, 43, 183, 0.773)`，不是实色 `--indigo-11`。这是 Radix 的设计（彩色文字带透明度以适配背景），
 **不是 bug，不要覆盖**。
 
-### 5.3 颜色可以压在容器上的三种情形
+### 5.4 颜色可以压在容器上的三种情形
 
 | 情形                       | 例子                                                          |
 | -------------------------- | ------------------------------------------------------------- |
@@ -352,15 +450,14 @@ prop 集合里没有 `color`——这条边界是组件库自己划的，顺着�
 | 形态                                                       | 为什么不能迁                                       |
 | ---------------------------------------------------------- | -------------------------------------------------- |
 | 第三方组件生成的 DOM（如 react-day-picker 的 `.rdp-*`）    | 类名拿不到 React prop                               |
-| 需要 9 / 10 阶灰的文字                                     | `Text color` 具名色只到 11 阶（见 §5.2）            |
-| `Badge` 要压到 9 阶的弱化色                                | 色名同样只到 11 阶                                  |
 | 必须渲染成特定原生元素（如要 `aria-current` 的路由 `<a>`） | 换成布局组件会丢语义与行为                          |
 | 根节点是原生 `<label>` 的容器                              | `text-align` 作用于 inline 子节点，只能留在它上面   |
 | 随祖先状态（`:hover` / `[aria-current]`）变化的文字色      | `Text` 的 `color` 是静态 prop，响应不了（见 §5.3）  |
 | 给 svg 与图形上色                                          | 不是文字（见 §5.3）                                 |
-| 等宽字体                                                   | `Text` 没有 `font-family` prop，靠容器继承          |
+| 原生输入控件展示路径需要等宽字体（如 `.dir-input`）         | `TextField` 属于原生 input 控件，无 code variant prop |
 | 状态强调的字重                                             | 表达状态差异，不是排版基线（见 §2.2）               |
-| `Popover.Content` 的 `overflow`                            | Popover 没有 overflow prop                          |
+| `ScrollArea` 键盘焦点避让吸顶标题（`.rt-ScrollAreaViewport` 的 `scroll-padding-top`） | `ScrollArea` 无对应 prop，焦点滚动必须由滚动视口承担 |
+| `PageShell` 吸顶磨砂标题（`z-index: 1`）                    | 受外层 `isolation: isolate` 局部层叠上下文保护，压住正文滚动内容且不溢出至弹层 |
 
 ### 8.2 卡片外观只有一处实现
 

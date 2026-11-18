@@ -1,22 +1,36 @@
-import {
-  CounterClockwiseClockIcon,
-  InfoCircledIcon,
-  TrashIcon,
-} from '@radix-ui/react-icons'
+import { History, Info, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
+  AlertDialog,
   Badge,
   Box,
   Button,
   Flex,
   IconButton,
+  Link,
   ScrollArea,
   Spinner,
   Text,
 } from '@radix-ui/themes'
 
-import { Panel, PanelBody, PanelHeader } from '@/components/panel'
-import { EmptyState } from '@/components/empty-state/empty-state'
+import {
+  Drawer,
+  DrawerBody,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from '@/components/drawer'
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/empty'
 import { useSettingsStore } from '@/features/settings'
 import { DEFAULT_HISTORY_LIMIT } from '@shared/historyLimit'
 import { useHistoryStore } from './historyStore'
@@ -70,6 +84,12 @@ interface HistoryPanelProps {
   activeStatus: ScanTaskStatus | null
 }
 
+/**
+ * 扫描历史入口（标题栏按钮 + 右侧 Drawer 抽屉）。
+ *
+ * 四类扫描页均在 Page Header Actions 挂此组件，点击滑出右侧抽屉查看并一键恢复；
+ * 清空全部走 AlertDialog 二次确认。
+ */
 const HistoryPanel = ({
   category,
   onRestore,
@@ -93,15 +113,6 @@ const HistoryPanel = ({
     setLoadingTask,
   } = useHistoryStore()
 
-  /**
-   * 只留本类别、且信息量足够的记录：
-   * - 扫到过图片；
-   * - 0 图但至少有一个分支真正探测过（日期/类型不存在、机台不可达等诊断结论）；
-   * - 退出时中断的任务，哪怕一张没扫到也要露出来。
-   *
-   * 老版本会把取消时什么都没扫到的任务也存下来，点进去是个空列表。
-   * 新版本不再写这类记录，这里用 diagnosed 再兜一层，旧条目也不会出现。
-   */
   const visible = items.filter(
     (item) =>
       (item.totalImages > 0 ||
@@ -111,6 +122,7 @@ const HistoryPanel = ({
   )
 
   const [open, setOpen] = useState(false)
+  const [confirmClear, setConfirmClear] = useState(false)
 
   useEffect(() => {
     void load()
@@ -137,12 +149,14 @@ const HistoryPanel = ({
 
     try {
       onRestore(item)
+      setOpen(false)
     } finally {
       setLoadingTask(null)
     }
   }
 
   const handleClear = (): void => {
+    setConfirmClear(false)
     clear()
       .then(() => showToast('已清空历史', '所有扫描记录均已删除', 'info'))
       .catch((cause: unknown) =>
@@ -151,65 +165,46 @@ const HistoryPanel = ({
   }
 
   return (
-    <Panel>
-      <PanelHeader
-        icon={<CounterClockwiseClockIcon width={13} height={13} />}
-        title="历史记录"
-        description="每次扫描结束后自动保存，可恢复参数或再次复制"
-        actions={
-          <>
-            {refreshing ? <Spinner size="1" /> : null}
-            <Text size="1" weight="medium" className="field-count">
-              {visible.length} / {limit}
-            </Text>
-            <Button
-              variant="soft"
-              color="gray"
-              size="1"
-              onClick={() => setOpen(!open)}
-            >
-              {open ? '收起' : '展开'}
-            </Button>
-          </>
-        }
-      />
+    <>
+      <Drawer open={open} onOpenChange={setOpen}>
+        <DrawerTrigger>
+          <Button type="button" variant="soft" color="gray" size="2">
+            {refreshing ? (
+              <Spinner size="1" />
+            ) : (
+              <History size={14} strokeWidth={1.75} />
+            )}
+            历史
+            {visible.length > 0 ? (
+              <Text size="1" color="gray" className="tabular">
+                {visible.length}
+              </Text>
+            ) : null}
+          </Button>
+        </DrawerTrigger>
 
-      {open ? (
-        <PanelBody>
-          <Flex direction="column" gap="3">
-            <Flex
-              className="history-toolbar"
-              align="center"
-              gap="3"
-              py="2"
-              px="3"
-            >
-              <Box flexGrow="1" minWidth="0">
-                <Text as="p" size="1" color="gray">
-                  每条记录包含全部图片路径，可恢复查看或再次复制；保留条数在设置页调整。
-                </Text>
-              </Box>
-              {visible.length > 0 ? (
-                <Button
-                  variant="soft"
-                  color="red"
-                  size="1"
-                  onClick={handleClear}
-                >
-                  <TrashIcon width={13} height={13} />
-                  清空
-                </Button>
-              ) : null}
+        <DrawerContent side="right" width="480px">
+          <DrawerHeader>
+            <Flex align="center" gap="2">
+              <DrawerTitle>扫描历史</DrawerTitle>
+              <Text size="1" weight="medium" color="gray" className="tabular">
+                {visible.length} / {limit}
+              </Text>
             </Flex>
+            <DrawerDescription>
+              点击记录可回填参数并恢复完整图片清单；保留条数在设置页调整。
+            </DrawerDescription>
+          </DrawerHeader>
 
+          <DrawerBody>
             {error ? (
-              <Text size="1" color="red">
+              <Text size="1" color="red" mb="3">
                 {error}
               </Text>
             ) : null}
 
             {loading ? (
-              <Flex align="center" justify="center" gap="2" py="4">
+              <Flex align="center" justify="center" gap="2" py="5">
                 <Spinner size="1" />
                 <Text size="1" color="gray">
                   正在读取历史记录…
@@ -218,16 +213,27 @@ const HistoryPanel = ({
             ) : null}
 
             {!loading && visible.length === 0 ? (
-              <EmptyState
-                icon={<InfoCircledIcon width={18} height={18} />}
-                title="还没有历史记录"
-                description="完成一次扫描后，结果会自动出现在这里，退出前中断的任务也会被保存。"
-              />
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Info size={18} strokeWidth={1.75} />
+                  </EmptyMedia>
+                  <EmptyTitle>还没有历史记录</EmptyTitle>
+                  <EmptyDescription>
+                    完成一次扫描后，结果会自动出现在这里，退出前中断的任务也会被保存。
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             ) : null}
 
             {!loading && visible.length > 0 ? (
-              <Box className="history-list" maxHeight="300px">
-                <ScrollArea type="auto" scrollbars="vertical">
+              <Box
+                className="history-list"
+                flexGrow="1"
+                minHeight="0"
+                overflow="hidden"
+              >
+                <ScrollArea type="auto" size="1" scrollbars="vertical">
                   {visible.map((item) => {
                     const meta = SCAN_STATUS_META[item.status]
                     const busy = loadingTaskId === item.id
@@ -265,16 +271,22 @@ const HistoryPanel = ({
                               <Badge color="amber">未命中</Badge>
                             ) : null}
                           </Flex>
-                          <button
-                            type="button"
-                            className="history-summary"
+                          <Link
+                            asChild
+                            size="1"
+                            weight="medium"
+                            underline="hover"
+                            truncate
                             title={`${item.params.machines.join('、')}\n${summarize(item)}`}
-                            onClick={() => handleRestore(item)}
                           >
-                            <Text size="1" weight="medium" truncate>
+                            <button
+                              type="button"
+                              className="history-summary"
+                              onClick={() => handleRestore(item)}
+                            >
                               {summarize(item)}
-                            </Text>
-                          </button>
+                            </button>
+                          </Link>
                         </Flex>
 
                         <Box flexShrink="0">
@@ -299,12 +311,13 @@ const HistoryPanel = ({
                           size="1"
                           disabled={busy}
                           onClick={() => void remove(item.id)}
+                          aria-label="删除这条记录"
                           title="删除这条记录"
                         >
                           {busy ? (
                             <Spinner size="1" />
                           ) : (
-                            <TrashIcon width={14} height={14} />
+                            <Trash2 size={14} strokeWidth={1.75} />
                           )}
                         </IconButton>
                       </Flex>
@@ -313,10 +326,54 @@ const HistoryPanel = ({
                 </ScrollArea>
               </Box>
             ) : null}
+          </DrawerBody>
+
+          <DrawerFooter>
+            {visible.length > 0 ? (
+              <Button
+                type="button"
+                variant="soft"
+                color="red"
+                size="2"
+                onClick={() => setConfirmClear(true)}
+              >
+                <Trash2 size={14} strokeWidth={1.75} />
+                清空全部
+              </Button>
+            ) : (
+              <Box />
+            )}
+
+            <DrawerClose>
+              <Button type="button" variant="soft" color="gray" size="2">
+                关闭
+              </Button>
+            </DrawerClose>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+
+      <AlertDialog.Root open={confirmClear} onOpenChange={setConfirmClear}>
+        <AlertDialog.Content maxWidth="400px">
+          <AlertDialog.Title>清空全部扫描历史？</AlertDialog.Title>
+          <AlertDialog.Description size="2">
+            将删除所有已保存的扫描记录，此操作无法撤销。
+          </AlertDialog.Description>
+          <Flex gap="3" justify="end" mt="4">
+            <AlertDialog.Cancel>
+              <Button variant="soft" color="gray">
+                取消
+              </Button>
+            </AlertDialog.Cancel>
+            <AlertDialog.Action>
+              <Button color="red" onClick={handleClear}>
+                确认清空
+              </Button>
+            </AlertDialog.Action>
           </Flex>
-        </PanelBody>
-      ) : null}
-    </Panel>
+        </AlertDialog.Content>
+      </AlertDialog.Root>
+    </>
   )
 }
 

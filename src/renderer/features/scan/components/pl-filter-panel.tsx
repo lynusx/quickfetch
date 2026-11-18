@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 import PlantFilterPanel, {
   FilterDateShift,
   FilterLevels,
@@ -9,34 +11,30 @@ import { usePlFilterStore } from '../stores/plFilterStore'
 import { selectPl, useSettingsStore } from '@/features/settings'
 import { PL_LEVELS } from '@shared/ipc'
 
+interface PlFilterPanelProps {
+  picker: ReactNode
+}
+
 /**
- * 利珀扫描范围。
- *
- * 比力禧特多一层「等级」：利珀的路径是
- * 时段 → Fail → 等级(A/B/C) → 类型，所以等级必须先选出来。
+ * 利珀扫描范围：日期/班次 → 时段 → 厂区/机台 → 等级 → 类型。
  */
-const PlFilterPanel = () => {
+const PlFilterPanel = ({ picker }: PlFilterPanelProps) => {
   const pl = useSettingsStore(selectPl)
   const addType = useSettingsStore((state) => state.addType)
   const removeType = useSettingsStore((state) => state.removeType)
   const catalogReady = useSettingsStore((state) => state.settings !== null)
-  const levels = usePlFilterStore((state) => state.levels)
 
   usePlantFilterDefaults(usePlFilterStore, { slots: true, paddedSlots: true })
 
   return (
     <PlantFilterPanel>
-      <FilterDateShift
-        filter={usePlFilterStore}
-        index={3}
-        extraDone={levels.length > 0}
-      >
-        <FilterLevels filter={usePlFilterStore} options={PL_LEVELS} />
+      <FilterDateShift filter={usePlFilterStore}>
+        <FilterSlots filter={usePlFilterStore} padded />
       </FilterDateShift>
-      <FilterSlots filter={usePlFilterStore} index={4} padded />
+      {picker}
+      <FilterLevels filter={usePlFilterStore} options={PL_LEVELS} />
       <FilterTypes
         filter={usePlFilterStore}
-        index={5}
         types={pl.typeCatalog}
         catalogReady={catalogReady}
         onAddType={(type) => void addType('pl', type)}

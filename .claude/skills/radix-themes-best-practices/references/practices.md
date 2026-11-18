@@ -183,15 +183,15 @@
 **反例**：`<div>` 只为加 margin / padding；`<span>` 当标签；`<h3>` 当标题；`<b>` / `<i>` 代替 `Strong` / `Em`；用 `Card` 拼一切（`Card` 是成品部件，不是构建块）。判断标准是**它有没有承担布局或排版职责**——承担了就必须换成组件。
 **代价**：多一层组件会加深 DOM（`Flex` 本身就是 `div`）；判断「Themes 有没有」要查一次 [llms.txt](llms.txt) 的组件清单。这一次 grep 换掉的，是「把 `ul` 改成 `Flex`、再改回来」的来回。
 
-### 2.8 As-Is 优先 vs 构建块自建：拒绝暴力覆盖（Overriding Styles）
+### 2.8 As-Is 优先 vs 构建块自建：拒绝暴力覆盖（Beyond Simple Style Overrides）
 
 **场景**：设计稿需要一个与 Radix 预设组件略有差异的界面元素（如带特殊虚线边框的文件触发区、尺寸极紧凑的状态条）。
-**默认**：严格执行三层递进原则（*Beyond simple style overrides, use components as-is or create your own using building blocks*）：
+**默认**：严格执行三层裁决矩阵（详见 [rules.md §2.2](rules.md#22-样式覆盖的三层裁决矩阵the-3-tier-decision-matrix)）：
 1. **As-Is 原则**：如果使用现有成品组件，**全盘接受其预设尺寸、圆角与交互层级**，仅通过内置 prop（`variant` / `color` / `size` / `highContrast`）调节，不要对其写 CSS 强扭。
 2. **令牌级定制**：全站通用的视觉偏离优先在根层级覆盖变量（覆盖 `--color-*`、`--radius-*`、`--cursor-*`），而不是逐个覆盖组件类名。
-3. **构建块自建**：当需求与成品组件（`Button` / `Card` 等）的预设形态根本冲突时，**严禁写 CSS 暴力覆写内部 `.rt-*` 类名**（如覆写 `.rt-Button` 的 padding/height/border）。应直接使用 14 个构建块（`Box` / `Flex` / `Grid` / `Text`）+ Radix Primitives + 令牌从零搭一个新组件；若需要按键/链接交互，外包 `<Button asChild>` 或 `<Link asChild>`。
+3. **构建块自建**：当需求与成品组件（`Button` / `Card` 等）的预设形态根本冲突时，**严禁写 CSS 暴力覆写内部 `.rt-*` 类名**（如覆写 `.rt-Button` 的 padding/height/border）。应直接使用 14 个构建块（`Box` / `Flex` / `Grid` / `Text` / `Code` 等）+ Radix Primitives + 令牌从零搭一个新组件；若需要按键/链接交互，外包 `<Button asChild>` 或 `<Link asChild>`。
 
-**反例**：给 `<Button>` 加一个自定义类名，在 CSS 里写 8 行样式把它的内边距清空、改高度为 18px、加虚线边框，把它强行伪装成一个文件选择器框。
+**反例**：给 `<Button>` 加一个自定义类名，在 CSS 里写 8 行样式把它的内边距清空、改高度为 18px、加虚线边框，把它强行伪装成一个文件选择器框；或者误以为 Text 无法等宽而在容器上写 `font-family: var(--code-font-family)`。
 **代价**：暴力覆写破坏了预设组件的特异性、Focus 环和 Hover/Active 状态机，极其脆弱且不可维护；用构建块搭虽然需要多写几行 JSX，但结构干净、完全受控且零样式冲突。
 
 ---

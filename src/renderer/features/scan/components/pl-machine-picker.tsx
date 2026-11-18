@@ -1,5 +1,4 @@
 import PlantMachinePicker from './plant-machine-picker'
-import { ReprobeSharesButton } from './reprobe-shares-button'
 import { usePlFilterStore } from '../stores/plFilterStore'
 import { selectPl, useSettingsStore } from '@/features/settings'
 import type { PlMachine } from '@shared/ipc'
@@ -22,7 +21,6 @@ const PlMachinePicker = ({ machines, onChanged }: PlMachinePickerProps) => {
   const error = useSettingsStore((state) => state.error)
   const setupPl = useSettingsStore((state) => state.setupPl)
   const refreshPl = useSettingsStore((state) => state.refreshPl)
-  const reprobeShares = useSettingsStore((state) => state.reprobeShares)
 
   return (
     <PlantMachinePicker
@@ -34,17 +32,12 @@ const PlMachinePicker = ({ machines, onChanged }: PlMachinePickerProps) => {
       filter={usePlFilterStore}
       onSetup={setupPl}
       onRefresh={refreshPl}
-      machineListActions={
-        <ReprobeSharesButton
-          saving={saving}
-          onReprobe={() => reprobeShares('pl')}
-        />
-      }
       labels={{
         rootPlaceholder: '\\\\10.108.x.x\\share\\利珀',
         rootHint:
           '每个含 .lnk 的子文件夹算一个厂区，机台地址来自快捷方式的目标',
         searchPlaceholder: '搜索机台，如 6 或 LX',
+        refreshLabel: '重新识别入口并探测共享',
       }}
       onChanged={onChanged}
     />

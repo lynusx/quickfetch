@@ -445,8 +445,8 @@ Radix 会在内部节点上输出 `data-*`，用它们写状态样式比自定�
   <IconButton aria-label="刷新"><UpdateIcon /></IconButton>
 </Tooltip>
 
-// ✅ 滚动条策略（ScrollArea）：hover / scroll / auto / always
-<ScrollArea type="scroll" scrollbars="vertical">
+// ✅ 滚动条策略与尺寸（ScrollArea）：size="1" (紧凑型 4px) / size="2" (标准型 8px)，type 为 hover / scroll / auto / always
+<ScrollArea type="auto" size="1" scrollbars="vertical">
 ```
 
 已核对过的继承 prop（按组件）：`AspectRatio`（`ratio`）、`Checkbox`（`checked` / `defaultChecked` / `onCheckedChange` / `required` / `name` / `value`）、`Progress`（`value` / `max` / `getValueLabel`）、`ScrollArea`（`type` / `scrollHideDelay` / `dir`）、`Tooltip`（`open` / `defaultOpen` / `onOpenChange` / `delayDuration` / `side` / `sideOffset` / `align` / `collisionPadding` / `onEscapeKeyDown` / `onPointerDownOutside` / `forceMount`）。

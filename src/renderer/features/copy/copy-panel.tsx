@@ -1,18 +1,19 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import {
-  DownloadIcon,
-  ExclamationTriangleIcon,
-  OpenInNewWindowIcon,
-  PauseIcon,
-  PlayIcon,
-  ResetIcon,
-  StopIcon,
-} from '@radix-ui/react-icons'
+  Download,
+  ExternalLink,
+  Pause,
+  Play,
+  RotateCcw,
+  Square,
+  TriangleAlert,
+} from 'lucide-react'
 import {
   Box,
   Button,
   Callout,
+  Code,
   Dialog,
   Flex,
   Spinner,
@@ -23,7 +24,13 @@ import {
 import { BulkActions } from '@/components/bulk-actions/bulk-actions'
 import { ChoiceList } from '@/components/choice-list'
 import { Field } from '@/components/field'
-import { EmptyState } from '@/components/empty-state/empty-state'
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/empty'
 import { ROUTES } from '@/routes/paths'
 import { useImageCopy } from './useImageCopy'
 import { copyStoreOf } from './copyStore'
@@ -115,11 +122,17 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
   if (!machineStats.length) {
     return (
       <Flex direction="column" gap="4">
-        <EmptyState
-          icon={<DownloadIcon width={18} height={18} />}
-          title="暂无可复制的图片"
-          description="完成一次扫描并命中图片后，这里会出现机台列表供勾选复制。"
-        />
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Download size={18} strokeWidth={1.75} />
+            </EmptyMedia>
+            <EmptyTitle>暂无可复制的图片</EmptyTitle>
+            <EmptyDescription>
+              完成一次扫描并命中图片后，这里会出现机台列表供勾选复制。
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
         {optionSummary}
       </Flex>
     )
@@ -138,7 +151,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
               color="gray"
               onClick={handleReveal}
             >
-              <OpenInNewWindowIcon width={13} height={13} />
+              <ExternalLink size={13} strokeWidth={1.75} />
               打开
             </Button>
           ) : undefined
@@ -165,9 +178,15 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
             px="2"
             data-empty={!activeDir}
           >
-            <Text size="1" truncate color={activeDir ? undefined : 'gray'}>
-              {activeDir || '尚未选择目标目录'}
-            </Text>
+            {activeDir ? (
+              <Code size="1" variant="ghost" truncate>
+                {activeDir}
+              </Code>
+            ) : (
+              <Text size="1" color="gray">
+                尚未选择目标目录
+              </Text>
+            )}
           </Flex>
           <Button
             variant="outline"
@@ -207,9 +226,9 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
           options={machineStats.map((item) => ({
             value: item.machine,
             label: (
-              <Text size="2" className="mono">
+              <Code variant="ghost" color="gray" highContrast size="2">
                 {item.machine}
-              </Text>
+              </Code>
             ),
             meta: item.images,
             title: item.machine,
@@ -237,10 +256,10 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
               ? `，创建 ${preview.folders.length} 个分组目录`
               : '，全部平铺在目标目录下'}
             {preview.folders.length > 0 ? (
-              <Text color="gray" ml="1" className="mono">
+              <Code variant="ghost" color="gray" ml="1">
                 （{preview.folders.slice(0, 3).join('、')}
                 {preview.folders.length > 3 ? '…' : ''}）
-              </Text>
+              </Code>
             ) : null}
             {preview.conflicts > 0 ? (
               <Text
@@ -272,7 +291,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
             {busy ? (
               <Spinner size="1" />
             ) : (
-              <DownloadIcon width={15} height={15} />
+              <Download size={15} strokeWidth={1.75} />
             )}
             {finished ? '重新复制' : '开始复制'}
           </Button>
@@ -280,7 +299,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
           <>
             {paused ? (
               <Button onClick={() => void handleResume()} disabled={busy}>
-                <PlayIcon width={15} height={15} />
+                <Play size={15} strokeWidth={1.75} />
                 继续
               </Button>
             ) : (
@@ -289,7 +308,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
                 onClick={() => void handlePause()}
                 disabled={busy}
               >
-                <PauseIcon width={15} height={15} />
+                <Pause size={15} strokeWidth={1.75} />
                 暂停
               </Button>
             )}
@@ -298,7 +317,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
               onClick={() => void handleCancel()}
               disabled={busy}
             >
-              <StopIcon width={15} height={15} />
+              <Square size={15} strokeWidth={1.75} />
               取消
             </Button>
           </>
@@ -310,7 +329,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
             onClick={() => void handleRetry()}
             disabled={busy}
           >
-            <ResetIcon width={15} height={15} />
+            <RotateCcw size={15} strokeWidth={1.75} />
             重试失败项（{task?.progress.failed}）
           </Button>
         ) : null}
@@ -319,7 +338,7 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
       {error ? (
         <Callout.Root color="red" size="1">
           <Callout.Icon>
-            <ExclamationTriangleIcon width={14} height={14} />
+            <TriangleAlert size={14} strokeWidth={1.75} />
           </Callout.Icon>
           <Callout.Text>
             <Strong>复制失败：</Strong> {error}
@@ -346,9 +365,9 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
             继续会用源文件覆盖它们，覆盖后无法撤销。
           </Dialog.Description>
           <Flex className="target-dir" align="center" gap="2" mb="3">
-            <Text size="1" truncate color="gray">
+            <Code size="1" variant="ghost" color="gray" truncate>
               {activeDir}
-            </Text>
+            </Code>
           </Flex>
           <Flex gap="3" justify="end">
             <Dialog.Close>

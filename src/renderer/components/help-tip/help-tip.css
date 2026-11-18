@@ -10,17 +10,3 @@
 .help-tip-trigger[data-state='open'] {
   color: var(--gray-12);
 }
-
-/* Popover.Content 没有 overflow prop，长说明在这里滚动。 */
-.help-tip-content {
-  max-height: var(--radix-popover-content-available-height);
-  overflow-y: auto;
-}
-
-.help-tip-title {
-  color: var(--gray-12);
-}
-
-.help-tip-text {
-  color: var(--gray-11);
-}
