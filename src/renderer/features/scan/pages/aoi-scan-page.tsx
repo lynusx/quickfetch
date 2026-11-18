@@ -42,7 +42,7 @@ const AoiScanPage = () => {
         !configured ? (
           <UnconfiguredNotice
             title="先配置森标 AOI 入口"
-            description="在左侧选择入口目录，应用会解析其中的快捷方式并识别各厂区机台"
+            description="在顶部选择入口目录，应用会解析其中的快捷方式并识别各厂区机台"
           />
         ) : active.length === 0 ? (
           <NoMachinesNotice />

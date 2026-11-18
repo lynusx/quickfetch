@@ -8,7 +8,6 @@ import {
   ScrollArea,
   Text,
 } from '@radix-ui/themes'
-import { cn } from '@/lib/utils'
 
 import './choice-list.css'
 
@@ -19,16 +18,11 @@ export interface ChoiceOption {
   title?: string
 }
 
-const COLUMN_CLASS = {
-  1: 'choice-cols-1',
-  2: 'choice-cols-2',
-  3: 'choice-cols-3',
-  4: 'choice-cols-4',
-} as const
+type ChoiceColumns = 1 | 2 | 3 | 4
 
 interface ChoiceBaseProps {
   options: ChoiceOption[]
-  columns?: keyof typeof COLUMN_CLASS
+  columns?: ChoiceColumns
   scroll?: boolean
   disabled?: boolean
   empty?: ReactNode
@@ -39,9 +33,6 @@ const emptyText = (empty: ReactNode) => (
     {empty ?? '没有可选项'}
   </Text>
 )
-
-const gridClass = (columns: keyof typeof COLUMN_CLASS) =>
-  cn('choice-grid', COLUMN_CLASS[columns])
 
 export const ChoiceList = ({
   options,
@@ -73,7 +64,7 @@ export const ChoiceList = ({
   if (!options.length) return emptyText(empty)
 
   const content = (
-    <Grid className={gridClass(columns)} gap="2">
+    <Grid columns={String(columns) as '1' | '2' | '3' | '4'} gap="2">
       {options.map((option) => {
         const checked = selected.has(option.value)
 
@@ -104,7 +95,13 @@ export const ChoiceList = ({
               onCheckedChange={(next) => toggle(option.value, next === true)}
             />
             <Box flexGrow="1" minWidth="0">
-              <Text size="2" truncate className="choice-label">
+              <Text
+                size="2"
+                weight={checked ? 'medium' : 'regular'}
+                color={checked ? undefined : 'gray'}
+                highContrast={checked || undefined}
+                truncate
+              >
                 {option.label}
               </Text>
             </Box>
@@ -124,8 +121,8 @@ export const ChoiceList = ({
   if (scroll) {
     return (
       <Box maxHeight="222px" className="choice-scroll">
-        <ScrollArea type="auto" scrollbars="vertical">
-          <Box className="choice-scroll-inner">{content}</Box>
+        <ScrollArea type="auto" size="1" scrollbars="vertical">
+          <Box p="2">{content}</Box>
         </ScrollArea>
       </Box>
     )
@@ -154,7 +151,7 @@ export const ChoiceRadio = ({
       disabled={disabled}
       onValueChange={onValueChange}
     >
-      <Grid className={gridClass(columns)} gap="2">
+      <Grid columns={String(columns) as '1' | '2' | '3' | '4'} gap="2">
         {options.map((option) => {
           const checked = option.value === value
 
@@ -182,7 +179,13 @@ export const ChoiceRadio = ({
                 onClick={(event) => event.stopPropagation()}
               />
               <Box flexGrow="1" minWidth="0">
-                <Text size="2" truncate className="choice-label">
+                <Text
+                  size="2"
+                  weight={checked ? 'medium' : 'regular'}
+                  color={checked ? undefined : 'gray'}
+                  highContrast={checked || undefined}
+                  truncate
+                >
                   {option.label}
                 </Text>
               </Box>

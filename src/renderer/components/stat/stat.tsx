@@ -28,7 +28,7 @@ interface StatProps {
 
 export const Stat = ({ label, value, unit, tone = 'default' }: StatProps) => (
   <Flex className="stat" direction="column" gap="1" minWidth="0" p="3">
-    <Text as="div" size="1" weight="medium" className="stat-label">
+    <Text as="div" size="1" weight="medium" color="gray">
       {label}
     </Text>
     <Text
@@ -42,7 +42,7 @@ export const Stat = ({ label, value, unit, tone = 'default' }: StatProps) => (
     >
       {value}
       {unit ? (
-        <Text as="span" size="1" weight="medium" ml="1" className="stat-unit">
+        <Text as="span" size="1" weight="medium" color="gray" ml="1">
           {unit}
         </Text>
       ) : null}
@@ -51,7 +51,7 @@ export const Stat = ({ label, value, unit, tone = 'default' }: StatProps) => (
 )
 
 export const StatGrid = ({ children }: { children: ReactNode }) => (
-  <Grid className="stat-grid" gap="2">
+  <Grid columns={{ initial: '2', lg: '4' }} gap="2">
     {children}
   </Grid>
 )

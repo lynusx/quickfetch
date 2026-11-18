@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react'
-import { DownloadIcon, MagnifyingGlassIcon } from '@radix-ui/react-icons'
+import { MagnifyingGlassIcon } from '@radix-ui/react-icons'
 import { Box, Flex, Grid } from '@radix-ui/themes'
 
-import { CopyPanel } from '@/features/copy'
 import { HistoryPanel } from '@/features/history'
 import { PageShell } from '@/components/page-shell/page-shell'
 import { Panel, PanelBody, PanelHeader } from '@/components/panel'
+import { ScanEntryRootBar } from './scan-entry-root-bar'
 import { ScanStatusBadge } from './scan-status-badge'
 import { ScanTaskPanel } from './scan-task-panel'
 import { useScanSession } from '../hooks/useScanSession'
@@ -78,62 +78,60 @@ const PlantScanPage = ({
       title={SCAN_CATEGORY_LABEL[category]}
       description={description}
       badge={task ? <ScanStatusBadge status={task.status} /> : null}
+      actions={
+        <ScanEntryRootBar category={category} disabled={busy || creating} />
+      }
     >
-      <Grid className="workbench-grid" gap="4" align="start">
+      <Flex direction="column" gap="4">
         <Panel>
           <PanelHeader
             icon={<MagnifyingGlassIcon width={13} height={13} />}
             title="扫描范围"
-            description="按顺序选好入口目录、机台、时间与类型"
           />
           <PanelBody>
-            {picker}
-            <Box className="panel-section" mt="4" pt="4">
-              {filterPanel}
-            </Box>
+            <Grid
+              columns={{
+                initial: '1',
+                md: 'minmax(280px, 1.1fr) minmax(440px, 2fr)',
+              }}
+              gap="5"
+              align="start"
+            >
+              <Box minWidth="0">{picker}</Box>
+              <Box minWidth="0">{filterPanel}</Box>
+            </Grid>
           </PanelBody>
         </Panel>
 
-        <Flex direction="column" gap="4" minWidth="0">
-          <ScanTaskPanel
-            task={task}
-            creating={creating}
-            busy={busy}
-            ready={ready}
-            missing={missing}
-            canStart={canStart}
-            error={error}
-            other={other}
-            otherLabel={otherLabel}
-            networkHint={networkHint}
-            notices={notices}
-            onStart={() => void start()}
-            onPause={() => void pause()}
-            onResume={() => void resume()}
-            onCancel={() => void cancel()}
-            onClear={clearResult}
-          />
+        <ScanTaskPanel
+          category={category}
+          task={task}
+          creating={creating}
+          busy={busy}
+          ready={ready}
+          missing={missing}
+          canStart={canStart}
+          error={error}
+          other={other}
+          otherLabel={otherLabel}
+          networkHint={networkHint}
+          notices={notices}
+          showToast={showToast}
+          onStart={() => void start()}
+          onPause={() => void pause()}
+          onResume={() => void resume()}
+          onCancel={() => void cancel()}
+          onClear={clearResult}
+        />
 
-          <Panel>
-            <PanelHeader
-              icon={<DownloadIcon width={13} height={13} />}
-              title="复制到本地"
-              description="按机台勾选，平铺或分组写入目标目录"
-            />
-            <PanelBody>
-              <CopyPanel category={category} showToast={showToast} />
-            </PanelBody>
-          </Panel>
-
-          <HistoryPanel
-            category={category}
-            onRestore={(item) => void restoreHistory(item)}
-            showToast={showToast}
-            activeId={task?.id ?? null}
-            activeStatus={task?.status ?? null}
-          />
-        </Flex>
-      </Grid>
+        <HistoryPanel
+          category={category}
+          onRestore={(item) => void restoreHistory(item)}
+          showToast={showToast}
+          activeId={task?.id ?? null}
+          activeStatus={task?.status ?? null}
+        />
+      </Flex>
     </PageShell>
   )
 }

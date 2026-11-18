@@ -29,12 +29,12 @@ export const EmptyState = ({ icon, title, description }: EmptyStateProps) => (
     >
       {icon}
     </Flex>
-    <Text as="p" size="2" weight="medium">
+    <Text as="p" size="2" weight="medium" align="center">
       {title}
     </Text>
     {description ? (
       <Box maxWidth="380px">
-        <Text as="p" size="1" className="empty-description">
+        <Text as="p" size="1" color="gray" align="center">
           {description}
         </Text>
       </Box>

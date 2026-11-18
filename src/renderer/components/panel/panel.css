@@ -1,14 +1,8 @@
 /* 面板：Panel / PanelHeader / PanelBody。卡片外观全部来自 Radix Card + `.app-card`，
-   本文件只留图标外观与说明文字色。
-   标题不设 `margin` / `color`：`.rt-Heading` 已经是 margin 0，根节点已经是 gray-12。 */
+   说明文字由 Text color="gray" 表达，本文件只留图标外观。 */
 
 .panel-icon {
   border-radius: var(--radius-3);
   background: var(--accent-a3);
   color: var(--accent-11);
-}
-
-/* 说明文字用 gray-10：`Text color="gray"` 只到 11 阶，表达不了更弱的层级 */
-.panel-description {
-  color: var(--gray-10);
 }

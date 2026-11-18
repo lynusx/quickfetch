@@ -10,6 +10,7 @@ import {
   Button,
   Flex,
   IconButton,
+  Link,
   ScrollArea,
   Spinner,
   Text,
@@ -155,11 +156,10 @@ const HistoryPanel = ({
       <PanelHeader
         icon={<CounterClockwiseClockIcon width={13} height={13} />}
         title="历史记录"
-        description="每次扫描结束后自动保存，可恢复参数或再次复制"
         actions={
           <>
             {refreshing ? <Spinner size="1" /> : null}
-            <Text size="1" weight="medium" className="field-count">
+            <Text size="1" weight="medium" color="gray" className="tabular">
               {visible.length} / {limit}
             </Text>
             <Button
@@ -227,7 +227,7 @@ const HistoryPanel = ({
 
             {!loading && visible.length > 0 ? (
               <Box className="history-list" maxHeight="300px">
-                <ScrollArea type="auto" scrollbars="vertical">
+                <ScrollArea type="auto" size="1" scrollbars="vertical">
                   {visible.map((item) => {
                     const meta = SCAN_STATUS_META[item.status]
                     const busy = loadingTaskId === item.id
@@ -265,16 +265,22 @@ const HistoryPanel = ({
                               <Badge color="amber">未命中</Badge>
                             ) : null}
                           </Flex>
-                          <button
-                            type="button"
-                            className="history-summary"
+                          <Link
+                            asChild
+                            size="1"
+                            weight="medium"
+                            underline="hover"
+                            truncate
                             title={`${item.params.machines.join('、')}\n${summarize(item)}`}
-                            onClick={() => handleRestore(item)}
                           >
-                            <Text size="1" weight="medium" truncate>
+                            <button
+                              type="button"
+                              className="history-summary"
+                              onClick={() => handleRestore(item)}
+                            >
                               {summarize(item)}
-                            </Text>
-                          </button>
+                            </button>
+                          </Link>
                         </Flex>
 
                         <Box flexShrink="0">

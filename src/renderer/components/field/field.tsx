@@ -35,7 +35,7 @@ export const Field = ({
           {label}
         </Text>
         {count != null ? (
-          <Text size="1" weight="medium" className="field-count">
+          <Text size="1" weight="medium" color="gray" className="tabular">
             {count}
           </Text>
         ) : null}
@@ -48,7 +48,7 @@ export const Field = ({
     </Flex>
     {children}
     {hint ? (
-      <Text as="p" size="1" className="field-hint">
+      <Text as="p" size="1" color="gray">
         {hint}
       </Text>
     ) : null}

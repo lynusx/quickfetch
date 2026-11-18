@@ -1,3 +1,5 @@
+import { Flex } from '@radix-ui/themes'
+
 import PlantFilterPanel, {
   FilterDateShift,
   FilterLevels,
@@ -26,17 +28,19 @@ const PlFilterPanel = () => {
 
   return (
     <PlantFilterPanel>
-      <FilterDateShift
-        filter={usePlFilterStore}
-        index={3}
-        extraDone={levels.length > 0}
-      >
-        <FilterLevels filter={usePlFilterStore} options={PL_LEVELS} />
-      </FilterDateShift>
-      <FilterSlots filter={usePlFilterStore} index={4} padded />
+      <Flex direction="column" gap="4">
+        <FilterDateShift
+          filter={usePlFilterStore}
+          index={2}
+          extraDone={levels.length > 0}
+        >
+          <FilterLevels filter={usePlFilterStore} options={PL_LEVELS} />
+        </FilterDateShift>
+        <FilterSlots filter={usePlFilterStore} index={3} padded />
+      </Flex>
       <FilterTypes
         filter={usePlFilterStore}
-        index={5}
+        index={4}
         types={pl.typeCatalog}
         catalogReady={catalogReady}
         onAddType={(type) => void addType('pl', type)}

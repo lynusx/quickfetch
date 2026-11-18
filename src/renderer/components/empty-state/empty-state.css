@@ -1,17 +1,8 @@
-/* 空状态：EmptyState。布局走 props，本文件只保留字体/颜色等。
-   标题不设 `margin` / `color`：`.rt-Text` 已经是 margin 0，根节点已经是 gray-12。 */
-
-.empty-state {
-  text-align: center;
-}
+/* 空状态：EmptyState。布局由 props 表达，说明文字颜色由 Text color="gray" 表达，
+   本文件只保留图标外观。 */
 
 .empty-icon {
   border-radius: var(--radius-3);
   background: var(--gray-a3);
   color: var(--gray-9);
-}
-
-/* 说明文字用 gray-10：`Text color="gray"` 只到 11 阶，表达不了更弱的层级 */
-.empty-description {
-  color: var(--gray-10);
 }

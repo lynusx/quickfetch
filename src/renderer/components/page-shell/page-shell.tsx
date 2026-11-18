@@ -11,6 +11,8 @@ interface PageShellProps {
   help?: ReactNode
   /** 跟在标题后面的状态徽标 */
   badge?: ReactNode
+  /** 标题栏右侧操作区，与左侧标题两端对齐 */
+  actions?: ReactNode
   /** 页面引导句，放在正文顶部随内容滚动；不传就不占位 */
   description?: ReactNode
   /** 正文的最大宽度；标题始终贴内容区内边距，不跟随它 */
@@ -32,6 +34,7 @@ export const PageShell = ({
   title,
   help,
   badge,
+  actions,
   description,
   contentMaxWidth = 'var(--app-content-max)',
   children,
@@ -72,17 +75,24 @@ export const PageShell = ({
             className="page-shell-header"
             data-stuck={stuck ? 'true' : undefined}
             align="center"
+            justify="between"
+            gap="3"
             position="sticky"
             top="0"
             height="var(--app-page-header-height)"
             px="4"
           >
             <PageHeader title={title} help={help} badge={badge} />
+            {actions ? (
+              <Flex align="center" gap="2" minWidth="0" flexShrink="0">
+                {actions}
+              </Flex>
+            ) : null}
           </Flex>
 
           <Box maxWidth={contentMaxWidth} mx="auto" px="4" pt="3" pb="9">
             {description ? (
-              <Text as="p" size="1" className="page-shell-description" mb="4">
+              <Text as="p" size="1" color="gray" mb="4">
                 {description}
               </Text>
             ) : null}

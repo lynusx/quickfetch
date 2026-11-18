@@ -132,24 +132,17 @@ export const HelpTip = ({ title, children }: HelpTipProps) => {
         sideOffset={6}
         collisionPadding={8}
         maxWidth="300px"
+        maxHeight="var(--radix-popover-content-available-height)"
         aria-labelledby={titleId}
-        className="help-tip-content"
         onOpenAutoFocus={(event) => event.preventDefault()}
         onCloseAutoFocus={(event) => event.preventDefault()}
         onPointerEnter={handlePointerEnter}
         onPointerLeave={handlePointerLeave}
       >
-        <Text
-          as="p"
-          size="2"
-          weight="bold"
-          id={titleId}
-          mb="1"
-          className="help-tip-title"
-        >
+        <Text as="p" size="2" weight="bold" id={titleId} mb="1">
           {title}
         </Text>
-        <Text as="p" size="1" className="help-tip-text">
+        <Text as="p" size="1" color="gray">
           {children}
         </Text>
       </Popover.Content>

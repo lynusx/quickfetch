@@ -30,12 +30,5 @@
 }
 
 .history-summary {
-  all: unset;
-  cursor: pointer;
-  color: var(--accent-11);
   text-align: left;
-}
-
-.history-summary:hover {
-  text-decoration: underline;
 }

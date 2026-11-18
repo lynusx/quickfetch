@@ -15,6 +15,7 @@ import {
   Button,
   Dialog,
   Flex,
+  Grid,
   IconButton,
   Text,
   TextField,
@@ -45,11 +46,11 @@ interface PlantFilterPanelProps {
   children: ReactNode
 }
 
-/** 面板容器：只负责纵向节奏，section 与顺序由调用方决定 */
+/** 面板容器：横向栅格排布，section 与顺序由调用方决定 */
 const PlantFilterPanel = ({ children }: PlantFilterPanelProps) => (
-  <Flex direction="column" gap="5">
+  <Grid columns={{ initial: '1', sm: '2' }} gap="4" align="start">
     {children}
-  </Flex>
+  </Grid>
 )
 
 interface FilterDateShiftProps {
@@ -367,6 +368,7 @@ export const FilterTypes = ({
       >
         <ChoiceList
           columns={1}
+          scroll
           value={selectedTypes}
           onValueChange={setTypes}
           options={types.map((type) => ({ value: type, label: type }))}

@@ -1,21 +1,5 @@
-/* 选择项：ChoiceList / ChoiceRadio。布局走 props，本文件只保留列模板、
-   滚动限高与交互态。 */
-
-.choice-cols-1 {
-  grid-template-columns: repeat(1, minmax(0, 1fr));
-}
-
-.choice-cols-2 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.choice-cols-3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.choice-cols-4 {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
+/* 选择项：ChoiceList / ChoiceRadio。布局由 Grid / Flex props 表达，
+   文字色与字重由 Text props 表达，本文件只保留边框、背景与交互态。 */
 
 .choice-cell {
   border: 1px solid var(--gray-a4);
@@ -44,22 +28,9 @@
   opacity: 0.6;
 }
 
-.choice-label {
-  color: var(--gray-11);
-}
-
-.choice-cell[data-selected='true'] .choice-label {
-  font-weight: var(--font-weight-medium);
-  color: var(--accent-12);
-}
-
 /* 选项多时由调用方传 `scroll`：外观在这里，限高走外层 Box maxHeight */
 .choice-scroll {
   border: 1px solid var(--app-border);
   border-radius: var(--radius-3);
   background: var(--app-surface);
-}
-
-.choice-scroll-inner {
-  padding: var(--space-2);
 }

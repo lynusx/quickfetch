@@ -82,6 +82,7 @@ export const AppSidebar = () => {
       <Box flexGrow="1" minHeight="0">
         <ScrollArea
           type="auto"
+          size="1"
           scrollbars="vertical"
           role="navigation"
           aria-label="主导航"
@@ -93,9 +94,9 @@ export const AppSidebar = () => {
                   as="div"
                   size="1"
                   weight="medium"
+                  color="gray"
                   mx="2"
                   mb="2"
-                  className="nav-group-label"
                 >
                   {group.label}
                 </Text>

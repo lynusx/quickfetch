@@ -26,14 +26,14 @@ const ElFilterPanel = () => {
     <PlantFilterPanel>
       <FilterDateShift
         filter={useElFilterStore}
-        index={3}
+        index={2}
         extraDone={slots.length > 0}
       >
         <FilterSlotsField filter={useElFilterStore} />
       </FilterDateShift>
       <FilterTypes
         filter={useElFilterStore}
-        index={4}
+        index={3}
         types={el.typeCatalog}
         catalogReady={catalogReady}
         onAddType={(type) => void addType('el', type)}

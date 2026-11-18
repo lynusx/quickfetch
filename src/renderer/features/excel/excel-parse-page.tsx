@@ -50,7 +50,6 @@ const ExcelParsePage = () => {
           Beta
         </Badge>
       }
-      description="解析单个 Excel 文件，按设备 ID 分组后，支持按线别与不良项筛选，并导出为 xlsx。"
     >
       <ExcelUploadZone />
 
@@ -63,7 +62,6 @@ const ExcelParsePage = () => {
           <PanelHeader
             icon={<InfoCircledIcon width={13} height={13} />}
             title="使用说明"
-            description="上传、解析、筛选、导出，四步完成"
           />
           <PanelBody>
             <Grid columns="repeat(auto-fit, minmax(220px, 1fr))" gap="4">
@@ -76,7 +74,7 @@ const ExcelParsePage = () => {
                         {item.title}
                       </Text>
                     </Flex>
-                    <Text as="p" size="1" className="guide-text" mt="1">
+                    <Text as="p" size="1" color="gray" mt="1">
                       {item.text}
                     </Text>
                   </Box>

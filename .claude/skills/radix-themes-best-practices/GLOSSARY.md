@@ -45,3 +45,7 @@ _Avoid_: base、响应式类名、Tailwind 前缀
 **leading trim（行高修剪）**:
 通过 `trim` prop 驱动的排版特性，消除文字行高在字型首尾带来的天然留白（half-leading），用于文字与图标或边框的像素级垂直居中对齐。
 _Avoid_: 负 margin、line-height 归一、文字贴边 hack
+
+**color-leakage（颜色泄漏）**:
+绕过 Typography 组件（`Text` / `Heading` / `Link` / `Code`）的 `color` / `highContrast` prop，在 CSS 中向文本书写本由组件库默认提供或原生支持的 11/12 阶颜色类（如 `.title { color: var(--gray-12); }`、`.desc { color: var(--gray-11); }`），破坏单点真相并引入无用类名。
+_Avoid_: 文本颜色覆盖、手写文本色、颜色类

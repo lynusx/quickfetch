@@ -33,12 +33,11 @@ const ElScanPage = () => {
   return (
     <PlantScanPage
       category="el"
-      description="按日期、班次与类型从 DC 共享盘收集 EL 图片，支持暂停续跑，并把命中的图片批量复制到本地。"
       notices={
         configured ? undefined : (
           <UnconfiguredNotice
             title="还没有配置 DC 根目录"
-            description="在左侧填入或选择根目录后，才能开始扫描。"
+            description="在顶部填入或选择根目录后，才能开始扫描。"
           />
         )
       }

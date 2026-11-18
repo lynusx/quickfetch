@@ -1,3 +1,5 @@
+import { Flex } from '@radix-ui/themes'
+
 import PlantFilterPanel, {
   FilterDateShift,
   FilterSlots,
@@ -22,11 +24,13 @@ const LxtFilterPanel = () => {
 
   return (
     <PlantFilterPanel>
-      <FilterDateShift filter={useLxtFilterStore} index={3} />
-      <FilterSlots filter={useLxtFilterStore} index={4} />
+      <Flex direction="column" gap="4">
+        <FilterDateShift filter={useLxtFilterStore} index={2} />
+        <FilterSlots filter={useLxtFilterStore} index={3} />
+      </Flex>
       <FilterTypes
         filter={useLxtFilterStore}
-        index={5}
+        index={4}
         types={lxt.typeCatalog}
         catalogReady={catalogReady}
         onAddType={(type) => void addType('lxt', type)}

@@ -52,7 +52,7 @@ export const PanelHeader = ({
         </Heading>
       </Flex>
       {description ? (
-        <Text as="p" size="1" className="panel-description" mt="1">
+        <Text as="p" size="1" color="gray" mt="1">
           {description}
         </Text>
       ) : null}

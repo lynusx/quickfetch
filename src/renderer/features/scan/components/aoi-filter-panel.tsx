@@ -22,10 +22,10 @@ const AoiFilterPanel = () => {
 
   return (
     <PlantFilterPanel>
-      <FilterDateShift filter={useAoiFilterStore} index={3} />
+      <FilterDateShift filter={useAoiFilterStore} index={2} />
       <FilterTypes
         filter={useAoiFilterStore}
-        index={4}
+        index={3}
         types={aoi.typeCatalog}
         catalogReady={catalogReady}
         onAddType={(type) => void addType('aoi', type)}

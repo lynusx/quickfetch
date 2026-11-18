@@ -36,7 +36,7 @@ const FileMetaItem = ({
   value: ReactNode
 }) => (
   <Flex className="file-meta-item" direction="column" gap="1" py="2" px="3">
-    <Text as="div" size="1" className="file-meta-label">
+    <Text as="div" size="1" color="gray">
       {label}
     </Text>
     <Text as="div" size="1" weight="medium" truncate className="tabular">
@@ -136,7 +136,6 @@ const ExcelViewer = () => {
         <PanelHeader
           icon={<TableIcon width={13} height={13} />}
           title={file.name}
-          description="单文件解析，默认读取第 1 个工作表"
           actions={
             <>
               <Badge color={statusMeta.color} variant={statusMeta.variant}>
@@ -182,13 +181,19 @@ const ExcelViewer = () => {
       ) : null}
 
       {file.status === 'completed' ? (
-        <Grid className="workbench-grid" gap="4" align="start">
+        <Grid
+          columns={{
+            initial: '1',
+            lg: 'minmax(320px, 400px) minmax(0, 1fr)',
+          }}
+          gap="4"
+          align="start"
+        >
           {/* 左侧筛选 */}
           <Panel>
             <PanelHeader
               icon={<TableIcon width={13} height={13} />}
               title="筛选条件"
-              description="线别与不良项可组合筛选，留空表示不过滤"
             />
             <PanelBody>
               <SheetFilterPanel />
@@ -236,17 +241,15 @@ const ExcelViewer = () => {
                 }
               />
               <PanelBody>
-                <Box className="table-shell">
-                  {sheet ? (
-                    <SheetTablePreview sheet={sheet} mode="result" />
-                  ) : (
-                    <EmptyState
-                      icon={<TableIcon width={18} height={18} />}
-                      title="暂无可显示的数据"
-                      description="调整左侧筛选条件后再试。"
-                    />
-                  )}
-                </Box>
+                {sheet ? (
+                  <SheetTablePreview sheet={sheet} mode="result" />
+                ) : (
+                  <EmptyState
+                    icon={<TableIcon width={18} height={18} />}
+                    title="暂无可显示的数据"
+                    description="调整左侧筛选条件后再试。"
+                  />
+                )}
               </PanelBody>
             </Panel>
           </Box>

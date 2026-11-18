@@ -13,6 +13,7 @@ import {
   Box,
   Button,
   Callout,
+  Code,
   Dialog,
   Flex,
   Spinner,
@@ -165,9 +166,15 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
             px="2"
             data-empty={!activeDir}
           >
-            <Text size="1" truncate color={activeDir ? undefined : 'gray'}>
-              {activeDir || '尚未选择目标目录'}
-            </Text>
+            {activeDir ? (
+              <Code size="1" variant="ghost" truncate>
+                {activeDir}
+              </Code>
+            ) : (
+              <Text size="1" color="gray">
+                尚未选择目标目录
+              </Text>
+            )}
           </Flex>
           <Button
             variant="outline"
@@ -207,9 +214,9 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
           options={machineStats.map((item) => ({
             value: item.machine,
             label: (
-              <Text size="2" className="mono">
+              <Code variant="ghost" color="gray" highContrast size="2">
                 {item.machine}
-              </Text>
+              </Code>
             ),
             meta: item.images,
             title: item.machine,
@@ -237,10 +244,10 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
               ? `，创建 ${preview.folders.length} 个分组目录`
               : '，全部平铺在目标目录下'}
             {preview.folders.length > 0 ? (
-              <Text color="gray" ml="1" className="mono">
+              <Code variant="ghost" color="gray" ml="1">
                 （{preview.folders.slice(0, 3).join('、')}
                 {preview.folders.length > 3 ? '…' : ''}）
-              </Text>
+              </Code>
             ) : null}
             {preview.conflicts > 0 ? (
               <Text
@@ -346,9 +353,9 @@ const CopyPanel = ({ category, showToast }: CopyPanelProps) => {
             继续会用源文件覆盖它们，覆盖后无法撤销。
           </Dialog.Description>
           <Flex className="target-dir" align="center" gap="2" mb="3">
-            <Text size="1" truncate color="gray">
+            <Code size="1" variant="ghost" color="gray" truncate>
               {activeDir}
-            </Text>
+            </Code>
           </Flex>
           <Flex gap="3" justify="end">
             <Dialog.Close>

@@ -11,13 +11,6 @@
   margin-top: var(--space-5);
 }
 
-/* 分组标签：缩进与下间距走 margin prop（`mx` / `mb`）——这里没有背景与描边，
-   padding 与 margin 的渲染位置完全一致，不必为此再套一层盒子。
-   `color` 用 gray-9：`Text color="gray"` 只到 11 阶，表达不了更弱的层级。 */
-.nav-group-label {
-  color: var(--gray-9);
-}
-
 /* 导航项必须渲染成 <a>（React Router 的 NavLink 提供 aria-current 与客户端跳转），
    拿不到 Flex 的布局 props，所以这几条布局声明只能留在这里，不算双写；
    文字色是状态色（:hover / [aria-current]），Text 的 color 是静态 prop，也盖不住。 */

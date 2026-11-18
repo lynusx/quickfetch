@@ -4,8 +4,6 @@
   border: 1px solid var(--app-border-strong);
   border-radius: var(--radius-2);
   background: var(--gray-a2);
-  /* Text 没有 font-family prop，等宽只能留在容器上由子元素继承 */
-  font-family: var(--code-font-family);
 }
 
 .target-dir[data-empty='true'] {
