@@ -1,9 +1,62 @@
+import { useEffect, useRef } from 'react'
+import { animated, useSpring } from '@react-spring/web'
 import { Box, Flex } from '@radix-ui/themes'
-import { Outlet } from 'react-router'
+import { Outlet, useLocation } from 'react-router'
 
 import { SidebarInset, SidebarProvider } from '@/components/sidebar'
+import { SPRING_SNAPPY, useReducedMotion } from '@/lib/motion'
 import { AppSidebar } from './app-sidebar'
 import './app-layout.css'
+
+const AnimatedFlex = animated(Flex)
+
+/**
+ * 路由切页轻量进场容器：每次切换侧边栏页面时播放极短淡入 + 6px 上移；
+ * 静止态自动还原 transform: none，避免给后代 fixed/sticky 元素制造新的包含块。
+ */
+const AnimatedOutlet = () => {
+  const { pathname } = useLocation()
+  const reducedMotion = useReducedMotion()
+  const prevPathRef = useRef(pathname)
+
+  const [spring, api] = useSpring(() => ({
+    opacity: 1,
+    y: 0,
+  }))
+
+  useEffect(() => {
+    if (prevPathRef.current === pathname) return
+    prevPathRef.current = pathname
+
+    if (reducedMotion) {
+      api.set({ opacity: 1, y: 0 })
+      return
+    }
+
+    api.start({
+      from: { opacity: 0, y: 6 },
+      to: { opacity: 1, y: 0 },
+      config: SPRING_SNAPPY,
+    })
+  }, [pathname, reducedMotion, api])
+
+  return (
+    <AnimatedFlex
+      direction="column"
+      flexGrow="1"
+      flexBasis="0"
+      minHeight="0"
+      style={{
+        opacity: spring.opacity,
+        transform: spring.y.to((v) =>
+          v === 0 ? 'none' : `translate3d(0, ${v}px, 0)`,
+        ),
+      }}
+    >
+      <Outlet />
+    </AnimatedFlex>
+  )
+}
 
 /**
  * 应用外壳。
@@ -31,7 +84,7 @@ const LayoutPage = () => (
       <Flex className="app-body" flexGrow="1" flexBasis="0" minHeight="0">
         <AppSidebar />
         <SidebarInset>
-          <Outlet />
+          <AnimatedOutlet />
         </SidebarInset>
       </Flex>
     </Flex>

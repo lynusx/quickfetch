@@ -1,42 +1,28 @@
-/* 抽屉：Drawer。基于 Radix Dialog.Content，将居中弹窗贴边停靠到视口边缘，
-   并补充滑入动效与头尾分隔线。 */
+/* 抽屉：Drawer。基于 Radix Dialog.Content，将居中弹窗贴边停靠到视口边缘；
+   滑入/滑出位移由 react-spring 驱动，本文件负责贴边定位、头尾分隔线与遮罩退场。 */
 
-@keyframes drawer-slide-in-right {
+@keyframes drawer-overlay-out {
   from {
-    transform: translateX(100%);
+    opacity: 1;
   }
 
   to {
-    transform: translateX(0);
+    opacity: 0;
   }
 }
 
-@keyframes drawer-slide-in-left {
-  from {
-    transform: translateX(-100%);
-  }
-
-  to {
-    transform: translateX(0);
-  }
-}
-
-@keyframes drawer-slide-in-bottom {
-  from {
-    transform: translateY(100%);
-  }
-
-  to {
-    transform: translateY(0);
-  }
-}
-
-/* 抽屉滑入动效期间阻止 Radix 外层滚动容器闪出横向滚动条 */
+/* 抽屉滑入/滑出期间阻止 Radix 外层滚动容器闪出横向滚动条 */
 .rt-BaseDialogScroll:has(.drawer-content) {
   overflow: hidden;
 }
 
-/* 覆盖 Radix Dialog.Content 的居中定位与默认内边距，
+/* 关闭滑出期间立即放开底层点击并让遮罩平滑淡出 */
+.rt-BaseDialogOverlay:has(.drawer-content[data-closing='true']) {
+  pointer-events: none;
+  animation: drawer-overlay-out 180ms ease-out forwards;
+}
+
+/* 覆盖 Radix Dialog.Content 的居中定位、默认内边距与缩放进场动画，
    相对于已避让顶带的 .rt-BaseDialogScroll 定位，确保阴影被遮罩层裁剪在顶带下方 */
 .drawer-content.rt-DialogContent {
   position: absolute;
@@ -47,6 +33,7 @@
   overflow: hidden;
   background: var(--app-surface);
   box-shadow: var(--shadow-5);
+  animation: none;
 }
 
 .drawer-content.rt-DialogContent[data-side='right'] {
@@ -57,7 +44,6 @@
   max-height: 100%;
   border-radius: var(--radius-4) 0 0 var(--radius-4);
   border-left: 1px solid var(--app-border);
-  animation: drawer-slide-in-right 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .drawer-content.rt-DialogContent[data-side='left'] {
@@ -68,7 +54,6 @@
   max-height: 100%;
   border-radius: 0 var(--radius-4) var(--radius-4) 0;
   border-right: 1px solid var(--app-border);
-  animation: drawer-slide-in-left 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .drawer-content.rt-DialogContent[data-side='bottom'] {
@@ -78,7 +63,6 @@
   max-height: min(82vh, 100%);
   border-radius: var(--radius-4) var(--radius-4) 0 0;
   border-top: 1px solid var(--app-border);
-  animation: drawer-slide-in-bottom 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .drawer-close {

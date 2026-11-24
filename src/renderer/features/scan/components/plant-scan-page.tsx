@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { ChevronUp, Play, Search, TriangleAlert } from 'lucide-react'
 import {
   Badge,
+  Box,
   Button,
   Callout,
   Flex,
@@ -12,6 +13,7 @@ import {
   Text,
 } from '@radix-ui/themes'
 
+import { Collapse } from '@/components/collapse'
 import { HistoryPanel } from '@/features/history'
 import { PageShell } from '@/components/page-shell/page-shell'
 import { Panel, PanelBody, PanelHeader } from '@/components/panel'
@@ -124,107 +126,112 @@ const PlantScanPage = ({
         />
       ) : (
         <Flex direction="column" gap="4">
-          {/* 上半区：配置期展示展开态参数矩阵，执行/结果期折叠为单行摘要条 */}
-          {scopeExpanded || !task ? (
-            <Panel>
-              <PanelHeader
-                icon={<Search size={15} strokeWidth={1.75} />}
-                title="扫描范围"
-                actions={
-                  <>
-                    {busy ? (
-                      <Badge color="blue" size="1">
-                        扫描中 · 仅查看
-                      </Badge>
-                    ) : null}
-                    {task ? (
-                      <Button
-                        type="button"
-                        variant="soft"
-                        color="gray"
-                        onClick={() => setScopeExpanded(false)}
-                      >
-                        收起
-                        <ChevronUp size={14} strokeWidth={1.75} />
-                      </Button>
-                    ) : null}
-                  </>
-                }
-              />
-              <PanelBody>
-                <Flex direction="column" gap="4">
-                  <Flex
-                    direction="column"
-                    gap="4"
-                    className="scope-matrix-grid"
-                    data-readonly={busy ? 'true' : undefined}
-                    aria-disabled={busy || undefined}
-                  >
-                    {scopeForm}
-                  </Flex>
-
-                  {!task && other && otherLabel ? (
-                    <Callout.Root color="blue" size="1">
-                      <Callout.Icon>
-                        <TriangleAlert size={14} strokeWidth={1.75} />
-                      </Callout.Icon>
-                      <Callout.Text>
-                        <Strong>另一类扫描正在进行：</Strong> {otherLabel}
-                      </Callout.Text>
-                    </Callout.Root>
-                  ) : null}
-
-                  {!task && error ? (
-                    <Callout.Root color="red" size="1">
-                      <Callout.Icon>
-                        <TriangleAlert size={14} strokeWidth={1.75} />
-                      </Callout.Icon>
-                      <Callout.Text>
-                        <Strong>启动扫描失败：</Strong> {error}
-                      </Callout.Text>
-                    </Callout.Root>
-                  ) : null}
-
-                  {!busy ? (
+          {/* 上半区：配置期展示展开态参数矩阵，执行/结果期平滑折叠为单行摘要条；
+              两个互斥 Collapse 放入同一 Box，避免收起态仍触发外层 Flex gap */}
+          <Box>
+            <Collapse open={scopeExpanded || !task}>
+              <Panel>
+                <PanelHeader
+                  icon={<Search size={15} strokeWidth={1.75} />}
+                  title="扫描范围"
+                  actions={
                     <>
-                      <Separator size="4" />
-                      <Flex
-                        align="center"
-                        justify="between"
-                        gap="3"
-                        wrap="wrap"
-                      >
-                        <Text size="2" color="gray">
-                          {!ready && missing?.length
-                            ? `请先选择：${missing.join('、')}`
-                            : '范围已就绪'}
-                        </Text>
+                      {busy ? (
+                        <Badge color="blue" size="1">
+                          扫描中 · 仅查看
+                        </Badge>
+                      ) : null}
+                      {task ? (
                         <Button
                           type="button"
-                          size="2"
-                          disabled={!canStart}
-                          onClick={() => void start()}
+                          variant="soft"
+                          color="gray"
+                          onClick={() => setScopeExpanded(false)}
                         >
-                          {creating ? (
-                            <Spinner size="1" />
-                          ) : (
-                            <Play size={14} strokeWidth={1.75} />
-                          )}
-                          {task ? '重新扫描' : '开始扫描'}
+                          收起
+                          <ChevronUp size={14} strokeWidth={1.75} />
                         </Button>
-                      </Flex>
+                      ) : null}
                     </>
-                  ) : null}
-                </Flex>
-              </PanelBody>
-            </Panel>
-          ) : (
-            <ScopeSummaryBar
-              category={category}
-              busy={busy}
-              onExpand={() => setScopeExpanded(true)}
-            />
-          )}
+                  }
+                />
+                <PanelBody>
+                  <Flex direction="column" gap="4">
+                    <Flex
+                      direction="column"
+                      gap="4"
+                      className="scope-matrix-grid"
+                      data-readonly={busy ? 'true' : undefined}
+                      aria-disabled={busy || undefined}
+                    >
+                      {scopeForm}
+                    </Flex>
+
+                    {!task && other && otherLabel ? (
+                      <Callout.Root color="blue" size="1">
+                        <Callout.Icon>
+                          <TriangleAlert size={14} strokeWidth={1.75} />
+                        </Callout.Icon>
+                        <Callout.Text>
+                          <Strong>另一类扫描正在进行：</Strong> {otherLabel}
+                        </Callout.Text>
+                      </Callout.Root>
+                    ) : null}
+
+                    {!task && error ? (
+                      <Callout.Root color="red" size="1">
+                        <Callout.Icon>
+                          <TriangleAlert size={14} strokeWidth={1.75} />
+                        </Callout.Icon>
+                        <Callout.Text>
+                          <Strong>启动扫描失败：</Strong> {error}
+                        </Callout.Text>
+                      </Callout.Root>
+                    ) : null}
+
+                    {!busy ? (
+                      <>
+                        <Separator size="4" />
+                        <Flex
+                          align="center"
+                          justify="between"
+                          gap="3"
+                          wrap="wrap"
+                        >
+                          <Text size="2" color="gray">
+                            {!ready && missing?.length
+                              ? `请先选择：${missing.join('、')}`
+                              : '范围已就绪'}
+                          </Text>
+                          <Button
+                            type="button"
+                            size="2"
+                            disabled={!canStart}
+                            onClick={() => void start()}
+                          >
+                            {creating ? (
+                              <Spinner size="1" />
+                            ) : (
+                              <Play size={14} strokeWidth={1.75} />
+                            )}
+                            {task ? '重新扫描' : '开始扫描'}
+                          </Button>
+                        </Flex>
+                      </>
+                    ) : null}
+                  </Flex>
+                </PanelBody>
+              </Panel>
+            </Collapse>
+
+            <Collapse open={!scopeExpanded && Boolean(task)} unmountOnExit>
+              <ScopeSummaryBar
+                category={category}
+                busy={busy}
+                onExpand={() => setScopeExpanded(true)}
+              />
+            </Collapse>
+          </Box>
 
           {/* 下半区：仅在已有扫描任务时渲染单列任务流与吸底复制栏 */}
           {task ? (

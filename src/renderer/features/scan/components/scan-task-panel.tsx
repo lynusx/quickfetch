@@ -32,10 +32,12 @@ import {
   Tooltip,
 } from '@radix-ui/themes'
 
+import { Collapse } from '@/components/collapse'
 import { useImageCopy } from '@/features/copy/useImageCopy'
 import { copyStoreOf } from '@/features/copy/copyStore'
 import { previewSizeLabel } from '@/features/copy/copyReadModel'
 import { selectPreferences, useSettingsStore } from '@/features/settings'
+import { SPRING_SNAPPY, useReducedMotion } from '@/lib/motion'
 import { ROUTES } from '@/routes/paths'
 import type { ScanCategory, ScanTask } from '@shared/ipc'
 import { COPY_CONFLICT_LABEL, COPY_LAYOUT_LABEL } from '@shared/ipc'
@@ -80,10 +82,7 @@ interface ScanTaskPanelProps {
 }
 
 const AnimatedTableRow = animated(Table.Row)
-
-const prefersReducedMotion = (): boolean =>
-  typeof window !== 'undefined' &&
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const AnimatedBox = animated(Box)
 
 /**
  * 扫描与就地复制统一单列任务流（Single-Column Task Stream）。
@@ -153,13 +152,22 @@ export const ScanTaskPanel = ({
   } = readModel
 
   const sizeLabel = previewSizeLabel(preview, previewing)
+  const reducedMotion = useReducedMotion()
 
   const rowTransitions = useTransition(view.rows, {
     keys: (row) => `${task.id}:${row.machine}`,
     from: { opacity: 0, y: 8 },
     enter: { opacity: 1, y: 0 },
-    config: { tension: 280, friction: 26 },
-    immediate: prefersReducedMotion(),
+    config: SPRING_SNAPPY,
+    immediate: reducedMotion,
+  })
+
+  const copyBarTransitions = useTransition(task.totalImages > 0, {
+    from: { opacity: 0, y: 12 },
+    enter: { opacity: 1, y: 0 },
+    leave: { opacity: 0, y: 12 },
+    config: SPRING_SNAPPY,
+    immediate: reducedMotion,
   })
 
   const onStartCopyClick = () => {
@@ -489,281 +497,296 @@ export const ScanTaskPanel = ({
       </Card>
 
       {/* 3. 吸底复制操作栏（置于 Card 外部，避免 Card overflow:hidden 破坏 sticky） */}
-      {task.totalImages > 0 ? (
-        <Box position="sticky" bottom="3" className="sticky-copy-bar">
-          <Card size="2" className="app-card sticky-copy-card">
-            <Flex direction="column" gap="3" p="4">
-              {!copyRunning && !copyPaused ? (
-                <>
-                  <Flex align="center" gap="2" minWidth="0">
-                    <Box flexGrow="1" minWidth="0">
-                      <TextField.Root
-                        size="2"
-                        value={activeDir ?? ''}
-                        placeholder="选择复制目标目录…"
-                        readOnly
-                        title={activeDir || undefined}
-                        disabled={copyBusy}
-                        onClick={() => void handlePickTarget()}
-                        className="dir-input"
-                      />
-                    </Box>
+      {copyBarTransitions((barStyle, show) =>
+        show ? (
+          <AnimatedBox
+            position="sticky"
+            bottom="3"
+            className="sticky-copy-bar"
+            style={{
+              opacity: barStyle.opacity,
+              transform: barStyle.y.to((v) =>
+                v === 0 ? 'none' : `translate3d(0, ${v}px, 0)`,
+              ),
+            }}
+          >
+            <Card size="2" className="app-card sticky-copy-card">
+              <Flex direction="column" gap="3" p="4">
+                {!copyRunning && !copyPaused ? (
+                  <>
+                    <Flex align="center" gap="2" minWidth="0">
+                      <Box flexGrow="1" minWidth="0">
+                        <TextField.Root
+                          size="2"
+                          value={activeDir ?? ''}
+                          placeholder="选择复制目标目录…"
+                          readOnly
+                          title={activeDir || undefined}
+                          disabled={copyBusy}
+                          onClick={() => void handlePickTarget()}
+                          className="dir-input"
+                        />
+                      </Box>
 
-                    <Box flexShrink="0">
-                      <Button
-                        size="2"
-                        variant="soft"
-                        color="gray"
-                        type="button"
-                        disabled={copyBusy}
-                        onClick={() => void handlePickTarget()}
-                      >
-                        {activeDir ? '更换目录' : '选择目录'}
-                      </Button>
-                    </Box>
-
-                    {activeDir && copyFinished ? (
                       <Box flexShrink="0">
                         <Button
                           size="2"
-                          variant="outline"
+                          variant="soft"
                           color="gray"
                           type="button"
-                          onClick={handleReveal}
-                          title="在文件资源管理器中打开目标目录"
+                          disabled={copyBusy}
+                          onClick={() => void handlePickTarget()}
                         >
-                          <ExternalLink size={14} strokeWidth={1.75} />
-                          打开
+                          {activeDir ? '更换目录' : '选择目录'}
                         </Button>
                       </Box>
+
+                      {activeDir && copyFinished ? (
+                        <Box flexShrink="0">
+                          <Button
+                            size="2"
+                            variant="outline"
+                            color="gray"
+                            type="button"
+                            onClick={handleReveal}
+                            title="在文件资源管理器中打开目标目录"
+                          >
+                            <ExternalLink size={14} strokeWidth={1.75} />
+                            打开
+                          </Button>
+                        </Box>
+                      ) : null}
+
+                      <Box flexShrink="0">
+                        <Button
+                          size="2"
+                          type="button"
+                          disabled={!canCopy || copyBusy}
+                          onClick={onStartCopyClick}
+                        >
+                          {copyBusy ? (
+                            <Spinner size="1" />
+                          ) : (
+                            <Download size={14} strokeWidth={1.75} />
+                          )}
+                          {copyFinished ? '重新复制' : '开始复制'}
+                          {pickedCount > 0 ? ` (${pickedCount}张)` : ''}
+                        </Button>
+                      </Box>
+                    </Flex>
+
+                    <Flex align="center" justify="between" gap="2" wrap="wrap">
+                      <Flex align="center" gap="2" wrap="wrap">
+                        <Text size="2" color="gray" className="tabular">
+                          已选 {selectedCount}/{machineStats.length} 台
+                          {sizeLabel ? ` · 预估 ${sizeLabel}` : ''} ·{' '}
+                          {COPY_LAYOUT_LABEL[layout]} ·{' '}
+                          {COPY_CONFLICT_LABEL[conflict]}
+                        </Text>
+                        {copySucceededClean && copyTask ? (
+                          <Flex align="center" gap="1">
+                            <CircleCheck
+                              size={14}
+                              strokeWidth={1.75}
+                              className="copy-done-icon"
+                            />
+                            <Text size="2" color="green" className="tabular">
+                              已复制 {copyTask.progress.copied} 张
+                              {copyTask.progress.alreadyExists > 0
+                                ? ` · 已存在 ${copyTask.progress.alreadyExists}`
+                                : ''}
+                              {copyTask.progress.skipped > 0
+                                ? ` · 跳过 ${copyTask.progress.skipped}`
+                                : ''}
+                            </Text>
+                          </Flex>
+                        ) : null}
+                      </Flex>
+                      <Button variant="ghost" color="gray" asChild>
+                        <Link to={ROUTES.SETTINGS}>设置</Link>
+                      </Button>
+                    </Flex>
+
+                    {/* 部分复制失败警告 + 重试 + 失败明细 */}
+                    {hasCopyFailures && copyTask ? (
+                      <Flex direction="column" gap="2">
+                        <Callout.Root color="amber" size="1">
+                          <Callout.Icon>
+                            <TriangleAlert size={14} strokeWidth={1.75} />
+                          </Callout.Icon>
+                          <Flex
+                            align="center"
+                            justify="between"
+                            gap="2"
+                            wrap="wrap"
+                            width="100%"
+                          >
+                            <Callout.Text>
+                              已复制 {copyTask.progress.copied} 张，
+                              <Strong>{failedCount} 张复制失败</Strong>
+                              {copyTask.progress.alreadyExists > 0
+                                ? `（已存在 ${copyTask.progress.alreadyExists}）`
+                                : ''}
+                            </Callout.Text>
+                            <Flex align="center" gap="2" flexShrink="0">
+                              {copyTask.failures.length > 0 ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  color="gray"
+                                  size="1"
+                                  onClick={() => setShowFailures(!showFailures)}
+                                >
+                                  {showFailures ? '收起明细' : '查看明细'}
+                                </Button>
+                              ) : null}
+                              <Button
+                                type="button"
+                                variant="soft"
+                                color="red"
+                                size="1"
+                                disabled={copyBusy}
+                                onClick={() => void handleRetry()}
+                              >
+                                <RotateCcw size={12} strokeWidth={1.75} />
+                                重试失败项（{failedCount}）
+                              </Button>
+                            </Flex>
+                          </Flex>
+                        </Callout.Root>
+
+                        <Collapse
+                          open={showFailures && copyTask.failures.length > 0}
+                          unmountOnExit
+                        >
+                          <Box
+                            maxHeight="160px"
+                            width="100%"
+                            overflow="hidden"
+                            className="copy-failure-list"
+                          >
+                            <ScrollArea
+                              type="auto"
+                              size="1"
+                              scrollbars="vertical"
+                            >
+                              {copyTask.failures.map((failure) => (
+                                <Flex
+                                  key={`${failure.path}-${failure.to}`}
+                                  direction="column"
+                                  gap="1"
+                                  p="2"
+                                  className="copy-failure-row"
+                                >
+                                  <Code
+                                    variant="ghost"
+                                    size="1"
+                                    color="gray"
+                                    highContrast
+                                    truncate
+                                    title={failure.path}
+                                  >
+                                    {failure.path}
+                                  </Code>
+                                  <Text
+                                    size="1"
+                                    color="red"
+                                    truncate
+                                    title={failure.reason}
+                                  >
+                                    {failure.reason}
+                                  </Text>
+                                </Flex>
+                              ))}
+                            </ScrollArea>
+                          </Box>
+                        </Collapse>
+                      </Flex>
                     ) : null}
 
-                    <Box flexShrink="0">
-                      <Button
-                        size="2"
-                        type="button"
-                        disabled={!canCopy || copyBusy}
-                        onClick={onStartCopyClick}
-                      >
-                        {copyBusy ? (
-                          <Spinner size="1" />
-                        ) : (
-                          <Download size={14} strokeWidth={1.75} />
-                        )}
-                        {copyFinished ? '重新复制' : '开始复制'}
-                        {pickedCount > 0 ? ` (${pickedCount}张)` : ''}
-                      </Button>
-                    </Box>
-                  </Flex>
-
-                  <Flex align="center" justify="between" gap="2" wrap="wrap">
-                    <Flex align="center" gap="2" wrap="wrap">
-                      <Text size="2" color="gray" className="tabular">
-                        已选 {selectedCount}/{machineStats.length} 台
-                        {sizeLabel ? ` · 预估 ${sizeLabel}` : ''} ·{' '}
-                        {COPY_LAYOUT_LABEL[layout]} ·{' '}
-                        {COPY_CONFLICT_LABEL[conflict]}
-                      </Text>
-                      {copySucceededClean && copyTask ? (
-                        <Flex align="center" gap="1">
-                          <CircleCheck
-                            size={14}
-                            strokeWidth={1.75}
-                            className="copy-done-icon"
-                          />
-                          <Text size="2" color="green" className="tabular">
-                            已复制 {copyTask.progress.copied} 张
-                            {copyTask.progress.alreadyExists > 0
-                              ? ` · 已存在 ${copyTask.progress.alreadyExists}`
-                              : ''}
-                            {copyTask.progress.skipped > 0
-                              ? ` · 跳过 ${copyTask.progress.skipped}`
-                              : ''}
-                          </Text>
-                        </Flex>
-                      ) : null}
-                    </Flex>
-                    <Button variant="ghost" color="gray" asChild>
-                      <Link to={ROUTES.SETTINGS}>设置</Link>
-                    </Button>
-                  </Flex>
-
-                  {/* 部分复制失败警告 + 重试 + 失败明细 */}
-                  {hasCopyFailures && copyTask ? (
-                    <Flex direction="column" gap="2">
-                      <Callout.Root color="amber" size="1">
+                    {copyError ? (
+                      <Callout.Root color="red" size="1">
                         <Callout.Icon>
                           <TriangleAlert size={14} strokeWidth={1.75} />
                         </Callout.Icon>
-                        <Flex
-                          align="center"
-                          justify="between"
-                          gap="2"
-                          wrap="wrap"
-                          width="100%"
-                        >
-                          <Callout.Text>
-                            已复制 {copyTask.progress.copied} 张，
-                            <Strong>{failedCount} 张复制失败</Strong>
-                            {copyTask.progress.alreadyExists > 0
-                              ? `（已存在 ${copyTask.progress.alreadyExists}）`
-                              : ''}
-                          </Callout.Text>
-                          <Flex align="center" gap="2" flexShrink="0">
-                            {copyTask.failures.length > 0 ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                color="gray"
-                                size="1"
-                                onClick={() => setShowFailures(!showFailures)}
-                              >
-                                {showFailures ? '收起明细' : '查看明细'}
-                              </Button>
-                            ) : null}
-                            <Button
-                              type="button"
-                              variant="soft"
-                              color="red"
-                              size="1"
-                              disabled={copyBusy}
-                              onClick={() => void handleRetry()}
-                            >
-                              <RotateCcw size={12} strokeWidth={1.75} />
-                              重试失败项（{failedCount}）
-                            </Button>
-                          </Flex>
-                        </Flex>
-                      </Callout.Root>
-
-                      {showFailures && copyTask.failures.length > 0 ? (
-                        <Box
-                          maxHeight="160px"
-                          width="100%"
-                          overflow="hidden"
-                          className="copy-failure-list"
-                        >
-                          <ScrollArea
-                            type="auto"
+                        <Callout.Text>
+                          复制失败：{copyError}
+                          <Button
+                            type="button"
+                            variant="soft"
                             size="1"
-                            scrollbars="vertical"
+                            ml="2"
+                            onClick={() => void handleRetry()}
                           >
-                            {copyTask.failures.map((failure) => (
-                              <Flex
-                                key={`${failure.path}-${failure.to}`}
-                                direction="column"
-                                gap="1"
-                                p="2"
-                                className="copy-failure-row"
-                              >
-                                <Code
-                                  variant="ghost"
-                                  size="1"
-                                  color="gray"
-                                  highContrast
-                                  truncate
-                                  title={failure.path}
-                                >
-                                  {failure.path}
-                                </Code>
-                                <Text
-                                  size="1"
-                                  color="red"
-                                  truncate
-                                  title={failure.reason}
-                                >
-                                  {failure.reason}
-                                </Text>
-                              </Flex>
-                            ))}
-                          </ScrollArea>
-                        </Box>
-                      ) : null}
-                    </Flex>
-                  ) : null}
-
-                  {copyError ? (
-                    <Callout.Root color="red" size="1">
-                      <Callout.Icon>
-                        <TriangleAlert size={14} strokeWidth={1.75} />
-                      </Callout.Icon>
-                      <Callout.Text>
-                        复制失败：{copyError}
-                        <Button
-                          type="button"
-                          variant="soft"
-                          size="1"
-                          ml="2"
-                          onClick={() => void handleRetry()}
-                        >
-                          重试
-                        </Button>
-                      </Callout.Text>
-                    </Callout.Root>
-                  ) : null}
-                </>
-              ) : (
-                <Flex direction="column" gap="2">
-                  <Flex align="center" justify="between" gap="3">
-                    <Flex align="center" gap="2">
-                      {copyRunning ? <Spinner size="1" /> : null}
-                      <Text size="2" weight="medium">
-                        {copyPaused ? '复制已暂停' : '正在复制到本地…'}
+                            重试
+                          </Button>
+                        </Callout.Text>
+                      </Callout.Root>
+                    ) : null}
+                  </>
+                ) : (
+                  <Flex direction="column" gap="2">
+                    <Flex align="center" justify="between" gap="3">
+                      <Flex align="center" gap="2">
+                        {copyRunning ? <Spinner size="1" /> : null}
+                        <Text size="2" weight="medium">
+                          {copyPaused ? '复制已暂停' : '正在复制到本地…'}
+                        </Text>
+                      </Flex>
+                      <Text size="2" weight="bold" className="tabular">
+                        {copyPercent}%
                       </Text>
                     </Flex>
-                    <Text size="2" weight="bold" className="tabular">
-                      {copyPercent}%
-                    </Text>
-                  </Flex>
 
-                  <Progress value={copyPercent} size="2" />
+                    <Progress value={copyPercent} size="2" />
 
-                  <Flex
-                    align="center"
-                    justify="between"
-                    gap="3"
-                    className="tabular"
-                  >
-                    <Text size="2" color="gray">
-                      已复制 {copyDone}/{preview?.total ?? pickedCount} 张
-                      {copyTask && copyTask.progress.bytesPerSecond > 0
-                        ? ` · ${formatFileSize(copyTask.progress.bytesPerSecond)}/s`
-                        : ''}
-                    </Text>
-                    <Flex align="center" gap="2">
-                      {copyPaused ? (
+                    <Flex
+                      align="center"
+                      justify="between"
+                      gap="3"
+                      className="tabular"
+                    >
+                      <Text size="2" color="gray">
+                        已复制 {copyDone}/{preview?.total ?? pickedCount} 张
+                        {copyTask && copyTask.progress.bytesPerSecond > 0
+                          ? ` · ${formatFileSize(copyTask.progress.bytesPerSecond)}/s`
+                          : ''}
+                      </Text>
+                      <Flex align="center" gap="2">
+                        {copyPaused ? (
+                          <Button
+                            size="1"
+                            variant="soft"
+                            onClick={() => void handleCopyResume()}
+                          >
+                            <Play size={13} strokeWidth={1.75} /> 继续
+                          </Button>
+                        ) : (
+                          <Button
+                            size="1"
+                            variant="soft"
+                            onClick={() => void handleCopyPause()}
+                          >
+                            <Pause size={13} strokeWidth={1.75} /> 暂停
+                          </Button>
+                        )}
                         <Button
                           size="1"
-                          variant="soft"
-                          onClick={() => void handleCopyResume()}
+                          variant="outline"
+                          color="red"
+                          onClick={() => void handleCopyCancel()}
                         >
-                          <Play size={13} strokeWidth={1.75} /> 继续
+                          <Square size={13} strokeWidth={1.75} /> 取消
                         </Button>
-                      ) : (
-                        <Button
-                          size="1"
-                          variant="soft"
-                          onClick={() => void handleCopyPause()}
-                        >
-                          <Pause size={13} strokeWidth={1.75} /> 暂停
-                        </Button>
-                      )}
-                      <Button
-                        size="1"
-                        variant="outline"
-                        color="red"
-                        onClick={() => void handleCopyCancel()}
-                      >
-                        <Square size={13} strokeWidth={1.75} /> 取消
-                      </Button>
+                      </Flex>
                     </Flex>
                   </Flex>
-                </Flex>
-              )}
-            </Flex>
-          </Card>
-        </Box>
-      ) : null}
+                )}
+              </Flex>
+            </Card>
+          </AnimatedBox>
+        ) : null,
+      )}
 
       {/* 重名覆盖确认（破坏性操作使用 AlertDialog） */}
       <AlertDialog.Root
