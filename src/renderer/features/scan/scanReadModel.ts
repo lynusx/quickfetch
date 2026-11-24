@@ -29,11 +29,17 @@ export type BranchTone = 'success' | 'danger' | 'warn' | 'muted'
 
 export interface ScanBranchRow {
   machine: string
+  /** 该机台是否正在扫描中（用于状态列展示 Spinner） */
+  scanning: boolean
   tone: BranchTone
   /** 不可访问原因；用于行上的 data-state 与分组 */
   kind: InaccessibleKind | null
   statusText: string
   imagesText: string
+  /** 该机台命中图片的总体积；无图、扫描前或老历史显示「—」 */
+  sizeText: string
+  /** 该机台扫描耗时；扫描中或老历史显示「—」 */
+  elapsedText: string
   /** 断链诊断全文，放进 title，不铺在行里 */
   detail: string | null
 }
@@ -56,6 +62,21 @@ export interface ScanTaskView {
   machinesPending: number
   phaseDescription: string
 }
+
+const MB = 1024 * 1024
+const GB = 1024 * MB
+
+/** 结果表「大小」列：固定 M / G 两位小数，配合 tabular-nums 小数点齐平 */
+const formatBranchSize = (bytes: number): string => {
+  if (bytes >= GB) return `${(bytes / GB).toFixed(2)} G`
+  const mb = bytes / MB
+  if (bytes > 0 && mb < 0.01) return '<0.01 M'
+  return `${mb.toFixed(2)} M`
+}
+
+/** 结果表「用时」列：统一以 s 两位小数展示 */
+const formatBranchDuration = (ms: number): string =>
+  `${(ms / 1000).toFixed(2)} s`
 
 const emptyInaccessible = (): InaccessibleCount => ({
   network: 0,
@@ -81,22 +102,36 @@ export const deriveScanTaskView = (task: ScanTask | null): ScanTaskView => {
   const inaccessible = emptyInaccessible()
   let abnormalCount = 0
 
-  // 行摘要、分组与异常计数共用一次遍历：分支最多几十台，但没必要跑三遍
+  // 渐进展示：只渲染已进入扫描或已有结论的机台，尚未轮到的 skipped 不占位
   for (const branch of task.branches) {
+    if (branch.status === 'skipped') continue
+
     const summary = branchSummary(branch, task.params)
     const kind = inaccessibleKindOf(branch)
+    const scanning = branch.status === 'scanning'
+    const sizeText =
+      branch.bytes != null && (branch.bytes > 0 || branch.images > 0)
+        ? formatBranchSize(branch.bytes)
+        : '—'
+    const elapsedText =
+      branch.elapsedMs != null ? formatBranchDuration(branch.elapsedMs) : '—'
 
     rows.push({
       machine: branch.machine,
+      scanning,
       tone: branchState(branch),
       kind,
       statusText: summary.statusText,
       imagesText: summary.imagesText,
+      sizeText,
+      elapsedText,
       detail: branch.detail ?? null,
     })
 
     if (kind) inaccessible[kind] += 1
-    if (branch.status !== 'hit' && branch.status !== 'empty') abnormalCount += 1
+    if (!scanning && branch.status !== 'hit' && branch.status !== 'empty') {
+      abnormalCount += 1
+    }
   }
 
   const hasInaccessible =

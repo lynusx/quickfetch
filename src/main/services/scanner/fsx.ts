@@ -62,7 +62,7 @@ const ABANDON_GRACE_MS = 1_500
  * `\\IP`（只有主机、没有共享名）时返回的 EINVAL 被算成断网，
  * 现场就出现「路径明明能打开，却提示没接专用内网」。
  */
-const NETWORK_CODES = new Set([
+export const NETWORK_CODES = new Set([
   'ETIMEDOUT',
   'ECONNREFUSED',
   'ECONNRESET',

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { animated, useTransition } from '@react-spring/web'
 import { Link } from 'react-router'
 import {
   CircleCheck,
@@ -78,6 +79,12 @@ interface ScanTaskPanelProps {
   onClear: () => void
 }
 
+const AnimatedTableRow = animated(Table.Row)
+
+const prefersReducedMotion = (): boolean =>
+  typeof window !== 'undefined' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
 /**
  * 扫描与就地复制统一单列任务流（Single-Column Task Stream）。
  *
@@ -146,6 +153,14 @@ export const ScanTaskPanel = ({
   } = readModel
 
   const sizeLabel = previewSizeLabel(preview, previewing)
+
+  const rowTransitions = useTransition(view.rows, {
+    keys: (row) => `${task.id}:${row.machine}`,
+    from: { opacity: 0, y: 8 },
+    enter: { opacity: 1, y: 0 },
+    config: { tension: 280, friction: 26 },
+    immediate: prefersReducedMotion(),
+  })
 
   const onStartCopyClick = () => {
     if (conflict === 'overwrite' && preview && preview.conflicts > 0) {
@@ -348,7 +363,7 @@ export const ScanTaskPanel = ({
 
           {/* 2. 随页自然滚动的机台结果与就地勾选表 */}
           {task.status !== 'pending' && view.rows.length > 0 ? (
-            <Table.Root variant="surface">
+            <Table.Root variant="surface" layout="fixed">
               <Table.Header>
                 <Table.Row>
                   <Table.ColumnHeaderCell width="40px">
@@ -371,25 +386,39 @@ export const ScanTaskPanel = ({
                   <Table.ColumnHeaderCell>机台</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell>状态</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell align="right">
-                    图片
+                    数量
+                  </Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell align="right">
+                    大小
+                  </Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell align="right">
+                    用时
                   </Table.ColumnHeaderCell>
                 </Table.Row>
               </Table.Header>
 
               <Table.Body>
-                {view.rows.map((row) => {
+                {rowTransitions((spring, row) => {
                   const hasImages = (imageCountMap.get(row.machine) ?? 0) > 0
                   const isChecked = machines.includes(row.machine)
                   const statusContent = (
                     <Flex align="center" gap="2" minWidth="0">
-                      <Box
-                        as="span"
-                        className="status-dot"
-                        data-tone={DOT_TONE[row.tone] || undefined}
-                      />
+                      {row.scanning ? (
+                        <Spinner size="1" />
+                      ) : (
+                        <Box
+                          as="span"
+                          className="status-dot"
+                          data-tone={DOT_TONE[row.tone] || undefined}
+                        />
+                      )}
                       <Text
                         size="2"
-                        color={STATUS_TEXT_COLOR[row.tone] ?? 'gray'}
+                        color={
+                          row.scanning
+                            ? 'gray'
+                            : (STATUS_TEXT_COLOR[row.tone] ?? 'gray')
+                        }
                         truncate
                       >
                         {row.statusText}
@@ -398,7 +427,14 @@ export const ScanTaskPanel = ({
                   )
 
                   return (
-                    <Table.Row key={row.machine} align="center">
+                    <AnimatedTableRow
+                      key={row.machine}
+                      align="center"
+                      style={{
+                        opacity: spring.opacity,
+                        transform: spring.y.to((v) => `translateY(${v}px)`),
+                      }}
+                    >
                       <Table.Cell>
                         <Checkbox
                           checked={isChecked}
@@ -433,7 +469,17 @@ export const ScanTaskPanel = ({
                           {row.imagesText}
                         </Text>
                       </Table.Cell>
-                    </Table.Row>
+                      <Table.Cell align="right">
+                        <Text size="2" color="gray" className="tabular">
+                          {row.sizeText}
+                        </Text>
+                      </Table.Cell>
+                      <Table.Cell align="right">
+                        <Text size="2" color="gray" className="tabular">
+                          {row.elapsedText}
+                        </Text>
+                      </Table.Cell>
+                    </AnimatedTableRow>
                   )
                 })}
               </Table.Body>

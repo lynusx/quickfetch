@@ -44,6 +44,9 @@ interface HistoryRecord {
     path: string
     absolutePath: string
     name: string
+    ext?: string
+    size?: number
+    mtimeMs?: number
     machine?: string
   }[]
   progress: ScanTask['progress']
@@ -209,20 +212,26 @@ export const createHistoryStore = (dir: string): HistoryStore => {
     }
 
     // 「有诊断」只认真正读过目录的分支：断链会给 missing/unreachable，
-    // 读到了内容会给 empty/hit。仍是 skipped 说明这个机台根本没轮到，
-    // 不能算作有效结论，否则取消瞬间的空任务也会被当成有信息存下来。
+    // 读到了内容会给 empty/hit。仍是 skipped/scanning 说明这台还没出结论。
     const diagnosed = task.branches.some(
-      (branch) => branch.status !== 'skipped',
+      (branch) => branch.status !== 'skipped' && branch.status !== 'scanning',
     )
 
     if (!images.length && !diagnosed && !interrupted) return false
+
+    // 落盘时把仍处于 scanning 的分支收敛为 skipped，避免恢复历史时一直转圈
+    const branches = task.branches.map((branch) =>
+      branch.status === 'scanning'
+        ? { ...branch, status: 'skipped' as const }
+        : branch,
+    )
 
     const record: HistoryRecord = {
       version: RECORD_VERSION,
       id: task.id,
       status: interrupted ? 'interrupted' : task.status,
       params: task.params,
-      branches: task.branches,
+      branches,
       // 必须存全量：历史任务的再次复制要能读到每一张图，
       // 只存预览的话恢复出来的任务会把 200 条之后的结果静默丢掉
       // machine 必须一起存：力禧特/利珀的 path 第 0 段是厂区，
@@ -231,6 +240,9 @@ export const createHistoryStore = (dir: string): HistoryStore => {
         path: image.path,
         absolutePath: image.absolutePath,
         name: image.name,
+        ...(image.ext !== undefined ? { ext: image.ext } : {}),
+        ...(image.size !== undefined ? { size: image.size } : {}),
+        ...(image.mtimeMs !== undefined ? { mtimeMs: image.mtimeMs } : {}),
         machine: image.machine,
       })),
       progress: task.progress,

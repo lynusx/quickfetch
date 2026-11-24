@@ -150,6 +150,13 @@ export const branchSummary = (
     }
   }
 
+  if (branch.status === 'scanning') {
+    return {
+      statusText: '扫描中…',
+      imagesText: branch.images > 0 ? `${branch.images} 张` : '—',
+    }
+  }
+
   if (branch.status === 'skipped') {
     return { statusText: '未探测', imagesText: '—' }
   }

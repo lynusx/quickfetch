@@ -1,4 +1,5 @@
-import { join } from 'node:path'
+import { stat } from 'node:fs/promises'
+import { extname, join } from 'node:path'
 
 import type {
   ScanBranch,
@@ -14,8 +15,10 @@ import { PL_LEVELS } from '../../../shared/ipc'
 import { PREVIEW_LIMIT } from '../../../shared/historyLimit'
 import { timeoutForConcurrency, createAdaptiveGate } from '../../utils/adaptive'
 import type { AdaptiveGate } from '../../utils/adaptive'
+import { toFsPath } from '../../utils/pathx'
 import { createTaskLifecycle } from '../../utils/taskLifecycle'
 import type { TaskLifecycle } from '../../utils/taskLifecycle'
+import { cacheImageSize } from '../copy/measure'
 import { isNetworkError, readDirSafe } from './fsx'
 import type { DirReadResult } from './fsx'
 import { describeLeafFailure, summarize } from './diagnosis'
@@ -46,6 +49,55 @@ const chunk = <T>(items: T[], size: number): T[][] => {
     result.push(items.slice(index, index + size))
   }
   return result
+}
+
+/** 机台键末段名称（EL 是纯机台名，其余是「厂区/机台」复合键） */
+const machineDisplayName = (key: string): string => {
+  const idx = key.lastIndexOf('/')
+  return idx === -1 ? key : key.slice(idx + 1)
+}
+
+/** 与前端机台选择器一致：普通机台自然数字升序在前，LX 机台自然升序置后 */
+const compareMachineKey = (a: string, b: string): number => {
+  const nameA = machineDisplayName(a)
+  const nameB = machineDisplayName(b)
+  const lxDiff = Number(/lx/i.test(nameA)) - Number(/lx/i.test(nameB))
+  if (lxDiff !== 0) return lxDiff
+
+  return nameA.localeCompare(nameB, 'zh-CN', { numeric: true })
+}
+
+/** 单张图片 stat 超时（毫秒）；避免偶发慢盘拖死整台收图 */
+const IMAGE_STAT_TIMEOUT_MS = 2_000
+/** 单目录内图片 stat 的局部并发上限，兼顾吞吐与 libuv 线程池余量 */
+const IMAGE_STAT_CONCURRENCY = 4
+
+const statImageMeta = async (
+  absPath: string,
+): Promise<{ size?: number; mtimeMs?: number }> => {
+  const request = stat(toFsPath(absPath))
+
+  request.then(
+    () => {},
+    () => {},
+  )
+
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error('stat timeout'))
+    }, IMAGE_STAT_TIMEOUT_MS)
+  })
+
+  try {
+    const info = await Promise.race([request, timeout])
+    return { size: info.size, mtimeMs: info.mtimeMs }
+  } catch {
+    return {}
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }
 
 /** 并发档位上下限 */
@@ -188,8 +240,6 @@ export class ScanTaskRunner {
   private batchSize = DEFAULT_MACHINE_BATCH_SIZE
   /** 失败率采样器，与复制任务共用同一套降档逻辑 */
   private readonly gate: AdaptiveGate
-  /** 已探测完但文件明细还没读的目录，分批清尾用 */
-  private readonly pendingDetails: { dir: string; machine: string }[] = []
 
   /** 前缀之后的层级差异（日期格式、机台名层、Fail/等级层），由解析器声明 */
   private readonly shape: PathShape
@@ -206,7 +256,9 @@ export class ScanTaskRunner {
     emit: (task: ScanTask) => void,
   ) {
     this.id = crypto.randomUUID()
-    this.params = params
+    // 按机台自然升序（LX 置后）规范扫描顺序，保证前后端与历史记录顺序一致
+    const sortedMachines = [...params.machines].sort(compareMachineKey)
+    this.params = { ...params, machines: sortedMachines }
     this.context = context
     this.emit = emit
 
@@ -236,8 +288,8 @@ export class ScanTaskRunner {
       this.levels.length *
       params.types.length
 
-    // 分支顺序与机台选择顺序一致，并发完成时也不会乱序
-    this.branches = params.machines.map((machine) => ({
+    // 分支顺序与升序排列后的机台顺序一致，并发完成时也不会乱序
+    this.branches = sortedMachines.map((machine) => ({
       machine,
       status: 'skipped',
       matchedDirs: 0,
@@ -245,7 +297,7 @@ export class ScanTaskRunner {
     }))
 
     this.ledger = createScanLedger({
-      machines: params.machines.length,
+      machines: sortedMachines.length,
       leavesPerBranch: this.leavesPerBranch,
     })
 
@@ -473,9 +525,6 @@ export class ScanTaskRunner {
       // 少了这个检查点，刚暂停的任务会被“完成”覆盖，界面看不到断网提示
       await this.checkpoint()
 
-      // 探测完成后逐目录补读文件明细，同样走闸门，不再另开并发
-      await this.collectDetails(limiter)
-
       this.progress.currentPath = ''
       this.ledger.finish()
     } catch (error) {
@@ -534,11 +583,38 @@ export class ScanTaskRunner {
     })
   }
 
-  /** 单个机台分支：机台 → 解析出的路径前缀 → 日期 → 班次 → 时段 → 类型 */
+  /** 单个机台分支：进入即标 scanning，完成探测 + 收图 + stat 后定性并记录用时 */
   private async scanMachine(machine: string, limiter: Limiter): Promise<void> {
     const branch = this.branches.find((item) => item.machine === machine)
     if (!branch) return
 
+    await this.checkpoint()
+
+    const branchStartedAt = Date.now()
+    branch.status = 'scanning'
+    branch.bytes = 0
+    this.touch(machine, true)
+
+    try {
+      await this.runMachinePipeline(branch, machine, limiter)
+    } finally {
+      if (branch.status === 'scanning') {
+        // 中途取消/异常未得出结论时还原为 skipped，避免界面残留转圈行
+        branch.status = 'skipped'
+        branch.elapsedMs = undefined
+      } else {
+        branch.elapsedMs = Math.max(0, Date.now() - branchStartedAt)
+      }
+      this.touch(machine, true)
+    }
+  }
+
+  /** 单台机台完整流水线：前缀探测 → 时段/类型展开 → 本台目录收图与图片 stat */
+  private async runMachinePipeline(
+    branch: ScanBranch,
+    machine: string,
+    limiter: Limiter,
+  ): Promise<void> {
     // 第 1 步：把机台换成绝对路径前缀。
     // EL 会校验「根/机台/EL」存在；力禧特要先探出这台机器用的是
     // el 还是 SaveImages。解析本身含网络读取，所以也走闸门。
@@ -651,7 +727,13 @@ export class ScanTaskRunner {
     // 这台机台一路读到了班次目录，网络是通的
     this.breaker.sampleMachine(true)
     if (this.slotless) {
-      this.collectSlotlessTypes(branch, machine, shiftDir, shiftRead.dirs)
+      await this.collectSlotlessTypes(
+        branch,
+        machine,
+        shiftDir,
+        shiftRead.dirs,
+        limiter,
+      )
       return
     }
 
@@ -681,10 +763,11 @@ export class ScanTaskRunner {
     }
 
     const typeSeen = new Set<string>()
+    const detailDirs: string[] = []
 
     // 第 5 层：时段 → 实际存在的类型目录。
-    // 这里只 readdir 确认类型目录存在并把路径挂进待收队列，
-    // 真正的文件明细在整棵树探测完之后统一补读（collectDetails）。
+    // 探测完本台命中的类型目录后，立即在本台内部收图并 stat，
+    // 让每台机台按升序完整呈现「扫描中 → 数量/大小/用时」。
     //
     // 注意不要在已占用闸门名额的任务里再嵌套 limiter() 调用：
     // 并发为 1 时外层任务拿着唯一名额等内层，内层在等名额，直接死锁。
@@ -771,7 +854,7 @@ export class ScanTaskRunner {
           }
 
           this.ledger.leavesConcluded(1, 0)
-          this.pendingDetails.push({ dir: join(level.dir, type), machine })
+          detailDirs.push(join(level.dir, type))
           this.ledger.detailQueued(1)
         }
       }
@@ -781,9 +864,6 @@ export class ScanTaskRunner {
 
     branch.availableTypes = [...typeSeen]
 
-    // 最终状态在 collectDetails 里判定：只有真读到图片才算命中。
-    // 但“所选类型一个都不存在”要在这里定性 —— 这类分支不会进待读队列，
-    // 留给兜底会被写成“类型目录存在，但里面没有图片文件”，与实际相反。
     const matchedTypes = this.params.types.filter((type) => typeSeen.has(type))
 
     if (!matchedTypes.length) {
@@ -793,29 +873,29 @@ export class ScanTaskRunner {
       branch.message = typeSeen.size
         ? `所选时段下没有所选类型，实际存在：${summarize([...typeSeen])}`
         : '所选时段下没有类型目录'
+      return
     }
-    // 类型目录找到了、只是还没读文件明细：不写占位状态，
-    // 等 collectDetails 根据是否读到图片定性为 hit / no-images。
 
-    this.touch(shiftDir, true)
+    await this.collectMachineDetails(branch, machine, detailDirs, limiter)
   }
 
   /**
    * 无时段层的收尾：班次目录下的子目录就是类型目录。
    *
-   * 每个所选类型算一个叶子；命中的类型挂进待收队列，
+   * 每个所选类型算一个叶子；命中的类型立即在本台内收图与 stat，
    * 目录不存在的直接计入跳过，不发无效请求。
    */
-  private collectSlotlessTypes(
+  private async collectSlotlessTypes(
     branch: ScanBranch,
     machine: string,
     shiftDir: string,
     typeDirs: string[],
-  ): void {
+    limiter: Limiter,
+  ): Promise<void> {
     const seen = new Set(typeDirs)
     branch.availableTypes = [...seen]
 
-    let matched = 0
+    const detailDirs: string[] = []
 
     for (const type of this.params.types) {
       if (!seen.has(type)) {
@@ -823,135 +903,74 @@ export class ScanTaskRunner {
         continue
       }
 
-      matched += 1
       this.ledger.leavesConcluded(1, 0)
-      this.pendingDetails.push({ dir: join(shiftDir, type), machine })
+      detailDirs.push(join(shiftDir, type))
       this.ledger.detailQueued(1)
     }
 
-    if (!matched) {
+    if (!detailDirs.length) {
       branch.status = 'empty'
       branch.emptyReason = 'types-missing'
       branch.brokenAt = '类型'
       branch.message = seen.size
         ? `该班次下没有所选类型，实际存在：${summarize(typeDirs)}`
         : '该班次下没有类型目录'
+      return
     }
-    // 类型目录找到了、只是还没读文件明细：交给 collectDetails 定性。
 
-    this.touch(shiftDir, true)
+    await this.collectMachineDetails(branch, machine, detailDirs, limiter)
   }
 
-  /**
-   * 收尾阶段：逐目录读取文件明细并收集图片。
-   *
-   * 与探测分开的理由是内存而非速度 —— 探测只拿目录名，几百个机台的
-   * 目录列表加起来也不过几 MB；而每读一个目录就把文件名、绝对路径全留在
-   * 进程里，几万张图会占掉上百 MB。所以探测跑完整批，再统一按闸门收尾，
-   * 闸门上限同时约束探测和收尾，总并发不会叠加。
-   */
-  private async collectDetails(limiter: Limiter): Promise<void> {
-    // 没有待读目录也要走一遍兜底：探测阶段"类型目录为空"的分支已经
-    // 自己写过文案了，但"类型目录在、只是还没读"的分支要在这里才定性。
-    // 以前这里直接 return，全靠 run() 里的 phase 切换兜住，容易被后续
-    // 改动带偏成"明细读完了但状态还挂着探测阶段"。
+  /** 读取单台机台命中的全部类型目录，收集图片与 stat，并定性该分支 */
+  private async collectMachineDetails(
+    branch: ScanBranch,
+    machine: string,
+    dirs: string[],
+    limiter: Limiter,
+  ): Promise<void> {
+    this.ledger.enterCollect(dirs.length > 0)
 
-    const queue = this.pendingDetails.splice(0)
+    for (const dir of dirs) {
+      await this.checkpoint()
+      if (this.lifecycle.signal.aborted) throw abortError()
 
-    // 切阶段要在开始读第一个明细之前：界面上"探测目录 / 收集图片"
-    // 与实际动作对不上，用户会以为卡在探测
-    this.ledger.enterCollect(queue.length > 0)
-    this.touch('', true)
-
-    // 不用 Promise.all(queue.map(...))：那样会把整个队列一次性派发下去，
-    // 取消后已排队的读取仍会全部跑完，用户看到的「取消」要等几十秒才生效。
-    // 改成 N 条泳道各自领活，每条泳道在领活前过 checkpoint，
-    // 取消时立刻停下，只有正在读的那几个目录会自然收尾。
-    let next = 0
-    const lanes = Math.max(1, Math.min(this.readConcurrency, queue.length))
-
-    logger.info('scan', 'scan.phase.collect', {
-      taskId: this.id,
-      detailTotal: queue.length,
-      lanes,
-    })
-
-    const worker = async (): Promise<void> => {
-      while (next < queue.length) {
-        await this.checkpoint()
-
-        if (this.lifecycle.signal.aborted) return
-
-        const index = next
-        next += 1
-
-        await limiter(() => this.readDetail(queue[index]))
-      }
+      await this.readDetail(branch, machine, dir, limiter)
     }
 
-    await Promise.all(Array.from({ length: lanes }, worker))
-
-    for (const branch of this.branches) {
-      // 断链（missing / unreachable）与已命中的分支不动：
-      // 断链分支的诊断文案在 markBroken 里写好了，不能被兜底逻辑覆盖
-      if (branch.status === 'hit' || branch.status === 'skipped') continue
-      if (branch.status === 'missing' || branch.status === 'unreachable')
-        continue
-
-      // 探测阶段已经定性的「没有所选类型 / 该班次下没有类型」不要动：
-      // 这类分支压根没排进待读队列，一张图都没有是必然的，
-      // 硬改成 no-images 会把正确的诊断文案覆盖成"目录在、只是没图"，
-      // 用户照着去查那个类型目录，结果那里根本不存在。
-      if (branch.emptyReason === 'types-missing') continue
-
-      // 走到这里说明类型目录找到了、但逐目录读下来一张图都没有。
-      branch.status = 'empty'
-      branch.emptyReason = 'no-images'
+    if (branch.images > 0) {
+      branch.status = 'hit'
+      branch.emptyReason = undefined
+      return
     }
 
-    // 兜底文案统一在最后写，而不是塞在上面的循环里：
-    // 「到底检查了几个所选目录」只跟探测结果有关，单独一段算不容易漏，
-    // 也不会被后面新加的状态分支搅乱。
-    //
-    // 数字要写人话：第一版写成「已匹配 0 个目录，共 0 张」，现场反馈
-    // 看了不知道是"目录没找到"还是"目录空"；这里改用「已检查 N 个目录」
-    // 并附上实际存在的类型，一眼能看出目录是在的、只是没图。
-    for (const branch of this.branches) {
-      if (branch.status !== 'empty') continue
-      // 「类型目录不存在」「该班次下没有类型」这两类结论在探测阶段就定了，
-      // 与"目录在但没图"不是一回事，保持原样
-      if (branch.emptyReason !== 'no-images') continue
-
-      branch.message = noImageMessage(
-        this.params.types.filter((type) =>
-          branch.availableTypes?.includes(type),
-        ).length,
-        branch.availableTypes ?? [],
-      )
-    }
+    // 走到这里说明类型目录存在，但逐目录读下来一张图都没有
+    branch.status = 'empty'
+    branch.emptyReason = 'no-images'
+    branch.message = noImageMessage(
+      this.params.types.filter((type) => branch.availableTypes?.includes(type))
+        .length,
+      branch.availableTypes ?? [],
+    )
   }
 
-  /** 读一个类型目录的文件明细，并把图片挂到结果集上 */
-  private async readDetail(item: {
-    dir: string
-    machine: string
-  }): Promise<void> {
-    // this.read() 里还会检查一次，但那是在拿到并发名额之后；
-    // 这里先挡一道，取消后连名额都不必去抢
+  /** 读一个类型目录的文件明细，顺带收集每张图片的 stat 并汇总到机台字节数 */
+  private async readDetail(
+    branch: ScanBranch,
+    machine: string,
+    dir: string,
+    limiter: Limiter,
+  ): Promise<void> {
     if (this.lifecycle.signal.aborted) throw abortError()
 
-    const branch = this.branches.find((entry) => entry.machine === item.machine)
-    const typeRead = await this.read(item.dir)
+    const typeRead = await limiter(() => this.read(dir))
 
     this.ledger.detailConcluded(typeRead.status === 'ok')
-
-    if (!branch) return
 
     if (typeRead.status !== 'ok') {
       logger.debug('scan', 'scan.detail.failed', {
         taskId: this.id,
-        machine: item.machine,
-        dir: item.dir,
+        machine,
+        dir,
         status: typeRead.status,
         code: typeRead.code,
         error: typeRead.raw,
@@ -959,40 +978,57 @@ export class ScanTaskRunner {
       return
     }
 
-    const images = typeRead.files.filter(isImageFile)
+    const imageNames = typeRead.files.filter(isImageFile)
 
-    if (!images.length) {
-      branch.status = branch.status === 'hit' ? 'hit' : 'empty'
-      return
-    }
+    if (!imageNames.length) return
 
     logger.debug('scan', 'scan.detail.hit', {
       taskId: this.id,
-      machine: item.machine,
-      dir: item.dir,
-      images: images.length,
+      machine,
+      dir,
+      images: imageNames.length,
     })
 
-    branch.matchedDirs += 1
-    branch.images += images.length
-    branch.status = 'hit'
-    branch.emptyReason = undefined
-    this.progress.dirsHit += 1
+    const segments = this.context.resolver.segments(machine, dir)
+    const statLimiter = createLimiter(IMAGE_STAT_CONCURRENCY)
+    const collected = await Promise.all(
+      imageNames.map((name) =>
+        statLimiter(async (): Promise<ScannedImage> => {
+          const absolutePath = join(dir, name)
+          const ext = extname(name).toLowerCase()
+          const meta = await statImageMeta(absolutePath)
 
-    const segments = this.context.resolver.segments(item.machine, item.dir)
+          if (meta.size !== undefined) {
+            cacheImageSize(absolutePath, meta.size)
+          }
 
-    for (const name of images) {
-      this.images.push({
-        path: [...segments, name].join('/'),
-        absolutePath: join(item.dir, name),
-        name,
-        // 复制按机台筛选/分组时用这个字段，路径第 0 段对力禧特、利珀、森标 AOI 是厂区
-        machine: item.machine,
-      })
+          return {
+            path: [...segments, name].join('/'),
+            absolutePath,
+            name,
+            ext,
+            ...(meta.size !== undefined ? { size: meta.size } : {}),
+            ...(meta.mtimeMs !== undefined ? { mtimeMs: meta.mtimeMs } : {}),
+            // 复制按机台筛选/分组时用这个字段，路径第 0 段对力禧特、利珀、森标 AOI 是厂区
+            machine,
+          }
+        }),
+      ),
+    )
+
+    let dirBytes = 0
+
+    for (const img of collected) {
+      this.images.push(img)
+      if (img.size !== undefined) dirBytes += img.size
     }
 
+    branch.matchedDirs += 1
+    branch.images += collected.length
+    branch.bytes = (branch.bytes ?? 0) + dirBytes
+    this.progress.dirsHit += 1
     this.progress.images = this.images.length
-    this.touch(item.dir)
+    this.touch(dir)
   }
 
   /**

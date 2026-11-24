@@ -350,6 +350,12 @@ export interface ScannedImage {
   /** 真实绝对路径，仅用于主进程复制，不展示 */
   absolutePath: string
   name: string
+  /** 小写文件后缀（如 .jpg / .bmp）；老历史记录无此字段 */
+  ext?: string
+  /** 文件大小（字节，来自扫描阶段 fs.stat）；老历史或 stat 失败时省略 */
+  size?: number
+  /** 文件修改时间（毫秒时间戳，来自 fs.stat）；老历史无此字段 */
+  mtimeMs?: number
   /**
    * 机台标识，与 ScanBranch.machine 完全一致。
    *
@@ -364,7 +370,7 @@ export interface ScannedImage {
 export interface ScanBranch {
   /** 机台标识。EL 是机台目录名；力禧特、利珀、森标 AOI 是「厂区/机台」复合键 */
   machine: string
-  status: 'hit' | 'empty' | 'missing' | 'unreachable' | 'skipped'
+  status: 'scanning' | 'hit' | 'empty' | 'missing' | 'unreachable' | 'skipped'
   /**
    * empty 的具体原因：
    * - types-missing：所选类型一个都不存在（探测阶段就能定性）
@@ -397,6 +403,10 @@ export interface ScanBranch {
   /** 实际读到图片的类型目录数 */
   matchedDirs: number
   images: number
+  /** 该机台命中图片的总字节数（由扫描阶段 stat 汇总）；老历史记录无此字段 */
+  bytes?: number
+  /** 该机台从开始探测到收图结束的耗时（毫秒）；老历史记录无此字段 */
+  elapsedMs?: number
   /** 该班次目录下真实存在的时段，与勾选值取交集后才是扫描目标；森标 AOI 无此时段层 */
   availableSlots?: string[]
   /** 该时段目录下真实存在的类型，用于提示「选了但目录里没有」；森标 AOI 即班次目录下的类型 */

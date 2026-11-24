@@ -5,6 +5,8 @@ import type { ScanHistoryItem } from '@shared/ipc'
 
 interface HistoryState {
   items: ScanHistoryItem[]
+  /** 是否已完成过至少一次拉取；避免切换扫描页时重复进入 loading 闪烁 */
+  loaded: boolean
   /** 首次加载中；之后刷新走 refreshing，避免列表闪烁 */
   loading: boolean
   refreshing: boolean
@@ -21,6 +23,9 @@ interface HistoryAction {
   setError: (error: string | null) => void
 }
 
+/** 复用进行中的列表请求，避免并发 load 互相覆盖 loading/refreshing 状态 */
+let inFlightLoad: Promise<void> | null = null
+
 /**
  * 历史记录列表。
  *
@@ -30,22 +35,32 @@ interface HistoryAction {
 export const useHistoryStore = create<HistoryState & HistoryAction>()(
   devtools((set, get) => ({
     items: [],
+    loaded: false,
     loading: false,
     refreshing: false,
     error: null,
     loadingTaskId: null,
 
     load: async (silent = false) => {
-      set(silent ? { refreshing: true } : { loading: true, error: null })
+      if (inFlightLoad) return inFlightLoad
 
-      try {
-        const items = await window.electronAPI.listScanHistory()
-        set({ items, error: null })
-      } catch (cause) {
-        set({ error: (cause as Error)?.message ?? '读取历史记录失败' })
-      } finally {
-        set({ loading: false, refreshing: false })
-      }
+      const useSilent = silent || get().loaded
+
+      set(useSilent ? { refreshing: true } : { loading: true, error: null })
+
+      inFlightLoad = (async () => {
+        try {
+          const items = await window.electronAPI.listScanHistory()
+          set({ items, loaded: true, error: null })
+        } catch (cause) {
+          set({ error: (cause as Error)?.message ?? '读取历史记录失败' })
+        } finally {
+          inFlightLoad = null
+          set({ loading: false, refreshing: false })
+        }
+      })()
+
+      return inFlightLoad
     },
 
     remove: async (taskId) => {

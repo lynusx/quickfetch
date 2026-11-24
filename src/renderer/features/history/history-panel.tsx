@@ -1,5 +1,5 @@
 import { History, Info, Trash2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   AlertDialog,
   Badge,
@@ -103,6 +103,7 @@ const HistoryPanel = ({
 
   const {
     items,
+    loaded,
     loading,
     refreshing,
     error,
@@ -123,17 +124,28 @@ const HistoryPanel = ({
 
   const [open, setOpen] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
+  const prevStatusRef = useRef<ScanTaskStatus | null>(activeStatus)
 
+  // 历史记录按全分类一次性拉取：仅首次未加载时读取，切扫描页不重复读盘
   useEffect(() => {
-    void load()
-  }, [load])
+    if (!loaded) void load()
+  }, [loaded, load])
 
-  // 任务一结束就静默刷新一次：落盘在主进程是异步的，这里稍等一下再读，
-  // 避免读到的还是「落盘前」的列表
+  // 仅当实时任务从活跃态（pending/running/paused）进入终态时静默刷新一次；
+  // 从历史记录载入的已结束任务不触发无意义重读。
   useEffect(() => {
-    if (!activeStatus) return
-    if (activeStatus === 'running' || activeStatus === 'paused') return
-    if (activeStatus === 'pending') return
+    const prev = prevStatusRef.current
+    prevStatusRef.current = activeStatus
+
+    const wasActive =
+      prev === 'pending' || prev === 'running' || prev === 'paused'
+    const isNowSettled =
+      Boolean(activeStatus) &&
+      activeStatus !== 'pending' &&
+      activeStatus !== 'running' &&
+      activeStatus !== 'paused'
+
+    if (!wasActive || !isNowSettled) return
 
     const timer = setTimeout(() => {
       void load(true)
