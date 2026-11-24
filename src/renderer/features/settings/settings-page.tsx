@@ -1,12 +1,13 @@
 import { Fragment, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
-import { TriangleAlert } from 'lucide-react'
+import { Monitor, Moon, Sun, TriangleAlert } from 'lucide-react'
 import {
   Box,
   Button,
   Callout,
   Code,
+  Flex,
   SegmentedControl,
   Slider,
   Switch,
@@ -31,6 +32,9 @@ import type {
   CopyLayout,
   LogInfo,
   PreferenceKey,
+  ThemeAppearance,
+  UiDensity,
+  UiScale,
 } from '@shared/ipc'
 import {
   COPY_CONFLICT_LABEL,
@@ -38,6 +42,11 @@ import {
   DEFAULT_PREFERENCES,
   PREFERENCE_ENV,
   PREFERENCE_RANGE,
+  THEME_APPEARANCES,
+  THEME_APPEARANCE_LABEL,
+  UI_DENSITIES,
+  UI_DENSITY_LABEL,
+  UI_SCALES,
 } from '@shared/ipc'
 import {
   DEFAULT_HISTORY_LIMIT,
@@ -60,6 +69,12 @@ const CONFLICT_HINT: Record<CopyConflictPolicy, string> = {
 
 const LAYOUTS: CopyLayout[] = ['flat', 'machine', 'type', 'machine-type']
 const CONFLICTS: CopyConflictPolicy[] = ['rename', 'skip', 'overwrite']
+
+const APPEARANCE_ICON: Record<ThemeAppearance, ReactNode> = {
+  system: <Monitor size={14} strokeWidth={1.75} aria-hidden="true" />,
+  light: <Sun size={14} strokeWidth={1.75} aria-hidden="true" />,
+  dark: <Moon size={14} strokeWidth={1.75} aria-hidden="true" />,
+}
 
 /** 分段控件窄，标签用短说法；复制面板仍显示完整标签 */
 const LAYOUT_SHORT_LABEL: Record<CopyLayout, string> = {
@@ -298,6 +313,69 @@ const SettingsPage = () => {
           </Callout.Text>
         </Callout.Root>
       ) : null}
+
+      <SettingsGroup id="appearance" title="外观">
+        <SettingsRow label="明暗">
+          <SegmentedControl.Root
+            aria-label="明暗"
+            value={preferences.appearance}
+            onValueChange={(value) =>
+              patch({ appearance: value as ThemeAppearance })
+            }
+          >
+            {THEME_APPEARANCES.map((value) => (
+              <SegmentedControl.Item key={value} value={value}>
+                <Flex align="center" gap="1">
+                  {APPEARANCE_ICON[value]}
+                  <Text size="2">{THEME_APPEARANCE_LABEL[value]}</Text>
+                </Flex>
+              </SegmentedControl.Item>
+            ))}
+          </SegmentedControl.Root>
+        </SettingsRow>
+
+        <SettingsRow
+          label="界面密度"
+          help={
+            <>
+              紧凑 → 收紧界面元素间距，同屏展示更多信息
+              <br />
+              舒适 → 默认留白，阅读更轻松
+            </>
+          }
+        >
+          <SegmentedControl.Root
+            aria-label="界面密度"
+            value={preferences.density}
+            onValueChange={(value) => patch({ density: value as UiDensity })}
+          >
+            {UI_DENSITIES.map((value) => (
+              <SegmentedControl.Item key={value} value={value}>
+                {UI_DENSITY_LABEL[value]}
+              </SegmentedControl.Item>
+            ))}
+          </SegmentedControl.Root>
+        </SettingsRow>
+
+        <SettingsRow
+          label="界面缩放"
+          help="按比例缩放整个应用界面，适配不同分辨率与屏幕尺寸。"
+        >
+          <SegmentedControl.Root
+            aria-label="界面缩放"
+            value={String(preferences.scale)}
+            onValueChange={(value) =>
+              patch({ scale: Number(value) as UiScale })
+            }
+          >
+            {UI_SCALES.map((value) => (
+              <SegmentedControl.Item key={value} value={String(value)}>
+                {value}%
+              </SegmentedControl.Item>
+            ))}
+          </SegmentedControl.Root>
+        </SettingsRow>
+      </SettingsGroup>
 
       <SettingsGroup id="scan-copy" title="扫描与复制">
         <SettingsRow label="分组方式" help={LAYOUT_HELP}>

@@ -24,6 +24,9 @@ import {
   elPlantOf,
   LXT_SHARES,
   PREFERENCE_RANGE,
+  THEME_APPEARANCES,
+  UI_DENSITIES,
+  UI_SCALES,
 } from '../../../shared/ipc'
 import {
   DEFAULT_HISTORY_LIMIT,
@@ -112,6 +115,15 @@ export const normalizePreferences = (raw: unknown): AppPreferences => {
   const conflicts = ['rename', 'skip', 'overwrite'] as const
 
   return {
+    appearance: THEME_APPEARANCES.includes(merged.appearance)
+      ? merged.appearance
+      : DEFAULT_PREFERENCES.appearance,
+    density: UI_DENSITIES.includes(merged.density)
+      ? merged.density
+      : DEFAULT_PREFERENCES.density,
+    scale: UI_SCALES.includes(merged.scale)
+      ? merged.scale
+      : DEFAULT_PREFERENCES.scale,
     copyLayout: layouts.includes(merged.copyLayout)
       ? merged.copyLayout
       : DEFAULT_PREFERENCES.copyLayout,

@@ -584,6 +584,32 @@ export const COPY_CONFLICT_LABEL: Record<CopyConflictPolicy, string> = {
   overwrite: '覆盖已存在',
 }
 
+/** 界面明暗模式：跟随系统、浅色、深色 */
+export const THEME_APPEARANCES = ['system', 'light', 'dark'] as const
+
+export type ThemeAppearance = (typeof THEME_APPEARANCES)[number]
+
+export const THEME_APPEARANCE_LABEL: Record<ThemeAppearance, string> = {
+  system: '跟随系统',
+  light: '浅色',
+  dark: '深色',
+}
+
+/** 界面密度：紧凑收紧间距，舒适保持默认留白 */
+export const UI_DENSITIES = ['compact', 'comfortable'] as const
+
+export type UiDensity = (typeof UI_DENSITIES)[number]
+
+export const UI_DENSITY_LABEL: Record<UiDensity, string> = {
+  compact: '紧凑',
+  comfortable: '舒适',
+}
+
+/** 界面缩放百分比档位 */
+export const UI_SCALES = [90, 100, 110, 125] as const
+
+export type UiScale = (typeof UI_SCALES)[number]
+
 /**
  * 设置页可调的偏好，随 settings.json 一起持久化。
  *
@@ -592,6 +618,12 @@ export const COPY_CONFLICT_LABEL: Record<CopyConflictPolicy, string> = {
  * EL / 力禧特 / 利珀 / 森标 AOI 共用同一套档位。
  */
 export interface AppPreferences {
+  /** 界面明暗主题 */
+  appearance: ThemeAppearance
+  /** 界面间距密度 */
+  density: UiDensity
+  /** 界面缩放百分比 */
+  scale: UiScale
   /** 复制到本地时按什么层级建子目录 */
   copyLayout: CopyLayout
   /** 目标已有同名文件时怎么处理 */
@@ -621,6 +653,9 @@ export interface AppPreferences {
  * 失败率自适应降档兜底。调高前先确认现场内存余量。
  */
 export const DEFAULT_PREFERENCES: AppPreferences = {
+  appearance: 'system',
+  density: 'comfortable',
+  scale: 100,
   copyLayout: 'flat',
   copyConflict: 'skip',
   scanConcurrency: 4,
