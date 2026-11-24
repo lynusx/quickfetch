@@ -68,7 +68,7 @@ const SheetTablePreview = ({ sheet, mode }: SheetTablePreviewProps) => {
    */
   return (
     <>
-      <Table.Root size="1" variant="surface">
+      <Table.Root variant="surface">
         <Table.Header>
           <Table.Row>
             {headerRow.map((cell, index) => (
@@ -89,7 +89,7 @@ const SheetTablePreview = ({ sheet, mode }: SheetTablePreviewProps) => {
               {row.map((cell, cellIndex) => (
                 <Table.Cell
                   key={cellIndex}
-                  className="sheet-cell-nowrap sheet-cell-number"
+                  className="sheet-cell-nowrap tabular"
                 >
                   {cell}
                 </Table.Cell>
@@ -106,7 +106,7 @@ const SheetTablePreview = ({ sheet, mode }: SheetTablePreviewProps) => {
 
       {showRowTruncation && (
         <Box className="sheet-footer" py="2">
-          <Text as="p" align="center" size="1" color="gray" className="tabular">
+          <Text as="p" align="center" size="2" color="gray" className="tabular">
             还有 {hiddenRowsCount} 行数据未在预览中显示
             {mode === 'result' ? '（复制或导出时包含全量数据）' : ''}
           </Text>

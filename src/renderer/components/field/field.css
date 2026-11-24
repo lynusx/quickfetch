@@ -2,7 +2,6 @@
    本文件只保留图标外观与步骤徽标样式。 */
 
 .field-label-icon {
-  display: inline-flex;
   color: var(--gray-9);
 }
 

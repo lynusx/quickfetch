@@ -145,14 +145,14 @@ const CopyProgress = ({
               完成进度
             </Text>
           </Flex>
-          <Text size="3" weight="bold" className="progress-value">
+          <Text size="3" weight="bold" className="tabular">
             {percent}%
           </Text>
         </Flex>
 
-        <Progress value={percent} size="2" />
+        <Progress value={percent} />
 
-        <Flex className="progress-meta" wrap="wrap" mt="2">
+        <Flex wrap="wrap" gapX="4" gapY="1" mt="2" className="tabular">
           <Text size="1" color="gray">
             {finished ? '总耗时' : '已用'} {formatDuration(progress.elapsedMs)}
           </Text>

@@ -9,7 +9,6 @@
 .history-list {
   border: 1px solid var(--app-border);
   border-radius: var(--radius-3);
-  overflow: hidden;
 }
 
 .history-row {

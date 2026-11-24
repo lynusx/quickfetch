@@ -27,9 +27,9 @@ export const Field = ({
     <Flex align="center" justify="between" gap="3" wrap="wrap" minHeight="32px">
       <Flex align="center" gap="2" minWidth="0">
         {icon ? (
-          <Box as="span" className="field-label-icon">
+          <Flex as="span" display="inline-flex" className="field-label-icon">
             {icon}
-          </Box>
+          </Flex>
         ) : null}
         <Text size="2" weight="medium">
           {label}

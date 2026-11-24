@@ -90,29 +90,39 @@ export const AppSidebar = () => {
               {group.items.map((item) => (
                 <SidebarMenuItem key={item.to}>
                   <SidebarMenuButton tooltip={item.label}>
-                    <NavLink
-                      to={item.to}
-                      className="nav-item"
-                      data-collapsed={!open || undefined}
+                    <Flex
+                      asChild
+                      position="relative"
+                      align="center"
+                      justify={open ? undefined : 'center'}
+                      gap="3"
+                      p={open ? '2' : '1'}
                     >
-                      <Flex
-                        className="nav-icon"
-                        align="center"
-                        justify="center"
-                        width="28px"
-                        height="28px"
-                        flexShrink="0"
-                      >
-                        <item.icon size={15} strokeWidth={1.75} />
-                      </Flex>
-                      {open ? (
-                        <Box minWidth="0">
-                          <Text size="2" weight="medium" className="nav-label">
-                            {item.label}
-                          </Text>
-                        </Box>
-                      ) : null}
-                    </NavLink>
+                      <NavLink to={item.to} className="nav-item">
+                        <Flex
+                          className="nav-icon"
+                          align="center"
+                          justify="center"
+                          width="28px"
+                          height="28px"
+                          flexShrink="0"
+                        >
+                          <item.icon size={15} strokeWidth={1.75} />
+                        </Flex>
+                        {open ? (
+                          <Box minWidth="0">
+                            <Text
+                              as="div"
+                              size="2"
+                              weight="medium"
+                              wrap="nowrap"
+                            >
+                              {item.label}
+                            </Text>
+                          </Box>
+                        ) : null}
+                      </NavLink>
+                    </Flex>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -123,45 +133,42 @@ export const AppSidebar = () => {
 
       <SidebarFooter>
         <SidebarMenuButton tooltip="设置">
-          <NavLink
-            to={ROUTES.SETTINGS}
-            className="nav-item"
-            data-collapsed={!open || undefined}
+          <Flex
+            asChild
+            position="relative"
+            align="center"
+            justify={open ? undefined : 'center'}
+            gap="3"
+            p={open ? '2' : '1'}
           >
-            <Flex
-              className="nav-icon"
-              align="center"
-              justify="center"
-              width="28px"
-              height="28px"
-              flexShrink="0"
-            >
-              <Settings size={15} strokeWidth={1.75} />
-            </Flex>
-            {open ? (
-              <Box minWidth="0">
-                <Text size="2" weight="medium" className="nav-label">
-                  设置
-                </Text>
-              </Box>
-            ) : null}
-          </NavLink>
+            <NavLink to={ROUTES.SETTINGS} className="nav-item">
+              <Flex
+                className="nav-icon"
+                align="center"
+                justify="center"
+                width="28px"
+                height="28px"
+                flexShrink="0"
+              >
+                <Settings size={15} strokeWidth={1.75} />
+              </Flex>
+              {open ? (
+                <Box minWidth="0">
+                  <Text as="div" size="2" weight="medium" wrap="nowrap">
+                    设置
+                  </Text>
+                </Box>
+              ) : null}
+            </NavLink>
+          </Flex>
         </SidebarMenuButton>
 
         {open ? (
           <Flex align="center" justify="between" gap="2" pt="2" pb="1" px="2">
-            <Flex as="span" display="inline-flex" align="center" gap="1">
-              <Box as="span" className="status-dot" data-tone="success" />
-              <Text size="1" color="gray">
-                本地运行
-              </Text>
-            </Flex>
-            <Flex as="span" align="center" gap="2">
-              <UpdateBadge />
-              <Text size="1" color="gray" className="tabular">
-                v{version ?? '…'}
-              </Text>
-            </Flex>
+            <Text size="1" color="gray" className="tabular">
+              v{version ?? '…'}
+            </Text>
+            <UpdateBadge />
           </Flex>
         ) : null}
       </SidebarFooter>

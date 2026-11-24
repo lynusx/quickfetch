@@ -594,6 +594,7 @@ export const ScanTaskPanel = ({
                         <Box
                           maxHeight="160px"
                           width="100%"
+                          overflow="hidden"
                           className="copy-failure-list"
                         >
                           <ScrollArea

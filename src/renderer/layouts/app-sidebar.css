@@ -1,26 +1,13 @@
-/* 应用导航项：AppSidebar。侧边栏骨架与折叠过渡已移至 components/sidebar/sidebar.css，
-   本文件只保留 NavLink 交互态与图标高亮。 */
+/* 应用导航项：AppSidebar。布局由 Flex asChild props 表达，
+   本文件只保留 NavLink 外观、交互态与图标高亮。 */
 
-/* 导航项必须渲染成 <a>（React Router 的 NavLink 提供 aria-current 与客户端跳转），
-   拿不到 Flex 的布局 props，所以这几条布局声明只能留在这里，不算双写；
-   文字色是状态色（:hover / [aria-current]），Text 的 color 是静态 prop，也盖不住。 */
 .nav-item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2);
   border-radius: var(--radius-4);
   color: var(--gray-11);
   text-decoration: none;
   transition:
     background-color var(--app-transition),
     color var(--app-transition);
-}
-
-.nav-item[data-collapsed='true'] {
-  justify-content: center;
-  padding: var(--space-1);
 }
 
 .nav-item:hover {
@@ -61,15 +48,4 @@
 .nav-item[aria-current='page'] .nav-icon {
   background: var(--accent-a4);
   color: var(--accent-11);
-}
-
-.nav-label {
-  display: block;
-  white-space: nowrap;
-}
-
-/* 有新版本时的提示入口：与版本号同一行，不抢主操作区 */
-.sidebar-update-link {
-  display: inline-flex;
-  text-decoration: none;
 }

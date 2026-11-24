@@ -1,5 +1,5 @@
-import { Link } from 'react-router'
-import { Badge } from '@radix-ui/themes'
+import { Link as RouterLink } from 'react-router'
+import { Badge, Flex, Link } from '@radix-ui/themes'
 
 import { ROUTES } from '@/routes/paths'
 import { useUpdateStore } from './updateStore'
@@ -18,12 +18,15 @@ export const UpdateBadge = () => {
   if (!visible) return null
 
   return (
-    <Link
-      to={`${ROUTES.SETTINGS}?section=update`}
-      className="sidebar-update-link"
-      aria-label="有新版本，前往更新设置"
-    >
-      <Badge color="green">有新版本</Badge>
-    </Link>
+    <Flex asChild display="inline-flex">
+      <Link asChild underline="none">
+        <RouterLink
+          to={`${ROUTES.SETTINGS}?section=update`}
+          aria-label="有新版本，前往更新设置"
+        >
+          <Badge color="green">有新版本</Badge>
+        </RouterLink>
+      </Link>
+    </Flex>
   )
 }

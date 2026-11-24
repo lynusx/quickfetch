@@ -168,7 +168,7 @@ const HistoryPanel = ({
     <>
       <Drawer open={open} onOpenChange={setOpen}>
         <DrawerTrigger>
-          <Button type="button" variant="soft" color="gray" size="2">
+          <Button type="button" variant="soft" color="gray">
             {refreshing ? (
               <Spinner size="1" />
             ) : (
@@ -259,11 +259,7 @@ const HistoryPanel = ({
                             <Text size="1" color="gray">
                               {formatTime(item.createdAt)}
                             </Text>
-                            <Badge
-                              color={meta.color}
-                              variant={meta.variant}
-                              size="1"
-                            >
+                            <Badge color={meta.color} variant={meta.variant}>
                               {meta.label}
                             </Badge>
                             {item.status === 'completed' &&
@@ -334,7 +330,6 @@ const HistoryPanel = ({
                 type="button"
                 variant="soft"
                 color="red"
-                size="2"
                 onClick={() => setConfirmClear(true)}
               >
                 <Trash2 size={14} strokeWidth={1.75} />
@@ -345,7 +340,7 @@ const HistoryPanel = ({
             )}
 
             <DrawerClose>
-              <Button type="button" variant="soft" color="gray" size="2">
+              <Button type="button" variant="soft" color="gray">
                 关闭
               </Button>
             </DrawerClose>

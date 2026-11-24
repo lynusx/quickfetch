@@ -302,7 +302,7 @@ const SettingsPage = () => {
       <SettingsGroup id="scan-copy" title="扫描与复制">
         <SettingsRow label="分组方式" help={LAYOUT_HELP}>
           <SegmentedControl.Root
-            size="1"
+            size="2"
             aria-label="分组方式"
             value={preferences.copyLayout}
             onValueChange={(value) =>
@@ -319,7 +319,7 @@ const SettingsPage = () => {
 
         <SettingsRow label="同名文件" help={CONFLICT_HELP}>
           <SegmentedControl.Root
-            size="1"
+            size="2"
             aria-label="同名文件"
             value={preferences.copyConflict}
             onValueChange={(value) =>

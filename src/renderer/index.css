@@ -55,12 +55,12 @@ body {
 /* 全局应用令牌、基线与共享工具类 */
 
 .radix-themes {
-  --app-sidebar-width: 242px;
-  --app-content-max: 1480px;
+  --app-sidebar-width: 216px;
+  --app-content-max: 1360px;
   /* 窗口顶部系统控件区高度：必须与 src/main/index.ts 的 WINDOW_CHROME_HEIGHT 保持一致 */
   --app-topbar-height: 40px;
   /* 页面标题区高度：PageShell 吸顶标题与滚动偏移共用 */
-  --app-page-header-height: 64px;
+  --app-page-header-height: 56px;
   --app-canvas: var(--gray-2);
   --app-surface: var(--color-panel-solid);
   --app-border: var(--gray-5);
@@ -101,23 +101,6 @@ body {
 /* 数字统一等宽，进度与统计不会跳动 */
 .tabular {
   font-variant-numeric: tabular-nums;
-}
-
-/* 进度块：扫描与复制共用同一套数值与元信息排版 */
-.progress-value {
-  font-variant-numeric: tabular-nums;
-}
-
-/* 行列异距（4px 14px）props 无法表达，布局留在这里；display 由 Flex 组件提供 */
-.progress-meta {
-  gap: var(--space-1) var(--space-4);
-  font-variant-numeric: tabular-nums;
-}
-
-.progress-meta span {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
 }
 
 /*

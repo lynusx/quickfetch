@@ -52,11 +52,18 @@ export const SettingsRow = ({
     align="center"
     justify="between"
     gap="5"
+    wrap={controlGrow ? undefined : 'wrap'}
     minHeight="52px"
     py="2"
     px="4"
   >
-    <Box flexGrow="1" flexShrink="1" flexBasis="0" minWidth="0" maxWidth="50%">
+    <Box
+      flexGrow="1"
+      flexShrink="1"
+      flexBasis={controlGrow ? '0' : undefined}
+      minWidth="0"
+      maxWidth={controlGrow ? '50%' : undefined}
+    >
       <SettingsLabel label={label} help={help} />
       {description ? (
         <Text as="p" size="1" color="gray" mt="1">
@@ -73,7 +80,7 @@ export const SettingsRow = ({
         flexShrink={controlGrow ? '1' : '0'}
         flexBasis={controlGrow ? '0' : undefined}
         minWidth="0"
-        maxWidth="50%"
+        maxWidth={controlGrow ? '50%' : undefined}
       >
         {children}
       </Flex>

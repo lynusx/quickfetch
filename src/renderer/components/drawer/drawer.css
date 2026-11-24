@@ -46,6 +46,7 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--app-surface);
+  box-shadow: var(--shadow-5);
 }
 
 .drawer-content.rt-DialogContent[data-side='right'] {
@@ -56,7 +57,6 @@
   max-height: 100%;
   border-radius: var(--radius-4) 0 0 var(--radius-4);
   border-left: 1px solid var(--app-border);
-  box-shadow: -8px 0 24px var(--black-a3);
   animation: drawer-slide-in-right 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
@@ -68,7 +68,6 @@
   max-height: 100%;
   border-radius: 0 var(--radius-4) var(--radius-4) 0;
   border-right: 1px solid var(--app-border);
-  box-shadow: 8px 0 24px var(--black-a3);
   animation: drawer-slide-in-left 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
@@ -79,7 +78,6 @@
   max-height: min(82vh, 100%);
   border-radius: var(--radius-4) var(--radius-4) 0 0;
   border-top: 1px solid var(--app-border);
-  box-shadow: 0 -8px 24px var(--black-a3);
   animation: drawer-slide-in-bottom 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 

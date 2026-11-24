@@ -23,10 +23,12 @@
 
 /*
  * 内容区：白底平面，左贴侧边栏、上贴顶带下沿、右与下贴窗口边；
- * 只留左上角圆角与侧边栏分开，不画描边、不加阴影。外壳不滚动，
- * 页面用 PageShell 在内容区内滚动正文。
+ * 左上大圆角配合 Radix --shadow-2（内置 1px 轮廓环与轻柔投影），
+ * 与浅灰画布拉开清晰层次。外壳不滚动，页面用 PageShell 在内容区内滚动正文。
  */
 .app-main {
+  z-index: 1;
   background: var(--app-surface);
-  border-radius: var(--radius-4) 0 0 0;
+  border-radius: var(--radius-6) 0 0 0;
+  box-shadow: var(--shadow-2);
 }

@@ -1,6 +1,14 @@
-import { useEffect } from 'react'
-import type { ReactNode } from 'react'
-import { ClipboardCopy, Download, Table2, TriangleAlert, X } from 'lucide-react'
+import { useEffect, useRef } from 'react'
+import type { ChangeEvent, DragEvent } from 'react'
+import {
+  ClipboardCopy,
+  Download,
+  Filter,
+  Table2,
+  TriangleAlert,
+  Upload,
+  X,
+} from 'lucide-react'
 import {
   Badge,
   Box,
@@ -23,35 +31,9 @@ import {
 import { Panel, PanelBody, PanelHeader } from '@/components/panel'
 import SheetFilterPanel from './sheet-filter-panel'
 import SheetTablePreview from './sheet-table-preview'
+import { useExcelUpload } from '../hooks/useExcelUpload'
 import { useExcelViewer } from '../hooks/useExcelViewer'
 import { useExcelStore } from '../stores/excelStore'
-
-import type { ExcelFile } from '../types'
-
-const FileMetaItem = ({
-  label,
-  value,
-}: {
-  label: string
-  value: ReactNode
-}) => (
-  <Flex className="file-meta-item" direction="column" gap="1" py="2" px="3">
-    <Text as="div" size="1" color="gray">
-      {label}
-    </Text>
-    <Text as="div" size="1" weight="medium" truncate className="tabular">
-      {value}
-    </Text>
-  </Flex>
-)
-
-const FileMeta = ({ file }: { file: ExcelFile }) => (
-  <Grid className="file-meta" columns="3" gap="2">
-    <FileMetaItem label="文件大小" value={file.size} />
-    <FileMetaItem label="工作表" value={`${file.sheets.length} 个`} />
-    <FileMetaItem label="上传时间" value={file.uploadTime} />
-  </Grid>
-)
 
 const STATUS_BADGE: Record<
   string,
@@ -68,6 +50,7 @@ const STATUS_BADGE: Record<
 
 const ExcelViewer = () => {
   const { file, sheet, setFile } = useExcelStore()
+  const { isDrag, isProcess, setIsDrag, uploadFile } = useExcelUpload()
   const {
     generateSheetDate,
     handleCopyToClipboard,
@@ -75,6 +58,7 @@ const ExcelViewer = () => {
     isCopy,
     isExport,
   } = useExcelViewer()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   /**
    * 只在「文件或筛选条件变了」时重算预览。
@@ -94,69 +78,137 @@ const ExcelViewer = () => {
     variant: 'surface',
   }
 
-  if (file.status === 'error') {
-    return (
-      <Panel>
-        <PanelHeader
-          icon={<Table2 size={13} strokeWidth={1.75} />}
-          title={file.name}
-          description="文件解析失败"
-          actions={<Badge color="red">错误</Badge>}
-        />
-        <PanelBody>
-          <Flex direction="column" gap="4">
-            <Callout.Root color="red" role="alert">
-              <Callout.Icon>
-                <TriangleAlert size={16} strokeWidth={1.75} />
-              </Callout.Icon>
-              <Callout.Text>
-                <Text weight="medium">{file.name}</Text>：
-                {file.error?.message || '未知错误'}
-              </Callout.Text>
-            </Callout.Root>
+  const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setIsDrag(true)
+  }
 
-            <FileMeta file={file} />
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+      setIsDrag(false)
+    }
+  }
 
-            <Flex justify="end">
-              <Button variant="soft" color="gray" onClick={() => setFile(null)}>
-                <X size={14} strokeWidth={1.75} />
-                清除文件
-              </Button>
-            </Flex>
-          </Flex>
-        </PanelBody>
-      </Panel>
-    )
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setIsDrag(false)
+
+    const files = event.dataTransfer.files
+    if (files.length > 0 && !isProcess) {
+      uploadFile(files[0])
+    }
+  }
+
+  const handleFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (files && files.length > 0) {
+      uploadFile(files[0])
+    }
+    event.target.value = ''
   }
 
   return (
-    <Flex direction="column" gap="5">
-      {/* 文件信息 */}
-      <Panel>
-        <PanelHeader
-          icon={<Table2 size={13} strokeWidth={1.75} />}
-          title={file.name}
-          actions={
-            <>
-              <Badge color={statusMeta.color} variant={statusMeta.variant}>
-                {statusMeta.label}
-              </Badge>
-              <IconButton
-                variant="ghost"
-                color="gray"
-                size="1"
-                aria-label="清除文件"
-                onClick={() => setFile(null)}
-              >
-                <X size={14} strokeWidth={1.75} />
-              </IconButton>
-            </>
-          }
-        />
-        <PanelBody>
-          <FileMeta file={file} />
-        </PanelBody>
+    <Flex direction="column" gap="4">
+      {/* 紧凑单行文件状态栏：支持直接拖拽新文件替换 */}
+      <Panel className="excel-file-bar">
+        <Flex
+          align="center"
+          justify="between"
+          gap="3"
+          wrap="wrap"
+          px="4"
+          py="3"
+          data-drag={isDrag || undefined}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
+          <Flex align="center" gap="3" minWidth="0" flexGrow="1">
+            <Flex
+              className="excel-file-icon"
+              align="center"
+              justify="center"
+              width="32px"
+              height="32px"
+              flexShrink="0"
+            >
+              <Table2 size={16} strokeWidth={1.75} />
+            </Flex>
+            <Flex direction="column" gap="1" minWidth="0">
+              <Flex align="center" gap="2" minWidth="0">
+                <Text size="2" weight="medium" truncate>
+                  {file.name}
+                </Text>
+                <Badge color={statusMeta.color} variant={statusMeta.variant}>
+                  {statusMeta.label}
+                </Badge>
+              </Flex>
+              <Text size="2" color="gray" truncate className="tabular">
+                {isDrag
+                  ? '释放文件以替换当前 Excel'
+                  : `${file.size} · ${file.sheets.length} 个工作表 · ${file.uploadTime}`}
+              </Text>
+            </Flex>
+          </Flex>
+
+          <Flex align="center" gap="2" flexShrink="0">
+            <Button
+              type="button"
+              variant="soft"
+              color="gray"
+              disabled={isProcess}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {isProcess ? (
+                <Spinner size="1" />
+              ) : (
+                <Upload size={14} strokeWidth={1.75} />
+              )}
+              {isProcess ? '解析中…' : '更换文件'}
+            </Button>
+            <IconButton
+              type="button"
+              variant="ghost"
+              color="gray"
+              aria-label="清除文件"
+              disabled={isProcess}
+              onClick={() => setFile(null)}
+            >
+              <X size={15} strokeWidth={1.75} />
+            </IconButton>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+              hidden
+              onChange={handleFileInputChange}
+              disabled={isProcess}
+            />
+          </Flex>
+        </Flex>
       </Panel>
+
+      {file.status === 'error' ? (
+        <Callout.Root color="red" role="alert">
+          <Callout.Icon>
+            <TriangleAlert size={16} strokeWidth={1.75} />
+          </Callout.Icon>
+          <Callout.Text>
+            <Text weight="medium">{file.name}</Text>：
+            {file.error?.message || '未知错误'}
+          </Callout.Text>
+        </Callout.Root>
+      ) : null}
 
       {file.status === 'processing' ? (
         <Panel>
@@ -172,7 +224,7 @@ const ExcelViewer = () => {
               <Text weight="medium" size="2">
                 正在解析 Excel 文件…
               </Text>
-              <Text size="1" color="gray">
+              <Text size="2" color="gray">
                 请稍候，正在读取工作表数据
               </Text>
             </Flex>
@@ -184,7 +236,7 @@ const ExcelViewer = () => {
         <Grid
           columns={{
             initial: '1',
-            lg: 'minmax(320px, 400px) minmax(0, 1fr)',
+            lg: '300px minmax(0, 1fr)',
           }}
           gap="4"
           align="start"
@@ -192,7 +244,7 @@ const ExcelViewer = () => {
           {/* 左侧筛选 */}
           <Panel>
             <PanelHeader
-              icon={<Table2 size={13} strokeWidth={1.75} />}
+              icon={<Filter size={15} strokeWidth={1.75} />}
               title="筛选条件"
             />
             <PanelBody>
@@ -204,7 +256,7 @@ const ExcelViewer = () => {
           <Box minWidth="0">
             <Panel>
               <PanelHeader
-                icon={<Table2 size={13} strokeWidth={1.75} />}
+                icon={<Table2 size={15} strokeWidth={1.75} />}
                 title={sheet?.name || '数据预览'}
                 description={
                   sheet
@@ -216,7 +268,6 @@ const ExcelViewer = () => {
                     <Button
                       variant="soft"
                       color="gray"
-                      size="1"
                       disabled={!sheet || isCopy}
                       onClick={() => sheet && handleCopyToClipboard(sheet)}
                     >
@@ -226,7 +277,6 @@ const ExcelViewer = () => {
                     <Button
                       variant="soft"
                       color="gray"
-                      size="1"
                       disabled={!sheet || isExport}
                       onClick={() => sheet && handleExportToExcel(sheet)}
                     >

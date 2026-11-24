@@ -15,20 +15,17 @@ interface PageShellProps {
   actions?: ReactNode
   /** 页面引导句，放在正文顶部随内容滚动；不传就不占位 */
   description?: ReactNode
-  /** 正文的最大宽度；标题始终贴内容区内边距，不跟随它 */
+  /** 正文与标题栏共用的最大宽度 */
   contentMaxWidth?: string
   children: ReactNode
 }
 
 /**
- * 页面骨架：内容区顶部留白 + 随内容滚动、到顶吸顶的标题。
+ * 页面骨架：吸顶标题 + 单一滚动视口。
  *
- * 标题属于滚动内容，不单独占一行固定栏：页首 24px 让它先随正文上移，
- * 移到内容区顶部后由 sticky 固定。标题底色取自内容区（白色半透明），
- * 正文从下方穿过时才呈现磨砂玻璃；吸顶后由哨兵元素触发一条下边框，
- * 静止时与内容区完全融为一体。滚动条占满内容区高度；键盘聚焦的元素
- * 靠 scroll-padding-top 让开标题。标题与正文共用水平内边距，正文按
- * 自身 max-width 居中。
+ * 标题栏贴内容区顶部，吸顶底色与磨砂底边框铺满内容区全宽，
+ * 内部标题与操作区和下方正文共用同一 `contentMaxWidth` 居中对齐，
+ * 避免宽屏下标题贴边、正文缩在中间的视觉断层。
  */
 export const PageShell = ({
   title,
@@ -67,7 +64,7 @@ export const PageShell = ({
         size="2"
         scrollbars="vertical"
       >
-        <Box className="page-shell-content" pt="5">
+        <Box className="page-shell-content">
           {/* 标题到达内容区顶部的标记，不渲染任何内容 */}
           <Box ref={sentinelRef} height="1px" aria-hidden="true" />
 
@@ -75,19 +72,26 @@ export const PageShell = ({
             className="page-shell-header"
             data-stuck={stuck ? 'true' : undefined}
             align="center"
-            justify="between"
-            gap="3"
             position="sticky"
             top="0"
             height="var(--app-page-header-height)"
-            px="4"
           >
-            <PageHeader title={title} help={help} badge={badge} />
-            {actions ? (
-              <Flex align="center" gap="2" minWidth="0" flexShrink="0">
-                {actions}
-              </Flex>
-            ) : null}
+            <Flex
+              align="center"
+              justify="between"
+              gap="3"
+              width="100%"
+              maxWidth={contentMaxWidth}
+              mx="auto"
+              px="4"
+            >
+              <PageHeader title={title} help={help} badge={badge} />
+              {actions ? (
+                <Flex align="center" gap="2" minWidth="0" flexShrink="0">
+                  {actions}
+                </Flex>
+              ) : null}
+            </Flex>
           </Flex>
 
           <Box maxWidth={contentMaxWidth} mx="auto" px="4" pt="3" pb="9">

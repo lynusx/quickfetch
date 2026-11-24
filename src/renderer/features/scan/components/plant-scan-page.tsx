@@ -100,7 +100,7 @@ const PlantScanPage = ({
   return (
     <PageShell
       title={SCAN_CATEGORY_LABEL[category]}
-      contentMaxWidth="1040px"
+      contentMaxWidth="1120px"
       badge={task ? <ScanStatusBadge status={task.status} /> : null}
       actions={
         <>

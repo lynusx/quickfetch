@@ -28,13 +28,7 @@ const LayoutPage = () => (
         flexShrink="0"
         flexBasis="var(--app-topbar-height)"
       />
-      <Flex
-        className="app-body"
-        flexGrow="1"
-        flexBasis="0"
-        minHeight="0"
-        overflow="hidden"
-      >
+      <Flex className="app-body" flexGrow="1" flexBasis="0" minHeight="0">
         <AppSidebar />
         <SidebarInset>
           <Outlet />

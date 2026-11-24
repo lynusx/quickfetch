@@ -177,6 +177,7 @@ export const SidebarInset = ({ children, className }: SidebarSectionProps) => (
   <Flex
     className={cn('app-main', className)}
     role="main"
+    position="relative"
     direction="column"
     flexGrow="1"
     flexBasis="0"
