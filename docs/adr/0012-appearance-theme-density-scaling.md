@@ -28,6 +28,14 @@
 - `@radix-ui/themes` 的 `<Theme scaling>` 最高仅支持 `110%`，无法满足 `125%` 档位；改由主进程调用 `webContents.setZoomFactor(scale / 100)`，实现四档完整等比无损缩放，并在 `did-finish-load` 时补同步，防止首次导航重置缩放。
 - 由于 Windows `titleBarOverlay.height` 按固定 `40` DIP 绘制而不随 `zoomFactor` 缩放，渲染层将倍率同步至 `--app-zoom`，并以 `--app-topbar-height: calc(40px / var(--app-zoom))` 反向补偿，使顶带拖拽区与模态遮罩上沿在任意缩放档位下均与系统窗口按钮严格对齐。
 
+### 4. 外观切换动效：统一采用 `react-spring`（`SPRING_GENTLE`）
+
+三项选项若直接瞬时切换会有明显的视觉跳变，因此统一使用 `src/renderer/lib/motion.ts` 中的 `SPRING_GENTLE`（临界阻尼、无回弹）并尊重 `prefers-reduced-motion`，且仅在设置水合完成后触发（冷启动直接落定，不误播动画）：
+
+- **明暗切换**：`ThemeTransitionOverlay` 在切换瞬间捕获旧主题画布色铺满全屏（`pointer-events: none`），通过 `react-spring` 将遮罩 `opacity: 0.4 → 0` 平滑淡出，同时在文档根节点挂载短时 `data-theme-transitioning` 过渡背景/边框/文字色；动画 `onRest` 后立即卸载遮罩并清理标记。
+- **界面密度**：`useApplyDensity` 通过 `react-spring` 将密度因子 `--app-density-t` 在 `0`（舒适）与 `1`（紧凑）间连续插值，驱动 `--space-1` 至 `--space-9` 及页头/设置行高度平滑伸缩，回到舒适态后移除 `data-density-active` 零常驻覆盖。
+- **界面缩放**：在 `preload` 暴露同进程同步方法 `window.electronAPI.setZoomFactor`（封装 `webFrame.setZoomFactor`，免去 60fps 跨进程 IPC 开销）；`useApplyScale` 逐帧弹簧插值真实缩放倍率并同步 `--app-zoom` 补偿顶带高度。主进程在保存偏好时仅更新 `currentScale` 缓存供新窗口/重载兜底，不直接打断渲染层正在播放的缩放动画。
+
 ## 取舍与后果
 
 - **收益**：

@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webFrame } from 'electron'
 
 import { IPC_EVENTS, IPC_INVOKE, IPC_SEND } from '../shared/ipc'
 import type {
@@ -55,6 +55,10 @@ const api: ElectronAPI = {
     } catch {
       // 日志上报失败不能影响渲染层业务
     }
+  },
+
+  setZoomFactor: (factor) => {
+    webFrame.setZoomFactor(factor)
   },
 }
 

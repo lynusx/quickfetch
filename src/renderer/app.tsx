@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Theme } from '@radix-ui/themes'
 
+import { ThemeTransitionOverlay } from '@/components/theme-transition-overlay/theme-transition-overlay'
 import { Toaster } from '@/components/toaster/toaster'
 import {
   selectPreferences,
@@ -25,11 +26,12 @@ import { AppRoutes } from './routes/app-routes'
  */
 function App() {
   const loadSettings = useSettingsStore((state) => state.load)
+  const hydrated = useSettingsStore((state) => state.settings !== null)
   const { appearance, density, scale } = useSettingsStore(selectPreferences)
   const resolvedAppearance = useResolvedAppearance(appearance)
 
-  useApplyDensity(density)
-  useApplyScale(scale)
+  useApplyDensity(density, hydrated)
+  useApplyScale(scale, hydrated)
   useUpdateBridge()
 
   useEffect(() => {
@@ -40,6 +42,10 @@ function App() {
     <Theme appearance={resolvedAppearance} grayColor="slate">
       <AppRoutes />
       <Toaster theme={resolvedAppearance} />
+      <ThemeTransitionOverlay
+        appearance={resolvedAppearance}
+        ready={hydrated}
+      />
     </Theme>
   )
 }

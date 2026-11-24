@@ -56,19 +56,20 @@ const syncAllWindows = (): void => {
   }
 }
 
-/** 将当前缩放比例同步到指定窗口 */
+/** 将当前缩放比例同步到指定窗口（冷启动与首次加载兜底） */
 export const syncWindowScale = (window: BrowserWindow): void => {
   if (window.isDestroyed()) return
   window.webContents.setZoomFactor(currentScale / 100)
 }
 
-/** 切换界面缩放比例并同步到全部已打开窗口 */
-export const applyUiScale = (scale: UiScale): void => {
+/**
+ * 更新主进程缓存的缩放比例。
+ *
+ * 运行期缩放由渲染层通过 webFrame.setZoomFactor 连续弹簧插值驱动，
+ * 这里只更新缓存供新窗口或页面重载时使用，避免落盘返回时打断动画。
+ */
+export const rememberUiScale = (scale: UiScale): void => {
   currentScale = scale
-
-  for (const window of BrowserWindow.getAllWindows()) {
-    syncWindowScale(window)
-  }
 }
 
 /** 切换 Electron 原生主题源，并刷新全部已打开窗口的底色与顶栏按钮色 */

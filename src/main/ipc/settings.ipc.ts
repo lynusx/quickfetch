@@ -30,7 +30,7 @@ import {
   saveTypeCatalog,
   settingsFilePath,
 } from '../services/settings'
-import { applyThemeAppearance, applyUiScale } from '../services/appearance'
+import { applyThemeAppearance, rememberUiScale } from '../services/appearance'
 import { applyUpdatePreferences } from '../services/update'
 import { splitMachine } from '../services/discovery/shortcuts'
 import { handle } from './handle'
@@ -188,7 +188,7 @@ export const registerSettingsIpc = (): void => {
     }
 
     if ('scale' in patch) {
-      applyUiScale(next.preferences.scale)
+      rememberUiScale(next.preferences.scale)
     }
 
     if ('updateAutoCheckEnabled' in patch) {

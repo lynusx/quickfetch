@@ -1,6 +1,8 @@
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { useSpring } from '@react-spring/web'
 
 import type { ThemeAppearance, UiDensity, UiScale } from '@shared/ipc'
+import { SPRING_GENTLE, useReducedMotion } from './motion'
 
 const DARK_MEDIA_QUERY = '(prefers-color-scheme: dark)'
 
@@ -40,25 +42,106 @@ export const useResolvedAppearance = (
   return resolved
 }
 
-/**
- * 将界面密度挂到文档根节点的 `data-density`，
- * 让主应用与 Radix Portal 弹层（抽屉、弹窗、说明卡）共用同一套间距令牌。
- */
-export const useApplyDensity = (density: UiDensity): void => {
-  useEffect(() => {
-    document.documentElement.dataset.density = density
-  }, [density])
+const applyDensityProgress = (progress: number): void => {
+  const root = document.documentElement
+
+  if (progress <= 0.001) {
+    delete root.dataset.densityActive
+    root.style.setProperty('--app-density-t', '0')
+    return
+  }
+
+  root.dataset.densityActive = 'true'
+  root.style.setProperty('--app-density-t', progress.toFixed(4))
 }
 
 /**
- * 同步当前 Electron 缩放倍率到 `--app-zoom`，用于反向补偿固定 DIP 高度的
- * 系统窗口顶带（40px），避免缩放后右上角窗口按钮与顶带错位。
+ * 使用 react-spring 连续插值密度因子（0 = 舒适，1 = 紧凑），
+ * 通过单个 CSS 变量 `--app-density-t` 驱动全应用与 Portal 弹层间距平滑伸缩。
+ *
+ * 首屏水合阶段直接落定目标值，避免冷启动时误播动画。
  */
-export const useApplyScale = (scale: UiScale): void => {
+export const useApplyDensity = (density: UiDensity, ready: boolean): void => {
+  const reducedMotion = useReducedMotion()
+  const hydratedRef = useRef(false)
+  const target = density === 'compact' ? 1 : 0
+
+  const [, api] = useSpring(() => ({
+    progress: target,
+    onChange: (result) => {
+      const value = result.value.progress as number
+      applyDensityProgress(value)
+    },
+    onRest: (result) => {
+      const value = result.value.progress as number
+      applyDensityProgress(value)
+    },
+  }))
+
   useEffect(() => {
-    document.documentElement.style.setProperty(
-      '--app-zoom',
-      String(scale / 100),
-    )
-  }, [scale])
+    document.documentElement.dataset.density = density
+
+    if (!ready) return
+
+    const immediate = !hydratedRef.current || reducedMotion
+    hydratedRef.current = true
+
+    if (immediate) {
+      api.set({ progress: target })
+      applyDensityProgress(target)
+      return
+    }
+
+    api.start({
+      to: { progress: target },
+      config: SPRING_GENTLE,
+    })
+  }, [density, ready, reducedMotion, target, api])
+}
+
+const applyZoomFactor = (factor: number): void => {
+  window.electronAPI?.setZoomFactor?.(factor)
+  document.documentElement.style.setProperty('--app-zoom', factor.toFixed(4))
+}
+
+/**
+ * 使用 react-spring 连续插值界面缩放倍率，同进程同步调用
+ * `webFrame.setZoomFactor` 并同步 `--app-zoom` 反向补偿 40 DIP 顶带高度。
+ *
+ * 首屏水合阶段直接落定目标值，避免冷启动时误播动画。
+ */
+export const useApplyScale = (scale: UiScale, ready: boolean): void => {
+  const reducedMotion = useReducedMotion()
+  const hydratedRef = useRef(false)
+  const target = scale / 100
+
+  const [, api] = useSpring(() => ({
+    factor: target,
+    onChange: (result) => {
+      const value = result.value.factor as number
+      applyZoomFactor(value)
+    },
+    onRest: (result) => {
+      const value = result.value.factor as number
+      applyZoomFactor(value)
+    },
+  }))
+
+  useEffect(() => {
+    if (!ready) return
+
+    const immediate = !hydratedRef.current || reducedMotion
+    hydratedRef.current = true
+
+    if (immediate) {
+      api.set({ factor: target })
+      applyZoomFactor(target)
+      return
+    }
+
+    api.start({
+      to: { factor: target },
+      config: SPRING_GENTLE,
+    })
+  }, [scale, ready, reducedMotion, target, api])
 }

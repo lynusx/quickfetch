@@ -57,6 +57,8 @@ body {
 :root {
   /* 当前界面缩放倍率，用于反向补偿系统窗口顶带高度 */
   --app-zoom: 1;
+  /* 界面密度连续插值因子（0 = 舒适，1 = 紧凑），由 react-spring 实时驱动 */
+  --app-density-t: 0;
 }
 
 .radix-themes {
@@ -76,22 +78,32 @@ body {
 }
 
 /*
- * 紧凑界面密度：统一收紧 Radix 间距阶梯（约 0.75–0.8x）及页头/设置行纵深，
- * 不改变字号（字号与整体比例由「界面缩放」控制，两者职责正交）。
- * 挂在 :root[data-density] 上，保证 Radix Portal 弹层同步生效。
+ * 紧凑界面密度（含过渡帧）：按 --app-density-t（0→1）线性收紧 Radix 间距阶梯
+ * 及页头/设置行纵深，不改变字号（字号与整体比例由「界面缩放」控制）。
+ * 挂在 :root[data-density-active] 上，保证 Radix Portal 弹层同步平滑过渡。
  */
-:root[data-density='compact'] .radix-themes {
-  --space-1: calc(3px * var(--scaling));
-  --space-2: calc(6px * var(--scaling));
-  --space-3: calc(9px * var(--scaling));
-  --space-4: calc(12px * var(--scaling));
-  --space-5: calc(18px * var(--scaling));
-  --space-6: calc(24px * var(--scaling));
-  --space-7: calc(30px * var(--scaling));
-  --space-8: calc(36px * var(--scaling));
-  --space-9: calc(48px * var(--scaling));
-  --app-page-header-height: 46px;
-  --app-settings-row-min-height: 42px;
+:root[data-density-active='true'] .radix-themes {
+  --space-1: calc((4px - 1px * var(--app-density-t)) * var(--scaling));
+  --space-2: calc((8px - 2px * var(--app-density-t)) * var(--scaling));
+  --space-3: calc((12px - 3px * var(--app-density-t)) * var(--scaling));
+  --space-4: calc((16px - 4px * var(--app-density-t)) * var(--scaling));
+  --space-5: calc((24px - 6px * var(--app-density-t)) * var(--scaling));
+  --space-6: calc((32px - 8px * var(--app-density-t)) * var(--scaling));
+  --space-7: calc((40px - 10px * var(--app-density-t)) * var(--scaling));
+  --space-8: calc((48px - 12px * var(--app-density-t)) * var(--scaling));
+  --space-9: calc((64px - 16px * var(--app-density-t)) * var(--scaling));
+  --app-page-header-height: calc(56px - 10px * var(--app-density-t));
+  --app-settings-row-min-height: calc(52px - 10px * var(--app-density-t));
+}
+
+/* 明暗切换瞬间启用短时色值过渡，动效结束后移除标记，不干扰日常悬停响应 */
+:root[data-theme-transitioning='true'] .radix-themes,
+:root[data-theme-transitioning='true'] .radix-themes * {
+  transition:
+    background-color 200ms ease-out,
+    border-color 200ms ease-out,
+    color 200ms ease-out,
+    box-shadow 200ms ease-out !important;
 }
 
 /*

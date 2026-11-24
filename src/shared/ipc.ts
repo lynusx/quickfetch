@@ -1031,6 +1031,9 @@ export interface ElectronAPI {
     defaultName: string
     data: Uint8Array
   }) => Promise<string | null>
+
+  /** 渲染进程内同步设置缩放倍率（webFrame.setZoomFactor），供缩放动画逐帧调用 */
+  setZoomFactor: (factor: number) => void
 }
 
 /**
