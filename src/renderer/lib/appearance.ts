@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react'
 
-import type { ThemeAppearance } from '@shared/ipc'
+import type { ThemeAppearance, UiDensity } from '@shared/ipc'
 
 const DARK_MEDIA_QUERY = '(prefers-color-scheme: dark)'
 
@@ -38,4 +38,14 @@ export const useResolvedAppearance = (
   }, [resolved])
 
   return resolved
+}
+
+/**
+ * 将界面密度挂到文档根节点的 `data-density`，
+ * 让主应用与 Radix Portal 弹层（抽屉、弹窗、说明卡）共用同一套间距令牌。
+ */
+export const useApplyDensity = (density: UiDensity): void => {
+  useEffect(() => {
+    document.documentElement.dataset.density = density
+  }, [density])
 }

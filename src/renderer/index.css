@@ -61,11 +61,32 @@ body {
   --app-topbar-height: 40px;
   /* 页面标题区高度：PageShell 吸顶标题与滚动偏移共用 */
   --app-page-header-height: 56px;
+  /* 设置行最小高度：随界面密度切换 */
+  --app-settings-row-min-height: 52px;
   --app-canvas: var(--gray-2);
   --app-surface: var(--color-panel-solid);
   --app-border: var(--gray-5);
   --app-border-strong: var(--gray-6);
   --app-transition: 140ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/*
+ * 紧凑界面密度：统一收紧 Radix 间距阶梯（约 0.75–0.8x）及页头/设置行纵深，
+ * 不改变字号（字号与整体比例由「界面缩放」控制，两者职责正交）。
+ * 挂在 :root[data-density] 上，保证 Radix Portal 弹层同步生效。
+ */
+:root[data-density='compact'] .radix-themes {
+  --space-1: calc(3px * var(--scaling));
+  --space-2: calc(6px * var(--scaling));
+  --space-3: calc(9px * var(--scaling));
+  --space-4: calc(12px * var(--scaling));
+  --space-5: calc(18px * var(--scaling));
+  --space-6: calc(24px * var(--scaling));
+  --space-7: calc(30px * var(--scaling));
+  --space-8: calc(36px * var(--scaling));
+  --space-9: calc(48px * var(--scaling));
+  --app-page-header-height: 46px;
+  --app-settings-row-min-height: 42px;
 }
 
 /*

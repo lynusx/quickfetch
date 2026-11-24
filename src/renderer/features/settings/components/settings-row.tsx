@@ -53,7 +53,7 @@ export const SettingsRow = ({
     justify="between"
     gap="5"
     wrap={controlGrow ? undefined : 'wrap'}
-    minHeight="52px"
+    minHeight="var(--app-settings-row-min-height)"
     py="2"
     px="4"
   >
