@@ -268,15 +268,14 @@ export const ChoiceRadio = ({
         <Flex wrap="wrap" align="center" gapX="4" gapY="2">
           {options.map((option) => {
             const checked = option.value === value
-
-            return (
+            const item = (
               <Text
                 as="label"
                 key={option.value}
                 size="2"
                 className="choice-inline"
                 data-disabled={disabled || undefined}
-                title={option.title}
+                title={option.tooltip ? undefined : option.title}
               >
                 <Flex as="span" display="inline-flex" align="center" gap="2">
                   <RadioGroup.Item value={option.value} />
@@ -297,14 +296,25 @@ export const ChoiceRadio = ({
                 </Flex>
               </Text>
             )
+
+            return option.tooltip ? (
+              <Tooltip
+                key={option.value}
+                content={option.tooltip}
+                delayDuration={250}
+              >
+                {item}
+              </Tooltip>
+            ) : (
+              item
+            )
           })}
         </Flex>
       ) : (
         <Grid columns={resolveGridColumns(columns)} gap="2">
           {options.map((option) => {
             const checked = option.value === value
-
-            return (
+            const item = (
               <Flex
                 key={option.value}
                 className="choice-cell"
@@ -314,7 +324,7 @@ export const ChoiceRadio = ({
                 p="2"
                 data-selected={checked || undefined}
                 data-disabled={disabled || undefined}
-                title={option.title}
+                title={option.tooltip ? undefined : option.title}
                 onClick={() => {
                   if (disabled) return
                   onValueChange(option.value)
@@ -348,6 +358,18 @@ export const ChoiceRadio = ({
                   </Box>
                 ) : null}
               </Flex>
+            )
+
+            return option.tooltip ? (
+              <Tooltip
+                key={option.value}
+                content={option.tooltip}
+                delayDuration={250}
+              >
+                {item}
+              </Tooltip>
+            ) : (
+              item
             )
           })}
         </Grid>

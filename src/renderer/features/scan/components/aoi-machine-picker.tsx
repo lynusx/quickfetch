@@ -1,12 +1,14 @@
 import { useMemo } from 'react'
 
 import PlantMachinePicker from './plant-machine-picker'
-import type { MachineListFilter } from './plant-machine-picker'
+import { defaultSelectedKeys } from './plant-machine-model'
+import type { MachineListFilter } from './plant-machine-model'
 import { useAoiFilterStore } from '../stores/aoiFilterStore'
 import { ChoiceRadio } from '@/components/choice-list'
 import { Field } from '@/components/field'
 import { selectAoi, useSettingsStore } from '@/features/settings'
 import {
+  AOI_IMAGE_DIRS,
   AOI_IMAGE_KIND_LABEL,
   AOI_SIDE_LABEL,
   aoiSideOfName,
@@ -24,6 +26,23 @@ const AoiSideField = ({ machines }: { machines: AoiMachine[] }) => {
   const plant = useAoiFilterStore((state) => state.plant)
   const side = useAoiFilterStore((state) => state.side)
   const setSide = useAoiFilterStore((state) => state.setSide)
+  const setSelectedMachines = useAoiFilterStore(
+    (state) => state.setSelectedMachines,
+  )
+
+  const handleSideChange = (nextSide: AoiSide) => {
+    if (nextSide === side) return
+    setSide(nextSide)
+    setSelectedMachines(
+      defaultSelectedKeys(
+        machines,
+        plant,
+        nextSide === 'all'
+          ? undefined
+          : { test: (machine) => aoiSideOfName(machine.name) === nextSide },
+      ),
+    )
+  }
 
   // 三档台数按当前厂区统计，和厂区选项的写法一致
   const options = useMemo(() => {
@@ -44,14 +63,11 @@ const AoiSideField = ({ machines }: { machines: AoiMachine[] }) => {
   }, [machines, plant])
 
   return (
-    <Field
-      label="检测面"
-      hint="只筛机台列表、不改扫描路径；切到某一侧会清掉另一侧已选的机台。"
-    >
+    <Field label="检测面">
       <ChoiceRadio
         layout="inline"
         value={side}
-        onValueChange={(value) => setSide(value as AoiSide)}
+        onValueChange={(value) => handleSideChange(value as AoiSide)}
         options={options}
       />
     </Field>
@@ -64,10 +80,7 @@ const AoiImageKindField = () => {
   const setImageKind = useAoiFilterStore((state) => state.setImageKind)
 
   return (
-    <Field
-      label="图片类型"
-      hint="整体是整张扫描图（.bmp），局部是异常区域的裁图（.jpg）；两者是机台上的两个同级目录。"
-    >
+    <Field label="图片类型">
       <ChoiceRadio
         layout="inline"
         value={imageKind}
@@ -75,6 +88,7 @@ const AoiImageKindField = () => {
         options={(['whole', 'partial'] as AoiImageKind[]).map((value) => ({
           value,
           label: AOI_IMAGE_KIND_LABEL[value],
+          tooltip: AOI_IMAGE_DIRS[value],
         }))}
       />
     </Field>
