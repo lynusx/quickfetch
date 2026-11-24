@@ -30,6 +30,7 @@ import {
   saveTypeCatalog,
   settingsFilePath,
 } from '../services/settings'
+import { applyThemeAppearance } from '../services/appearance'
 import { applyUpdatePreferences } from '../services/update'
 import { splitMachine } from '../services/discovery/shortcuts'
 import { handle } from './handle'
@@ -181,6 +182,10 @@ export const registerSettingsIpc = (): void => {
 
   handle('savePreferences', async (_event, patch: Partial<AppPreferences>) => {
     const next = await savePreferences(patch)
+
+    if ('appearance' in patch) {
+      applyThemeAppearance(next.preferences.appearance)
+    }
 
     if ('updateAutoCheckEnabled' in patch) {
       applyUpdatePreferences(next.preferences)

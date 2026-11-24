@@ -1,8 +1,21 @@
-import { BrowserWindow, app, nativeImage, screen, shell } from 'electron'
+import {
+  BrowserWindow,
+  app,
+  nativeImage,
+  nativeTheme,
+  screen,
+  shell,
+} from 'electron'
 import type { BrowserWindowConstructorOptions } from 'electron'
 import { join } from 'node:path'
 
+import { DEFAULT_PREFERENCES } from '../shared/ipc'
 import { registerIpcHandlers } from './ipc'
+import {
+  initAppearanceService,
+  resolveTitleBarOverlay,
+  resolveWindowBackground,
+} from './services/appearance'
 import { cleanupSettingsTempFiles, readSettings } from './services/settings'
 import { initLogger, logger } from './services/log'
 import {
@@ -41,31 +54,19 @@ const MIN_WINDOW_HEIGHT = 600
 const WINDOW_EDGE_MARGIN = 64
 
 /**
- * 自定义标题栏高度，必须与渲染层 `.app-topbar` 的 40px 保持一致。
- *
- * 内容整体下移这一高度，窗口顶部只保留系统窗口控件：
- * macOS 是红绿灯，Windows 是右上角的最小化/最大化/关闭。
- */
-const WINDOW_CHROME_HEIGHT = 40
-
-/**
  * 隐藏系统标题栏，只保留窗口控件。
  *
  * - macOS：hiddenInset 保留原生红绿灯，去掉系统标题
  * - Windows：hidden + titleBarOverlay 只画右上角按钮，去掉图标与标题。
  *   覆盖层底色设为全透明（#00000000），直接透出下层渲染层的 `.app-topbar`（--app-canvas），
- *   避免 Display P3 广色域色差或与相邻区域的背景拼接缝；图标色对应 --gray-12。
+ *   图标色随当前深浅色取 --gray-12。
  */
-const windowChrome: BrowserWindowConstructorOptions =
+const resolveWindowChrome = (dark: boolean): BrowserWindowConstructorOptions =>
   process.platform === 'darwin'
     ? { titleBarStyle: 'hiddenInset' }
     : {
         titleBarStyle: 'hidden',
-        titleBarOverlay: {
-          color: '#00000000',
-          symbolColor: '#1c2024',
-          height: WINDOW_CHROME_HEIGHT,
-        },
+        titleBarOverlay: resolveTitleBarOverlay(dark),
       }
 
 /**
@@ -91,6 +92,7 @@ const resolveWindowSize = (): { width: number; height: number } => {
 
 const createWindow = (): BrowserWindow => {
   const { width, height } = resolveWindowSize()
+  const dark = nativeTheme.shouldUseDarkColors
 
   const window = new BrowserWindow({
     width,
@@ -100,11 +102,11 @@ const createWindow = (): BrowserWindow => {
     center: true,
     show: false,
     autoHideMenuBar: true,
-    // 与画布同色，避免首屏渲染前闪一下白底
-    backgroundColor: '#f9f9fb',
+    // 与画布同色，避免首屏渲染前闪白或闪黑
+    backgroundColor: resolveWindowBackground(dark),
     title: '秒取',
     icon: appIcon.isEmpty() ? undefined : appIcon,
-    ...windowChrome,
+    ...resolveWindowChrome(dark),
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
@@ -206,8 +208,11 @@ if (!hasSingleInstanceLock) {
       app.dock?.setIcon(appIcon)
     }
 
-    // 先按已落盘的开关初始化日志，后续启动步骤与现场操作都能被记录
+    // 先按已落盘的开关初始化日志与明暗主题，首屏窗口即按目标主题底色创建
     const settings = await readSettings().catch(() => null)
+    initAppearanceService(
+      settings?.preferences.appearance ?? DEFAULT_PREFERENCES.appearance,
+    )
     await initLogger({
       enabled: settings?.preferences.debugLogEnabled === true,
     })
