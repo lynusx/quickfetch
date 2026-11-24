@@ -1,7 +1,8 @@
 import { BrowserWindow, nativeTheme } from 'electron'
 import type { TitleBarOverlayOptions } from 'electron'
 
-import type { ThemeAppearance } from '../../shared/ipc'
+import { DEFAULT_PREFERENCES } from '../../shared/ipc'
+import type { ThemeAppearance, UiScale } from '../../shared/ipc'
 
 /**
  * 自定义标题栏高度，必须与渲染层 `.app-topbar` 的 40px 保持一致。
@@ -20,6 +21,7 @@ const OVERLAY_SYMBOL_LIGHT = '#1c2024'
 const OVERLAY_SYMBOL_DARK = '#edeef0'
 
 let listenerInstalled = false
+let currentScale: UiScale = DEFAULT_PREFERENCES.scale
 
 export const resolveWindowBackground = (dark: boolean): string =>
   dark ? WINDOW_BG_DARK : WINDOW_BG_LIGHT
@@ -54,14 +56,33 @@ const syncAllWindows = (): void => {
   }
 }
 
+/** 将当前缩放比例同步到指定窗口 */
+export const syncWindowScale = (window: BrowserWindow): void => {
+  if (window.isDestroyed()) return
+  window.webContents.setZoomFactor(currentScale / 100)
+}
+
+/** 切换界面缩放比例并同步到全部已打开窗口 */
+export const applyUiScale = (scale: UiScale): void => {
+  currentScale = scale
+
+  for (const window of BrowserWindow.getAllWindows()) {
+    syncWindowScale(window)
+  }
+}
+
 /** 切换 Electron 原生主题源，并刷新全部已打开窗口的底色与顶栏按钮色 */
 export const applyThemeAppearance = (appearance: ThemeAppearance): void => {
   nativeTheme.themeSource = appearance
   syncAllWindows()
 }
 
-/** 启动期初始化主题源，并监听系统深浅色变化（选择「跟随系统」时生效） */
-export const initAppearanceService = (appearance: ThemeAppearance): void => {
+/** 启动期初始化主题源与缩放比例，并监听系统深浅色变化（选择「跟随系统」时生效） */
+export const initAppearanceService = (
+  appearance: ThemeAppearance,
+  scale: UiScale,
+): void => {
+  currentScale = scale
   nativeTheme.themeSource = appearance
 
   if (!listenerInstalled) {

@@ -15,6 +15,7 @@ import {
   initAppearanceService,
   resolveTitleBarOverlay,
   resolveWindowBackground,
+  syncWindowScale,
 } from './services/appearance'
 import { cleanupSettingsTempFiles, readSettings } from './services/settings'
 import { initLogger, logger } from './services/log'
@@ -115,6 +116,10 @@ const createWindow = (): BrowserWindow => {
     },
   })
 
+  // 首屏加载完成后再次同步缩放，避免 Chromium 首次导航重置 zoomFactor
+  syncWindowScale(window)
+  window.webContents.on('did-finish-load', () => syncWindowScale(window))
+
   // 等首屏渲染完成再显示，避免白屏闪烁
   window.once('ready-to-show', () => window.show())
 
@@ -208,10 +213,11 @@ if (!hasSingleInstanceLock) {
       app.dock?.setIcon(appIcon)
     }
 
-    // 先按已落盘的开关初始化日志与明暗主题，首屏窗口即按目标主题底色创建
+    // 先按已落盘的开关初始化日志与外观（明暗主题与缩放），首屏窗口即按目标主题底色创建
     const settings = await readSettings().catch(() => null)
     initAppearanceService(
       settings?.preferences.appearance ?? DEFAULT_PREFERENCES.appearance,
+      settings?.preferences.scale ?? DEFAULT_PREFERENCES.scale,
     )
     await initLogger({
       enabled: settings?.preferences.debugLogEnabled === true,

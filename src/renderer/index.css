@@ -54,11 +54,16 @@ body {
 
 /* 全局应用令牌、基线与共享工具类 */
 
+:root {
+  /* 当前界面缩放倍率，用于反向补偿系统窗口顶带高度 */
+  --app-zoom: 1;
+}
+
 .radix-themes {
   --app-sidebar-width: 216px;
   --app-content-max: 1360px;
-  /* 窗口顶部系统控件区高度：必须与 src/main/index.ts 的 WINDOW_CHROME_HEIGHT 保持一致 */
-  --app-topbar-height: 40px;
+  /* 窗口顶部系统控件区高度：按 zoomFactor 反向补偿，保持与主进程 40 DIP 严格对齐 */
+  --app-topbar-height: calc(40px / var(--app-zoom));
   /* 页面标题区高度：PageShell 吸顶标题与滚动偏移共用 */
   --app-page-header-height: 56px;
   /* 设置行最小高度：随界面密度切换 */

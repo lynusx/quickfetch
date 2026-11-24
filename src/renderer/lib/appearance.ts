@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react'
 
-import type { ThemeAppearance, UiDensity } from '@shared/ipc'
+import type { ThemeAppearance, UiDensity, UiScale } from '@shared/ipc'
 
 const DARK_MEDIA_QUERY = '(prefers-color-scheme: dark)'
 
@@ -48,4 +48,17 @@ export const useApplyDensity = (density: UiDensity): void => {
   useEffect(() => {
     document.documentElement.dataset.density = density
   }, [density])
+}
+
+/**
+ * 同步当前 Electron 缩放倍率到 `--app-zoom`，用于反向补偿固定 DIP 高度的
+ * 系统窗口顶带（40px），避免缩放后右上角窗口按钮与顶带错位。
+ */
+export const useApplyScale = (scale: UiScale): void => {
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      '--app-zoom',
+      String(scale / 100),
+    )
+  }, [scale])
 }
