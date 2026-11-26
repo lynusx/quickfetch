@@ -617,6 +617,31 @@ export type UiScale = (typeof UI_SCALES)[number]
  * 环境变量。集中到这里之后，界面只认这份值，环境变量仍可临时覆盖。
  * EL / 力禧特 / 利珀 / 森标 AOI 共用同一套档位。
  */
+/** 性能档位：把扫描并发、机台分批与复制并发打包为三档预设 */
+export const PERFORMANCE_PROFILES = ['low', 'standard', 'high'] as const
+
+export type PerformanceProfile = (typeof PERFORMANCE_PROFILES)[number]
+
+export const PERFORMANCE_PROFILE_LABEL: Record<PerformanceProfile, string> = {
+  low: '低负载',
+  standard: '标准',
+  high: '高速',
+}
+
+/** 各性能档位对应的底层资源参数 */
+export const PERFORMANCE_PROFILE_VALUES: Record<
+  PerformanceProfile,
+  {
+    scanConcurrency: number
+    scanBatchSize: number
+    copyConcurrency: number
+  }
+> = {
+  low: { scanConcurrency: 2, scanBatchSize: 1, copyConcurrency: 3 },
+  standard: { scanConcurrency: 4, scanBatchSize: 2, copyConcurrency: 6 },
+  high: { scanConcurrency: 6, scanBatchSize: 3, copyConcurrency: 10 },
+}
+
 export interface AppPreferences {
   /** 界面明暗主题 */
   appearance: ThemeAppearance
@@ -628,13 +653,9 @@ export interface AppPreferences {
   copyLayout: CopyLayout
   /** 目标已有同名文件时怎么处理 */
   copyConflict: CopyConflictPolicy
-  /** 同时读取的目录数；运行中失败率过高会自动降档 */
-  scanConcurrency: number
-  /** 每批扫描的机台数 */
-  scanBatchSize: number
-  /** 同时复制的文件数 */
-  copyConcurrency: number
-  /** 每批复制的文件数 */
+  /** 性能档位：统一决定同时读取目录、每批扫描机台与同时复制文件 */
+  performanceProfile: PerformanceProfile
+  /** 每批复制的文件数（同时也是单批复制的并发上限） */
   copyBatchSize: number
   /**
    * 是否写全量调试日志。
@@ -648,9 +669,9 @@ export interface AppPreferences {
 }
 
 /**
- * 默认档位按现场 8G 内存电脑设定：内存峰值主要由「每批机台数」决定，
- * 所以批次保持 2；读取与复制并发维持低位，网络盘吃紧时再靠
- * 失败率自适应降档兜底。调高前先确认现场内存余量。
+ * 默认档位按现场 8G 内存电脑设定：「标准」档对应 4 路目录读取、每批 2 台机台、
+ * 6 路复制并发，网络盘吃紧时再靠失败率自适应降档兜底；每批复制默认 5 张，
+ * 兼顾暂停响应与共享盘稳定性。
  */
 export const DEFAULT_PREFERENCES: AppPreferences = {
   appearance: 'system',
@@ -658,23 +679,18 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   scale: 100,
   copyLayout: 'flat',
   copyConflict: 'skip',
-  scanConcurrency: 4,
-  scanBatchSize: 2,
-  copyConcurrency: 6,
-  copyBatchSize: 50,
+  performanceProfile: 'standard',
+  copyBatchSize: 5,
   debugLogEnabled: false,
   updateAutoCheckEnabled: true,
 }
 
 /**
- * 每项的可调范围。主进程按它 clamp，设置页按它画滑杆，
- * 两边共用一份，不会出现「界面允许 32、主进程悄悄压回 8」。
+ * 数值偏好的可调范围。主进程按它 clamp，设置页按它画滑杆，
+ * 两边共用一份，不会出现「界面允许 50、主进程悄悄压回 20」。
  */
 export const PREFERENCE_RANGE = {
-  scanConcurrency: { min: 1, max: 8, step: 1 },
-  scanBatchSize: { min: 1, max: 4, step: 1 },
-  copyConcurrency: { min: 1, max: 16, step: 1 },
-  copyBatchSize: { min: 10, max: 100, step: 10 },
+  copyBatchSize: { min: 5, max: 20, step: 5 },
 } as const
 
 /**

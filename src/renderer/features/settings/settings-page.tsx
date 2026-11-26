@@ -31,6 +31,7 @@ import type {
   CopyConflictPolicy,
   CopyLayout,
   LogInfo,
+  PerformanceProfile,
   PreferenceKey,
   ThemeAppearance,
   UiDensity,
@@ -40,6 +41,9 @@ import {
   COPY_CONFLICT_LABEL,
   COPY_LAYOUT_LABEL,
   DEFAULT_PREFERENCES,
+  PERFORMANCE_PROFILES,
+  PERFORMANCE_PROFILE_LABEL,
+  PERFORMANCE_PROFILE_VALUES,
   PREFERENCE_ENV,
   PREFERENCE_RANGE,
   THEME_APPEARANCES,
@@ -52,6 +56,7 @@ import {
   DEFAULT_HISTORY_LIMIT,
   HISTORY_LIMIT_RANGE,
 } from '@shared/historyLimit'
+import './settings-page.css'
 
 /** 分组方式的实际目录形态，光看名字不知道会建几层 */
 const LAYOUT_SAMPLE: Record<CopyLayout, string> = {
@@ -91,6 +96,31 @@ const LAYOUT_HELP = LAYOUTS.map((value, index) => (
     {COPY_LAYOUT_LABEL[value]} → {LAYOUT_SAMPLE[value]}
   </Fragment>
 ))
+
+const PROFILE_HINT: Record<PerformanceProfile, string> = {
+  low: '共享盘波动或电脑吃紧时使用',
+  standard: '常规 8G 现场机默认档位',
+  high: '内网稳定且机器空闲时使用',
+}
+
+const PROFILE_KEYS: readonly PreferenceKey[] = [
+  'scanConcurrency',
+  'scanBatchSize',
+  'copyConcurrency',
+]
+
+const PROFILE_HELP = PERFORMANCE_PROFILES.map((value, index) => {
+  const { scanConcurrency, scanBatchSize, copyConcurrency } =
+    PERFORMANCE_PROFILE_VALUES[value]
+
+  return (
+    <Fragment key={value}>
+      {index > 0 ? <br /> : null}
+      {PERFORMANCE_PROFILE_LABEL[value]} → 读目录 {scanConcurrency} / 机台批{' '}
+      {scanBatchSize} / 复制并发 {copyConcurrency}（{PROFILE_HINT[value]}）
+    </Fragment>
+  )
+})
 
 const CONFLICT_HELP = CONFLICTS.map((value, index) => (
   <Fragment key={value}>
@@ -273,14 +303,12 @@ const SettingsPage = () => {
     }
   }
 
-  /** 只恢复复制策略与并发档位，不把正在排查的调试日志关掉 */
+  /** 只恢复复制策略与性能设置，不把正在排查的调试日志关掉 */
   const restoreCopyDefaults = () => {
     patch({
       copyLayout: DEFAULT_PREFERENCES.copyLayout,
       copyConflict: DEFAULT_PREFERENCES.copyConflict,
-      scanConcurrency: DEFAULT_PREFERENCES.scanConcurrency,
-      scanBatchSize: DEFAULT_PREFERENCES.scanBatchSize,
-      copyConcurrency: DEFAULT_PREFERENCES.copyConcurrency,
+      performanceProfile: DEFAULT_PREFERENCES.performanceProfile,
       copyBatchSize: DEFAULT_PREFERENCES.copyBatchSize,
     })
   }
@@ -288,6 +316,11 @@ const SettingsPage = () => {
   /** 被接管时把环境变量名传下去，行内会换成说明文案 */
   const envName = (key: PreferenceKey) =>
     envOverrides.includes(key) ? PREFERENCE_ENV[key] : undefined
+
+  const profileEnvNames = PROFILE_KEYS.filter((key) =>
+    envOverrides.includes(key),
+  ).map((key) => PREFERENCE_ENV[key])
+  const allProfileOverridden = profileEnvNames.length === PROFILE_KEYS.length
 
   return (
     <PageShell
@@ -422,33 +455,52 @@ const SettingsPage = () => {
       </SettingsGroup>
 
       <SettingsGroup id="performance" title="性能">
-        <SliderRow
-          label="同时读取目录"
-          help="读取共享盘时同时发出的目录请求数；失败率过高会自动降一档。"
-          value={preferences.scanConcurrency}
-          range={PREFERENCE_RANGE.scanConcurrency}
-          envName={envName('scanConcurrency')}
-          onChange={(next) => patch({ scanConcurrency: next })}
-        />
-        <SliderRow
-          label="每批扫描机台"
-          help="一批机台扫完再开下一批，内存峰值只与单批相关。"
-          value={preferences.scanBatchSize}
-          range={PREFERENCE_RANGE.scanBatchSize}
-          envName={envName('scanBatchSize')}
-          onChange={(next) => patch({ scanBatchSize: next })}
-        />
-        <SliderRow
-          label="同时复制文件"
-          help="同时写入目标目录的文件数；共享盘冲突频繁时调低。"
-          value={preferences.copyConcurrency}
-          range={PREFERENCE_RANGE.copyConcurrency}
-          envName={envName('copyConcurrency')}
-          onChange={(next) => patch({ copyConcurrency: next })}
-        />
+        <SettingsRow
+          label="性能档位"
+          help={PROFILE_HELP}
+          description={
+            profileEnvNames.length > 0 ? (
+              <>
+                {allProfileOverridden
+                  ? '已由环境变量 '
+                  : '部分参数已由环境变量 '}
+                {profileEnvNames.map((name, index) => (
+                  <Fragment key={name}>
+                    {index > 0 ? '、' : null}
+                    <Code size="1">{name}</Code>
+                  </Fragment>
+                ))}
+                {allProfileOverridden
+                  ? ' 全部接管，此处不生效'
+                  : ' 接管，其余仍随档位生效'}
+              </>
+            ) : undefined
+          }
+        >
+          <SegmentedControl.Root
+            size="2"
+            aria-label="性能档位"
+            aria-disabled={allProfileOverridden || undefined}
+            className={
+              allProfileOverridden ? 'settings-control-disabled' : undefined
+            }
+            value={preferences.performanceProfile}
+            onValueChange={(value) => {
+              if (!allProfileOverridden) {
+                patch({ performanceProfile: value as PerformanceProfile })
+              }
+            }}
+          >
+            {PERFORMANCE_PROFILES.map((value) => (
+              <SegmentedControl.Item key={value} value={value}>
+                {PERFORMANCE_PROFILE_LABEL[value]}
+              </SegmentedControl.Item>
+            ))}
+          </SegmentedControl.Root>
+        </SettingsRow>
         <SliderRow
           label="每批复制文件"
-          help="每批复制完让出一次界面刷新，进度更新更及时。"
+          help="按批推进复制，每批拷完再开下一批并刷新进度；实际同时复制数不会超过本项（取性能档位复制并发与本项的较小值）。"
           value={preferences.copyBatchSize}
           range={PREFERENCE_RANGE.copyBatchSize}
           envName={envName('copyBatchSize')}
@@ -492,7 +544,7 @@ const SettingsPage = () => {
       <SettingsGroup id="reset" title="重置">
         <SettingsRow
           label="复制与性能设置"
-          help="分组方式、同名文件策略与四个并发档位回到出厂值；扫描历史与调试日志不受影响。"
+          help="分组方式、同名文件策略、性能档位与每批复制文件回到出厂值；扫描历史与调试日志不受影响。"
         >
           <Button variant="soft" color="gray" onClick={restoreCopyDefaults}>
             恢复默认

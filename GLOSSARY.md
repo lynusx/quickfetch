@@ -43,3 +43,7 @@ _Avoid_: Intermediate directory, raw directory read count
 **Hit Directory**:
 A Leaf Type Directory that contains at least one matching image.
 _Avoid_: Valid directory, non-empty folder
+
+**Performance Profile**:
+A three-tier resource load preset (`low`, `standard`, `high`) that bundles directory read concurrency, machine scan batch size, and copy concurrency for field machines, paired with the independent copy batch size control.
+_Avoid_: Concurrency tier, speed mode, four performance sliders

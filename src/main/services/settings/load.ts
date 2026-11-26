@@ -7,7 +7,7 @@
  * 优先级：环境变量 > 设置页 > 默认值
  */
 import type { AppPreferences, PreferenceKey } from '../../../shared/ipc'
-import { PREFERENCE_ENV } from '../../../shared/ipc'
+import { PERFORMANCE_PROFILE_VALUES, PREFERENCE_ENV } from '../../../shared/ipc'
 
 const toInt = (value: string | undefined, fallback: number): number => {
   const parsed = Number.parseInt(value ?? '', 10)
@@ -43,9 +43,13 @@ const pick = (env: keyof typeof PREFERENCE_ENV, fallback: number): number =>
  * EL / 力禧特 / 利珀 / 森标 AOI 共用同一套设置：四类扫描都从这份偏好读取，
  * 现场只有一套机器资源，分开配反而容易出现一边过载、一边闲置。
  */
-export const loadFrom = (preferences: AppPreferences): LoadProfile => ({
-  readConcurrency: pick('scanConcurrency', preferences.scanConcurrency),
-  machineBatchSize: pick('scanBatchSize', preferences.scanBatchSize),
-  copyConcurrency: pick('copyConcurrency', preferences.copyConcurrency),
-  copyBatchSize: pick('copyBatchSize', preferences.copyBatchSize),
-})
+export const loadFrom = (preferences: AppPreferences): LoadProfile => {
+  const preset = PERFORMANCE_PROFILE_VALUES[preferences.performanceProfile]
+
+  return {
+    readConcurrency: pick('scanConcurrency', preset.scanConcurrency),
+    machineBatchSize: pick('scanBatchSize', preset.scanBatchSize),
+    copyConcurrency: pick('copyConcurrency', preset.copyConcurrency),
+    copyBatchSize: pick('copyBatchSize', preferences.copyBatchSize),
+  }
+}

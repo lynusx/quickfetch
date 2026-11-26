@@ -1,0 +1,5 @@
+/* SegmentedControl.Root 原生无 disabled prop，全部参数被环境变量接管时禁用交互 */
+.settings-control-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}

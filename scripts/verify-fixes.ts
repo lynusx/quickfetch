@@ -51,6 +51,7 @@ import {
 import {
   defaultSettings,
   isAppSettings,
+  loadFrom,
   normalizeAoi,
   normalizeEl,
   normalizeLxt,
@@ -3122,6 +3123,110 @@ const logIpcTests = async () => {
         .debugLogEnabled,
       false,
     )
+  })
+
+  await test('settings: performanceProfile 归一化与 copyBatchSize 5-20 步长 5 截断', async () => {
+    const defaults = normalizePreferences(undefined)
+    assert.equal(defaults.performanceProfile, 'standard')
+    assert.equal(defaults.copyBatchSize, 5)
+
+    assert.equal(
+      normalizePreferences({ performanceProfile: 'low' }).performanceProfile,
+      'low',
+    )
+    assert.equal(
+      normalizePreferences({ performanceProfile: 'high' }).performanceProfile,
+      'high',
+    )
+    assert.equal(
+      normalizePreferences({ performanceProfile: 'turbo' as never })
+        .performanceProfile,
+      'standard',
+    )
+
+    assert.equal(normalizePreferences({ copyBatchSize: 1 }).copyBatchSize, 5)
+    assert.equal(normalizePreferences({ copyBatchSize: 8 }).copyBatchSize, 10)
+    assert.equal(normalizePreferences({ copyBatchSize: 15 }).copyBatchSize, 15)
+    assert.equal(normalizePreferences({ copyBatchSize: 50 }).copyBatchSize, 20)
+  })
+
+  await test('settings: loadFrom 按三档展开并支持环境变量覆盖', async () => {
+    const envKeys = [
+      'QUICKFETCH_READ_CONCURRENCY',
+      'QUICKFETCH_MACHINE_BATCH',
+      'QUICKFETCH_COPY_CONCURRENCY',
+      'QUICKFETCH_COPY_BATCH',
+    ] as const
+    const saved = Object.fromEntries(envKeys.map((k) => [k, process.env[k]]))
+
+    try {
+      for (const k of envKeys) delete process.env[k]
+
+      assert.deepEqual(
+        loadFrom(
+          normalizePreferences({
+            performanceProfile: 'low',
+            copyBatchSize: 5,
+          }),
+        ),
+        {
+          readConcurrency: 2,
+          machineBatchSize: 1,
+          copyConcurrency: 3,
+          copyBatchSize: 5,
+        },
+      )
+      assert.deepEqual(
+        loadFrom(
+          normalizePreferences({
+            performanceProfile: 'standard',
+            copyBatchSize: 10,
+          }),
+        ),
+        {
+          readConcurrency: 4,
+          machineBatchSize: 2,
+          copyConcurrency: 6,
+          copyBatchSize: 10,
+        },
+      )
+      assert.deepEqual(
+        loadFrom(
+          normalizePreferences({
+            performanceProfile: 'high',
+            copyBatchSize: 20,
+          }),
+        ),
+        {
+          readConcurrency: 6,
+          machineBatchSize: 3,
+          copyConcurrency: 10,
+          copyBatchSize: 20,
+        },
+      )
+
+      process.env.QUICKFETCH_READ_CONCURRENCY = '1'
+      process.env.QUICKFETCH_COPY_BATCH = '12'
+      assert.deepEqual(
+        loadFrom(
+          normalizePreferences({
+            performanceProfile: 'high',
+            copyBatchSize: 5,
+          }),
+        ),
+        {
+          readConcurrency: 1,
+          machineBatchSize: 3,
+          copyConcurrency: 10,
+          copyBatchSize: 12,
+        },
+      )
+    } finally {
+      for (const k of envKeys) {
+        if (saved[k] === undefined) delete process.env[k]
+        else process.env[k] = saved[k]
+      }
+    }
   })
 }
 

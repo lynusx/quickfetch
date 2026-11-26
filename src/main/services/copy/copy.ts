@@ -37,12 +37,12 @@ export type { CopyPlan, PlanAction, PlanItem } from './plan'
 /**
  * 同时打开的文件句柄上限。现场机器 8G 内存，10 路并发复制 +
  * 每个目标先 stat 一次会瞬时占用 20 个句柄，遇到网络盘共享冲突就开始失败，
- * 所以降到 6，并以每批 50 个文件的粒度推进。
+ * 所以标准档默认 6，并以每批 5 个文件的粒度推进。
  */
 export const DEFAULT_COPY_CONCURRENCY = 6
 
-/** 每批复制的文件数：批与批之间让出事件循环，进度也能按批反馈 */
-export const DEFAULT_COPY_BATCH_SIZE = 50
+/** 每批复制的文件数：按批推进并在批之间刷新进度、响应暂停 */
+export const DEFAULT_COPY_BATCH_SIZE = 5
 
 /**
  * 同一扫描任务是否已有未结束的复制。

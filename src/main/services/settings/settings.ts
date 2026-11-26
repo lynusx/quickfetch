@@ -23,6 +23,7 @@ import {
   DEFAULT_PREFERENCES,
   elPlantOf,
   LXT_SHARES,
+  PERFORMANCE_PROFILES,
   PREFERENCE_RANGE,
   THEME_APPEARANCES,
   UI_DENSITIES,
@@ -130,21 +131,9 @@ export const normalizePreferences = (raw: unknown): AppPreferences => {
     copyConflict: conflicts.includes(merged.copyConflict)
       ? merged.copyConflict
       : DEFAULT_PREFERENCES.copyConflict,
-    scanConcurrency: clampPreference(
-      merged.scanConcurrency,
-      'scanConcurrency',
-      DEFAULT_PREFERENCES.scanConcurrency,
-    ),
-    scanBatchSize: clampPreference(
-      merged.scanBatchSize,
-      'scanBatchSize',
-      DEFAULT_PREFERENCES.scanBatchSize,
-    ),
-    copyConcurrency: clampPreference(
-      merged.copyConcurrency,
-      'copyConcurrency',
-      DEFAULT_PREFERENCES.copyConcurrency,
-    ),
+    performanceProfile: PERFORMANCE_PROFILES.includes(merged.performanceProfile)
+      ? merged.performanceProfile
+      : DEFAULT_PREFERENCES.performanceProfile,
     copyBatchSize: clampPreference(
       merged.copyBatchSize,
       'copyBatchSize',
