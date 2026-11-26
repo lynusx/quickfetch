@@ -978,9 +978,15 @@ export class ScanTaskRunner {
       return
     }
 
+    // 只统计成功读取的叶子类型目录，确保不超过笛卡尔积组合数
+    this.progress.dirsScanned += 1
+
     const imageNames = typeRead.files.filter(isImageFile)
 
-    if (!imageNames.length) return
+    if (!imageNames.length) {
+      this.touch(dir)
+      return
+    }
 
     logger.debug('scan', 'scan.detail.hit', {
       taskId: this.id,
@@ -1046,7 +1052,6 @@ export class ScanTaskRunner {
     const result = await readDirSafe(path, { timeoutMs })
 
     if (result.status === 'ok') {
-      this.progress.dirsScanned += 1
       this.breaker.sampleRead(false)
       this.recordSample(false)
     } else if (isNetworkError(result.status)) {

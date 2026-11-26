@@ -26,7 +26,6 @@ const LxtMachinePicker = ({ machines, onChanged }: LxtMachinePickerProps) => {
     <PlantMachinePicker
       machines={machines}
       entryRoot={lxt.entryRoot}
-      skipped={lxt.skipped}
       saving={saving}
       error={error}
       filter={useLxtFilterStore}

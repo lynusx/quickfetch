@@ -26,7 +26,6 @@ const PlMachinePicker = ({ machines, onChanged }: PlMachinePickerProps) => {
     <PlantMachinePicker
       machines={machines}
       entryRoot={pl.entryRoot}
-      skipped={pl.skipped}
       saving={saving}
       error={error}
       filter={usePlFilterStore}

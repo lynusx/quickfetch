@@ -8,8 +8,10 @@ import {
   Info,
   Pause,
   Play,
+  RefreshCw,
   RotateCcw,
   Square,
+  Trash2,
   TriangleAlert,
 } from 'lucide-react'
 import {
@@ -20,7 +22,6 @@ import {
   Card,
   Checkbox,
   Code,
-  DataList,
   Flex,
   Progress,
   ScrollArea,
@@ -43,7 +44,6 @@ import type { ScanCategory, ScanTask } from '@shared/ipc'
 import { COPY_CONFLICT_LABEL, COPY_LAYOUT_LABEL } from '@shared/ipc'
 import { elapsedLabel, deriveScanTaskView } from '../scanReadModel'
 import { formatFileSize } from '@/utils/common'
-import { ScanStatusBadge } from './scan-status-badge'
 
 const DOT_TONE: Record<string, string> = {
   success: 'success',
@@ -213,108 +213,109 @@ export const ScanTaskPanel = ({
   const copySucceededClean =
     copyFinished && copyTask?.status === 'completed' && failedCount === 0
 
+  const metricsSummary = (
+    <Flex align="center" gap="3" wrap="wrap" className="tabular">
+      <Text size="2" color="gray">
+        命中{' '}
+        <Text size="2" weight="bold" highContrast>
+          {task.totalImages.toLocaleString()} 张
+        </Text>
+      </Text>
+      <Text size="2" color="gray">
+        耗时 {elapsedLabel(task)}
+      </Text>
+      {task.progress.dirsScanned > 0 ? (
+        <Text size="2" color="gray">
+          目录 {task.progress.dirsScanned.toLocaleString()}
+        </Text>
+      ) : null}
+    </Flex>
+  )
+
+  const progressHeadline =
+    task.status === 'paused'
+      ? '扫描已暂停'
+      : [
+          view.phaseDescription || '正在扫描…',
+          view.machinesPending > 0 ? `等待 ${view.machinesPending} 台` : null,
+          view.etaText ? `剩余 ${view.etaText}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')
+
   return (
     <Flex direction="column" gap="4">
       <Card size="2" className="app-card">
         <Flex direction="column" gap="4" p="4">
-          {/* 1. 顶层状态与主控条 */}
-          <Flex align="center" justify="between" gap="3" wrap="wrap">
-            <Flex align="center" gap="2">
-              {!busy ? (
-                <Button size="2" onClick={onStart} disabled={!canStart}>
-                  {creating ? (
-                    <Spinner size="1" />
-                  ) : (
-                    <Play size={14} strokeWidth={1.75} />
-                  )}
-                  重新扫描
-                </Button>
-              ) : (
-                <>
-                  {task.status === 'paused' ? (
-                    <Button size="2" onClick={onResume}>
-                      <Play size={14} strokeWidth={1.75} /> 继续
-                    </Button>
-                  ) : (
-                    <Button
-                      size="2"
-                      variant="outline"
-                      onClick={onPause}
-                      disabled={task.status !== 'running'}
-                    >
-                      <Pause size={14} strokeWidth={1.75} /> 暂停
-                    </Button>
-                  )}
-                  <Button size="2" variant="outline" onClick={onCancel}>
-                    <Square size={14} strokeWidth={1.75} /> 取消
-                  </Button>
-                </>
-              )}
-
-              {!busy ? (
-                <Button
-                  size="2"
-                  variant="ghost"
-                  color="gray"
-                  onClick={onClear}
-                  aria-label="清除扫描结果"
-                  title="清除扫描结果"
-                >
-                  <RotateCcw size={14} strokeWidth={1.75} />
-                </Button>
-              ) : null}
-
-              <ScanStatusBadge status={task.status} size="1" />
-            </Flex>
-
-            {/* 结构化关键指标 */}
-            <DataList.Root orientation="horizontal">
-              <DataList.Item align="center">
-                <DataList.Label minWidth="auto">命中</DataList.Label>
-                <DataList.Value>
-                  <Text size="2" weight="bold" className="tabular">
-                    {task.totalImages.toLocaleString()} 张
+          {/* 1. 扫描状态、进度与操作栏 */}
+          {busy ? (
+            <Flex direction="column" gap="2">
+              <Flex align="center" justify="between" gap="3">
+                <Flex align="center" gap="2" minWidth="0">
+                  {task.status !== 'paused' ? <Spinner size="1" /> : null}
+                  <Text size="2" weight="medium" truncate>
+                    {progressHeadline}
                   </Text>
-                </DataList.Value>
-              </DataList.Item>
-              <DataList.Item align="center">
-                <DataList.Label minWidth="auto">耗时</DataList.Label>
-                <DataList.Value>
-                  <Text size="2" color="gray" className="tabular">
-                    {elapsedLabel(task)}
-                  </Text>
-                </DataList.Value>
-              </DataList.Item>
-              {task.progress.dirsScanned > 0 ? (
-                <DataList.Item align="center">
-                  <DataList.Label minWidth="auto">目录</DataList.Label>
-                  <DataList.Value>
-                    <Text size="2" color="gray" className="tabular">
-                      {task.progress.dirsScanned}
-                    </Text>
-                  </DataList.Value>
-                </DataList.Item>
-              ) : null}
-            </DataList.Root>
-          </Flex>
-
-          {/* 扫描进度 */}
-          {busy || task.progress.percent > 0 ? (
-            <Box>
-              <Progress value={task.progress.percent} size="2" />
-              <Flex justify="between" align="center" mt="1" className="tabular">
-                <Text size="2" color="gray">
-                  {view.phaseDescription || `${task.progress.percent}%`}
-                  {view.machinesPending > 0 &&
-                    ` · 等待 ${view.machinesPending} 台`}
-                  {view.etaText && ` · 剩余 ${view.etaText}`}
-                </Text>
-                <Text size="2" weight="medium" color="gray">
+                </Flex>
+                <Text size="2" weight="bold" className="tabular">
                   {task.progress.percent}%
                 </Text>
               </Flex>
-            </Box>
-          ) : null}
+
+              <Progress value={task.progress.percent} size="2" />
+
+              <Flex align="center" justify="between" gap="3" wrap="wrap">
+                {metricsSummary}
+                <Flex align="center" gap="2">
+                  {task.status === 'paused' ? (
+                    <Button size="1" variant="soft" onClick={onResume}>
+                      <Play size={13} strokeWidth={1.75} /> 继续
+                    </Button>
+                  ) : (
+                    <Button
+                      size="1"
+                      variant="soft"
+                      onClick={onPause}
+                      disabled={task.status !== 'running'}
+                    >
+                      <Pause size={13} strokeWidth={1.75} /> 暂停
+                    </Button>
+                  )}
+                  <Button
+                    size="1"
+                    variant="outline"
+                    color="red"
+                    onClick={onCancel}
+                  >
+                    <Square size={13} strokeWidth={1.75} /> 取消
+                  </Button>
+                </Flex>
+              </Flex>
+            </Flex>
+          ) : (
+            <Flex align="center" justify="between" gap="3" wrap="wrap">
+              {metricsSummary}
+              <Flex align="center" gap="2">
+                <Button size="1" onClick={onStart} disabled={!canStart}>
+                  {creating ? (
+                    <Spinner size="1" />
+                  ) : (
+                    <RefreshCw size={13} strokeWidth={1.75} />
+                  )}
+                  重新扫描
+                </Button>
+                <Button
+                  size="1"
+                  variant="soft"
+                  color="gray"
+                  onClick={onClear}
+                  aria-label="清除扫描结果"
+                >
+                  <Trash2 size={13} strokeWidth={1.75} /> 清除
+                </Button>
+              </Flex>
+            </Flex>
+          )}
 
           {/* 异常与阻断通知 */}
           {(other ||

@@ -41,9 +41,25 @@ export const describeUpdateError = (error: unknown): string => {
     return '更新包校验失败，请重新下载'
   }
 
+  if (/app-update\.yml/i.test(message)) {
+    return '当前免安装版不支持自动检查更新，请点击「打开下载页面」获取最新版'
+  }
+
+  if (/ENOENT|no such file or directory/i.test(message)) {
+    return '更新所需文件缺失，请尝试打开下载页面手动更新'
+  }
+
   if (/EACCES|EPERM/i.test(message)) {
     return '没有权限写入更新缓存，请检查目录权限'
   }
 
-  return `更新失败：${message}`
+  const cleaned = message
+    .split('\n')[0]
+    .replace(/,\s*(?:open|stat|scandir|access)\s+['"]?[^'"]+['"]?/gi, '')
+    .replace(/[A-Za-z]:\\[^\s'"]+/g, '')
+    .trim()
+
+  return cleaned
+    ? `更新失败：${cleaned}`
+    : '更新失败，请稍后重试或打开下载页面手动更新'
 }

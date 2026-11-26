@@ -1,12 +1,6 @@
 import type { ReactNode } from 'react'
 import { useEffect, useMemo } from 'react'
-import {
-  Building2,
-  Monitor,
-  RefreshCw,
-  Search,
-  TriangleAlert,
-} from 'lucide-react'
+import { Building2, Monitor, RefreshCw, Search } from 'lucide-react'
 import {
   Box,
   Callout,
@@ -23,7 +17,7 @@ import { ChoiceList, ChoiceRadio } from '@/components/choice-list'
 import { Field } from '@/components/field'
 import { useToast } from '@/hooks/useToast'
 import type { PlantFilterStore } from '../stores/plantFilterStore'
-import type { EntrySetupResult, SkippedLink, Plant } from '@shared/ipc'
+import type { EntrySetupResult, Plant } from '@shared/ipc'
 import { plantLabel } from '@shared/ipc'
 import {
   compareMachineName,
@@ -39,7 +33,6 @@ interface PlantMachinePickerProps {
   /** 已识别的机台（含 stale），由页面从 settings 里传进来 */
   machines: PickableMachine[]
   entryRoot: string | null
-  skipped?: SkippedLink[]
   saving?: boolean
   error?: string | null
   /** 该页的筛选状态，两类各有自己的实例 */
@@ -76,7 +69,6 @@ interface PlantMachinePickerProps {
 const PlantMachinePicker = ({
   machines,
   entryRoot,
-  skipped = [],
   saving = false,
   error = null,
   filter,
@@ -178,37 +170,6 @@ const PlantMachinePicker = ({
 
   return (
     <Flex direction="column" gap="4">
-      {skipped.length > 0 && (
-        <Box asChild p="2">
-          <details className="skipped-box">
-            <Flex asChild align="center" gap="2">
-              <summary>
-                <TriangleAlert size={14} strokeWidth={1.75} />
-                <Text size="1" color="gray">
-                  {skipped.length} 个快捷方式已跳过
-                </Text>
-              </summary>
-            </Flex>
-            <Flex direction="column" gap="1" mt="2">
-              {skipped.map((item) => (
-                <Flex
-                  key={`${item.plant}/${item.file}`}
-                  align="baseline"
-                  gap="2"
-                >
-                  <Code variant="ghost" size="1" color="gray">
-                    {item.plant}/{item.file}
-                  </Code>
-                  <Text size="1" color="gray">
-                    {item.reason}
-                  </Text>
-                </Flex>
-              ))}
-            </Flex>
-          </details>
-        </Box>
-      )}
-
       {error && (
         <Callout.Root color="red" size="1">
           <Callout.Text>{error}</Callout.Text>

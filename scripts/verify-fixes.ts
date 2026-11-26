@@ -2333,6 +2333,103 @@ const aoiTests = async () => {
     const partialImages = partial.getImages()
     assert.equal(partialImages.length, 1)
     assert.ok(partialImages[0].name.endsWith('.jpg'), partialImages[0].name)
+    assert.equal(
+      partial.snapshot().progress.dirsScanned,
+      1,
+      '只计叶子类型目录，不把中间层 SaveSmallImages/日期/时段算入',
+    )
+  })
+
+  await test('扫描目录计数: dirsScanned 只计叶子类型目录且不超过笛卡尔积', async () => {
+    const { ScanTaskRunner } = await import('../src/main/services/scanner/task')
+    const root = await mkdtemp(join(tmpdir(), 'qf-pl-dirs-'))
+
+    // 2 机台 × 2 时段 × 2 等级 × 2 类型 = 16 笛卡尔积；实际仅创建 3 个叶子类型目录（2 含图 + 1 空）
+    const leaf1 = join(
+      root,
+      'm1',
+      'pl-1c',
+      'Matting',
+      '2026.11.26',
+      '1C',
+      '白班',
+      '08',
+      'Fail',
+      'A',
+      '脏污',
+    )
+    const leaf2 = join(
+      root,
+      'm1',
+      'pl-1c',
+      'Matting',
+      '2026.11.26',
+      '1C',
+      '白班',
+      '08',
+      'Fail',
+      'B',
+      '划伤',
+    )
+    const leafEmpty = join(
+      root,
+      'm2',
+      'pl-2c',
+      'Matting',
+      '2026.11.26',
+      '2C',
+      '白班',
+      '09',
+      'Fail',
+      'A',
+      '脏污',
+    )
+    await mkdirP(leaf1, { recursive: true })
+    await mkdirP(leaf2, { recursive: true })
+    await mkdirP(leafEmpty, { recursive: true })
+    await writeFile(join(leaf1, '1.jpg'), 'a')
+    await writeFile(join(leaf2, '2.jpg'), 'b')
+
+    const runner = new ScanTaskRunner(
+      {
+        category: 'pl',
+        machines: ['西区/1C', '西区/2C'],
+        date: '20261126',
+        shift: '白班',
+        slots: ['08', '09'],
+        levels: ['A', 'B'],
+        types: ['脏污', '划伤'],
+      },
+      {
+        category: 'pl',
+        resolver: createPlResolver({
+          hosts: new Map([
+            ['西区/1C', join(root, 'm1')],
+            ['西区/2C', join(root, 'm2')],
+          ]),
+          shares: new Map([
+            ['西区/1C', 'pl-1c'],
+            ['西区/2C', 'pl-2c'],
+          ]),
+          date: '20261126',
+          onShare: () => undefined,
+        }),
+        load: { readConcurrency: 2, machineBatchSize: 2 },
+      },
+      () => undefined,
+    )
+
+    runner.start()
+    await runner.waitSettled()
+
+    const snap = runner.snapshot()
+    assert.equal(
+      snap.progress.dirsScanned,
+      3,
+      '仅统计实际读取到的 3 个叶子类型目录',
+    )
+    assert.equal(snap.progress.dirsHit, 2, '其中 2 个目录命中图片')
+    assert.ok(snap.progress.dirsScanned <= 16, '有效目录不得超过笛卡尔积组合数')
   })
 
   await test('检测面: 机台名与机台键的判定', async () => {
@@ -2571,6 +2668,36 @@ const updateTests = async () => {
     assert.match(
       describeUpdateError(new Error('404 Not Found')),
       /缺少更新信息/,
+    )
+    assert.match(
+      describeUpdateError(
+        new Error(
+          "ENOENT: no such file or directory, open 'C:\\Users\\demo\\QuickFetch\\resources\\app-update.yml'",
+        ),
+      ),
+      /免安装版不支持自动检查更新/,
+    )
+    assert.ok(
+      !describeUpdateError(
+        new Error(
+          "ENOENT: no such file or directory, open 'C:\\Users\\demo\\QuickFetch\\resources\\app-update.yml'",
+        ),
+      ).includes('C:\\Users'),
+      '不应把本机绝对路径暴露给用户',
+    )
+    assert.match(
+      describeUpdateError(
+        new Error(
+          "ENOENT: no such file or directory, open 'C:\\Users\\demo\\other.yml'",
+        ),
+      ),
+      /更新所需文件缺失/,
+    )
+    assert.ok(
+      !describeUpdateError(
+        new Error("EUNKNOWN: failed, open 'C:\\secret\\file'"),
+      ).includes('C:\\secret'),
+      '兜底报错同样剥离本机路径',
     )
   })
 }

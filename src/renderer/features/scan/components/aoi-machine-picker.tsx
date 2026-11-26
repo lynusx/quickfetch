@@ -126,7 +126,6 @@ const AoiMachinePicker = ({ machines, onChanged }: AoiMachinePickerProps) => {
     <PlantMachinePicker
       machines={machines}
       entryRoot={aoi.entryRoot}
-      skipped={aoi.skipped}
       saving={saving}
       error={error}
       filter={useAoiFilterStore}

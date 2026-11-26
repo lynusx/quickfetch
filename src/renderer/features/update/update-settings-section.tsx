@@ -132,11 +132,9 @@ export const UpdateSettingsSection = () => {
   const statusText =
     phase === 'available' && state?.availableVersion
       ? `发现新版本 v${state.availableVersion}`
-      : phase === 'error' && state?.error
-        ? state.error
-        : phase === 'disabled' && state?.message
-          ? state.message
-          : PHASE_TEXT[phase]
+      : phase === 'disabled' && state?.message
+        ? state.message
+        : PHASE_TEXT[phase]
 
   const showManualEntry =
     phase === 'error' ||

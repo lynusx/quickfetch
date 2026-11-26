@@ -35,3 +35,11 @@ _Avoid_: Scope picker, directory machine picker
 **Single-Column Task Stream**:
 The unified vertical workflow in the lower content area that integrates active scan control, natural-scrolling machine result inspection, in-place copy selection, and a sticky bottom local copy bar into a single coherent flow.
 _Avoid_: Multi-panel task area, split copy panel, separate copy workflow
+
+**Leaf Type Directory**:
+The innermost defect-type directory representing one Cartesian combination of the active scan scope (machine × time slot × optional PL level × defect type), excluding intermediate structural directories such as share root, date, shift, time slot, `Fail`, or level.
+_Avoid_: Intermediate directory, raw directory read count
+
+**Hit Directory**:
+A Leaf Type Directory that contains at least one matching image.
+_Avoid_: Valid directory, non-empty folder
