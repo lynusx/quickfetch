@@ -136,9 +136,7 @@ const PlantScanPage = ({ category }: PlantScanPageProps) => {
                   actions={
                     <>
                       {busy ? (
-                        <Badge color="blue" size="1">
-                          扫描中 · 仅查看
-                        </Badge>
+                        <Badge color="blue">扫描中 · 仅查看</Badge>
                       ) : null}
                       {task ? (
                         <Button
@@ -204,7 +202,6 @@ const PlantScanPage = ({ category }: PlantScanPageProps) => {
                           </Text>
                           <Button
                             type="button"
-                            size="2"
                             disabled={!canStart}
                             onClick={() => void start()}
                           >

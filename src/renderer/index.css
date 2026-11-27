@@ -186,7 +186,6 @@ body {
 
 /* 目录输入框显示绝对路径，跨 scan / copy 共享等宽样式 */
 .dir-input {
-  width: 100%;
   font-family: var(--code-font-family);
 }
 

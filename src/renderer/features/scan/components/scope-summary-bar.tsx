@@ -55,9 +55,7 @@ export const ScopeSummaryBar = ({
 
           {busy ? (
             <Box flexShrink="0">
-              <Badge color="blue" size="1">
-                扫描中
-              </Badge>
+              <Badge color="blue">扫描中</Badge>
             </Box>
           ) : null}
         </Flex>

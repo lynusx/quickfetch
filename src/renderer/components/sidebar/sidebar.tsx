@@ -95,20 +95,19 @@ export const SidebarContent = ({
   <Box flexGrow="1" minHeight="0" className={className}>
     <ScrollArea
       type="auto"
-      size="1"
       scrollbars="vertical"
       role="navigation"
       aria-label="主导航"
     >
-      <Box px="3" pt="1" pb="4">
+      <Flex direction="column" gap="5" px="3" pt="1" pb="4">
         {children}
-      </Box>
+      </Flex>
     </ScrollArea>
   </Box>
 )
 
 export const SidebarGroup = ({ children, className }: SidebarSectionProps) => (
-  <Box className={cn('sidebar-group', className)}>{children}</Box>
+  <Box className={className}>{children}</Box>
 )
 
 export const SidebarGroupLabel = ({

@@ -204,8 +204,10 @@ const ExcelViewer = () => {
             <TriangleAlert size={16} strokeWidth={1.75} />
           </Callout.Icon>
           <Callout.Text>
-            <Text weight="medium">{file.name}</Text>：
-            {file.error?.message || '未知错误'}
+            <Text size="2" weight="medium">
+              {file.name}
+            </Text>
+            ：{file.error?.message || '未知错误'}
           </Callout.Text>
         </Callout.Root>
       ) : null}
@@ -220,7 +222,7 @@ const ExcelViewer = () => {
               gap="2"
               py="6"
             >
-              <Spinner size="2" />
+              <Spinner />
               <Text weight="medium" size="2">
                 正在解析 Excel 文件…
               </Text>

@@ -1,71 +1,75 @@
 # 缺失组件的处理方案
 
-Themes 未提供 Date Picker、TreeView、Carousel、Combobox、DataTable 等复杂组件。按以下优先级处理：
+`@radix-ui/themes` 未内置 DatePicker、Drawer、Sidebar、Combobox、TreeView、Carousel、Toast、复杂虚拟化 DataTable 等高阶业务组件；另有部分组件仅存在于无样式的 Radix Primitives（如 `Accordion`、`Collapsible`、`Form`、`Label`、`Menubar`、`OneTimePasswordField`、`PasswordToggleField`、`Toast`、`Toggle`、`Toolbar`）。
 
-**有一批组件只在 Primitives 里有、Themes 没有包装**：`Accordion`、`Collapsible`、`Form`、`Label`、`Menubar`、`OneTimePasswordField`、`PasswordToggleField`、`Toast`、`Toggle`、`Toolbar`。它们是无样式的，要用就得自写全部外观 + 令牌覆盖（见下面的「一致性三件套」），或者按方案表换成第三方库。
+处理缺失组件的核心底线是**绝不引入自带独立主题体系的重型 UI 库（如 Ant Design、MUI、Mantine）或混入 Tailwind CSS**，确保全应用始终受唯一根 `<Theme>` 控制。
 
-## 优先级
+---
 
-1. **首选**：引入无样式底层库（如 Date Picker 用 `react-day-picker`）+ Radix 令牌覆盖层。
-2. **可参考**：借鉴 shadcn/ui 的组件结构，但必须拆除其 Tailwind 依赖，所有样式替换为 Radix 令牌。
-3. **禁止**：引入 Mantine、Antd、Element 等自带主题体系的库——它们的主题与 `<Theme>` 互不感知，暗色模式会失效。
+## 1. 先查内置轻量平替（零外部依赖）
 
-## 一致性三件套（覆盖样式必须遵守）
+| 未单独封装的组件 | `@radix-ui/themes` 内置平替 | 说明 |
+| --- | --- | --- |
+| `Label` | `<Text as="label">` | 原生支持排版 props 与 `htmlFor`；`RadioGroup.Item` / `CheckboxGroup.Item` 含文本时自动包 label |
+| `Toggle` / `ToggleGroup` | `Switch` 或 `SegmentedControl` | 布尔开关用 `Switch`；多值切换直接用 `SegmentedControl` |
+| `Toolbar` | `Flex` + `Button` / `IconButton` + `Separator` | 构建块直接组合即可 |
+| `PasswordToggleField` | `TextField.Root` + `TextField.Slot` | 右侧 `Slot` 放入切换 `type` 的 `IconButton` |
 
-满足以下三条后，新组件自动跟随 `<Theme>` 的主题色与明暗切换：
+---
 
-1. **颜色**：只用 `var(--accent-*)`、`var(--gray-*)` 令牌，禁止手写 hex
-2. **字体**：`font-family: var(--default-font-family)`
-3. **圆角**：`var(--radius-1)` ~ `var(--radius-4)`
+## 2. 复杂缺失组件的两种并列一等方案
 
-## 方案对比
+根据组件形态从以下两种无冲突方案中择优采用（也可组合使用）：
 
-| 方案 | 一致性 | 工作量 | 评价 |
-|---|---|---|---|
-| react-day-picker + Radix 令牌 | 高 | 中 | 推荐，干净可控 |
-| shadcn/ui 源码改造 | 中 | 高 | 需拆 Tailwind、逐个替换变量 |
-| React Aria 无样式组件 | 高 | 高 | 行为/无障碍最强，样式全自写 |
-| Mantine / Antd 组件 | 低 | 低 | 禁止，主题体系冲突 |
+| 方案 | 适用组件举例 | 做法与优劣 |
+| --- | --- | --- |
+| **方案 A：移植组合式无头 API（参考 `shadcn/ui` 结构 + Radix 令牌）** | `Drawer`（侧滑抽屉，基于 `Dialog` primitive）、`Sidebar`（可折叠导航骨架）、`Empty`（结构化空态）、`Collapsible` / `Accordion` | 复用业界成熟的组合式子组件 API 契约与 Radix Primitives 无障碍行为，彻底剥离 Tailwind 类名，改由 Radix 构建块（`Flex`/`Box`/`Text`）+ 设计令牌实现样式，与宿主组件库无缝融为一体 |
+| **方案 B：引入专注单一领域的 Headless 库 + 令牌覆盖层** | `DatePicker`（`react-day-picker`）、`Combobox`（`cmdk`）、`Toast`（`sonner`）、`Carousel`（`embla-carousel-react`）、`DataTable`（`@tanstack/react-table` + Themes `Table`） | 免去手写日历键盘网格、模糊搜索或手势物理引擎的高昂成本；外壳用 Themes 组件（如 `Popover` + `Button`），内部 DOM 用极薄的令牌 CSS 覆盖 |
 
-## Date Picker 参考实现
+---
 
-```bash
-npm install react-day-picker date-fns
-```
+## 3. 令牌一致性三件套（自定义/覆盖层必守）
+
+无论采用方案 A 还是方案 B，新增组件的 CSS 满足以下三条即可自动跟随 `<Theme>` 的明暗模式、主题色与圆角档位切换：
+
+1. **颜色**：只引用 `var(--accent-*)`、`var(--gray-*)`、`var(--color-panel-solid)`，不写硬编码色值；
+2. **字体**：使用 `var(--default-font-family)`（代码类用 `var(--code-font-family)`）；
+3. **圆角与阴影**：引用 `var(--radius-1)`~`var(--radius-4)` 与 `var(--shadow-1)`~`var(--shadow-6)`。
+
+---
+
+## 4. DatePicker 最小参考实现（`Popover` + `react-day-picker`）
 
 ```tsx
-// date-picker.tsx
-import { useState } from "react";
-import { DayPicker } from "react-day-picker";
-import { Popover, Button } from "@radix-ui/themes";
-import { CalendarIcon } from "@radix-ui/react-icons";
-import { format } from "date-fns";
-import "react-day-picker/style.css";
-import "./date-picker.css"; // 令牌覆盖层
+import { useState } from 'react'
+import { DayPicker } from 'react-day-picker'
+import { Button, Popover } from '@radix-ui/themes'
+import { format } from 'date-fns'
+import 'react-day-picker/style.css'
+import './date-picker.css'
 
 export function DatePicker() {
-  const [date, setDate] = useState<Date>();
+  const [date, setDate] = useState<Date>()
 
   return (
     <Popover.Root>
       <Popover.Trigger>
         <Button variant="soft" color="gray">
-          <CalendarIcon />
-          {date ? format(date, "yyyy-MM-dd") : "选择日期"}
+          {date ? format(date, 'yyyy-MM-dd') : '选择日期'}
         </Button>
       </Popover.Trigger>
-      <Popover.Content>
+      <Popover.Content width="auto">
         <DayPicker mode="single" selected={date} onSelect={setDate} />
       </Popover.Content>
     </Popover.Root>
-  );
+  )
 }
 ```
 
 ```css
-/* date-picker.css —— 用 Radix 令牌覆盖 react-day-picker 默认样式 */
+/* date-picker.css —— 第三方无头 DOM 消费 Radix 令牌 */
 .rdp-root {
-  --rdp-accent-color: var(--accent-9);            /* 选中色 = 主题强调色 */
+  --rdp-accent-color: var(--accent-9);
   --rdp-accent-background-color: var(--accent-3);
   --rdp-day-height: 32px;
   --rdp-day-width: 32px;
@@ -75,31 +79,8 @@ export function DatePicker() {
   font-family: var(--default-font-family);
   color: var(--gray-12);
 }
+
 .rdp-day_button:hover {
-  background: var(--gray-3);
+  background: var(--gray-a3);
 }
 ```
-
-## Primitives 缺失组件的官方平替
-
-部分 Primitives 虽未以同名包装进入 Themes，但 Themes 提供了极轻量的内置平替，**不必引入外部库**：
-
-| Primitives 未包装组件 | Themes 官方推荐平替 | 说明 |
-|---|---|---|
-| `Label` | `<Text as="label">` | `Text as="label"` 完美支持排版 prop 与原生 `htmlFor`；`RadioGroup.Item` 内含文字时自动包 label |
-| `Toggle` | `Switch` 或 `SegmentedControl` | 单项切换用 `Switch`；选项组用 `SegmentedControl`（底层正是 Toggle Group primitive） |
-| `Toolbar` | `Flex` + `Button/IconButton` + `Separator` | 用构建块组合出工具栏，无需额外引入外部组件 |
-| `PasswordToggleField` | `TextField.Root` + `TextField.Slot` | 用 `TextField.Slot side="right"` 放置切换可见性的 `IconButton` |
-
-## 其他缺失组件选型建议
-
-| 组件 | 推荐底层库 | 外壳 |
-|---|---|---|
-| Date Picker | `react-day-picker` | Themes `Popover` + `Button` |
-| Combobox / 搜索选择 | `cmdk` | Themes `Popover` + `TextField` |
-| Carousel | `embla-carousel-react` | Themes `IconButton` 做翻页 |
-| Toast | `sonner`（Themes 没有 Toast；样式用令牌覆盖） | — |
-| DataTable | `@tanstack/react-table`（无样式） | Themes `Table` 组件渲染 |
-| TreeView | `@headless-tree/react` 或自研 | Themes 令牌 |
-
-选型原则：底层库必须是**无样式（headless）**的，样式职责全部交给 Radix 令牌。

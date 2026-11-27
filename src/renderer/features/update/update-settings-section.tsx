@@ -255,7 +255,7 @@ export const UpdateSettingsSection = () => {
             </Callout.Icon>
             <Callout.Text>
               <Flex align="center" justify="between" gap="3" wrap="wrap">
-                <Text>
+                <Text size="2">
                   更新 v{state?.availableVersion ?? ''} 已下载，重启后生效。
                 </Text>
                 <Button

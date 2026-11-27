@@ -103,30 +103,40 @@ export const DatePicker = ({
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger>
-        <Button
-          type="button"
-          variant="surface"
-          color="gray"
-          className="date-trigger"
-          disabled={disabled}
-          aria-label={`选择日期，当前 ${displayText}`}
-        >
-          <Box flexShrink="0" className="date-trigger-icon">
-            <CalendarIcon size={14} strokeWidth={1.75} />
-          </Box>
-          <Box flexGrow="1">
-            <Text
-              size="2"
-              align="left"
-              color={selectedDate ? undefined : 'gray'}
+      <Flex direction="column">
+        <Popover.Trigger>
+          <Button
+            type="button"
+            variant="surface"
+            color="gray"
+            disabled={disabled}
+            aria-label={`选择日期，当前 ${displayText}`}
+          >
+            <Flex
+              as="span"
+              width="100%"
+              align="center"
+              gap="2"
+              className="tabular"
             >
-              {displayText}
-            </Text>
-          </Box>
-          {relative ? <Badge color="indigo">{relative}</Badge> : null}
-        </Button>
-      </Popover.Trigger>
+              <Box as="span" flexShrink="0" className="date-trigger-icon">
+                <CalendarIcon size={14} strokeWidth={1.75} />
+              </Box>
+              <Box as="span" flexGrow="1" minWidth="0">
+                <Text
+                  size="2"
+                  align="left"
+                  color={selectedDate ? undefined : 'gray'}
+                  truncate
+                >
+                  {displayText}
+                </Text>
+              </Box>
+              {relative ? <Badge color="indigo">{relative}</Badge> : null}
+            </Flex>
+          </Button>
+        </Popover.Trigger>
+      </Flex>
 
       <Popover.Content size="1" align="start" className="date-popover">
         <Flex direction="column" gap="2">
@@ -137,7 +147,6 @@ export const DatePicker = ({
               variant="ghost"
               color="gray"
               size="1"
-              className="date-shortcut"
               onClick={() => selectShortcut(0)}
             >
               今天
@@ -147,7 +156,6 @@ export const DatePicker = ({
               variant="ghost"
               color="gray"
               size="1"
-              className="date-shortcut"
               onClick={() => selectShortcut(-1)}
             >
               昨天
@@ -157,7 +165,6 @@ export const DatePicker = ({
               variant="ghost"
               color="gray"
               size="1"
-              className="date-shortcut"
               onClick={() => selectShortcut(-2)}
             >
               前天

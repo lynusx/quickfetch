@@ -108,7 +108,6 @@ export const ChoiceList = ({
             {itemWidth ? (
               <Box as="span" flexGrow="1" minWidth="0">
                 <Text
-                  as="span"
                   size="2"
                   weight={checked ? 'medium' : 'regular'}
                   color={checked ? undefined : 'gray'}
@@ -120,7 +119,6 @@ export const ChoiceList = ({
               </Box>
             ) : (
               <Text
-                as="span"
                 size="2"
                 weight={checked ? 'medium' : 'regular'}
                 color={checked ? undefined : 'gray'}
@@ -130,7 +128,7 @@ export const ChoiceList = ({
               </Text>
             )}
             {option.meta != null ? (
-              <Text as="span" size="2" color="gray" className="tabular">
+              <Text size="2" color="gray" className="tabular">
                 {option.meta}
               </Text>
             ) : null}
@@ -234,7 +232,7 @@ export const ChoiceList = ({
         maxHeight={scrollMaxHeight}
         className="choice-scroll"
       >
-        <ScrollArea type="auto" size="1" scrollbars="vertical">
+        <ScrollArea type="auto" scrollbars="vertical">
           <Box p="3">{content}</Box>
         </ScrollArea>
       </Flex>
@@ -280,7 +278,6 @@ export const ChoiceRadio = ({
                 <Flex as="span" display="inline-flex" align="center" gap="2">
                   <RadioGroup.Item value={option.value} />
                   <Text
-                    as="span"
                     size="2"
                     weight={checked ? 'medium' : 'regular'}
                     color={checked ? undefined : 'gray'}
@@ -289,7 +286,7 @@ export const ChoiceRadio = ({
                     {option.label}
                   </Text>
                   {option.meta != null ? (
-                    <Text as="span" size="2" color="gray" className="tabular">
+                    <Text size="2" color="gray" className="tabular">
                       ({option.meta})
                     </Text>
                   ) : null}

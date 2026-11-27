@@ -138,7 +138,6 @@ export const StickyCopyBar = ({
                     <Flex align="center" gap="2" minWidth="0">
                       <Box flexGrow="1" minWidth="0">
                         <TextField.Root
-                          size="2"
                           value={activeDir ?? ''}
                           placeholder="选择复制目标目录…"
                           readOnly
@@ -151,7 +150,6 @@ export const StickyCopyBar = ({
 
                       <Box flexShrink="0">
                         <Button
-                          size="2"
                           variant="soft"
                           color="gray"
                           type="button"
@@ -165,7 +163,6 @@ export const StickyCopyBar = ({
                       {activeDir && copyFinished ? (
                         <Box flexShrink="0">
                           <Button
-                            size="2"
                             variant="outline"
                             color="gray"
                             type="button"
@@ -180,7 +177,6 @@ export const StickyCopyBar = ({
 
                       <Box flexShrink="0">
                         <Button
-                          size="2"
                           type="button"
                           disabled={!canCopy || copyBusy}
                           onClick={handleStartClick}
@@ -285,11 +281,7 @@ export const StickyCopyBar = ({
                             overflow="hidden"
                             className="copy-failure-list"
                           >
-                            <ScrollArea
-                              type="auto"
-                              size="1"
-                              scrollbars="vertical"
-                            >
+                            <ScrollArea type="auto" scrollbars="vertical">
                               {copyTask.failures.map((failure) => (
                                 <Flex
                                   key={`${failure.path}-${failure.to}`}
@@ -358,7 +350,7 @@ export const StickyCopyBar = ({
                       </Text>
                     </Flex>
 
-                    <Progress value={copyPercent} size="2" />
+                    <Progress value={copyPercent} />
 
                     <Flex
                       align="center"

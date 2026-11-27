@@ -178,7 +178,6 @@ export const ScanEntryRootBar = ({
   const triggerButton = (
     <Button
       type="button"
-      size="2"
       variant="soft"
       color={configured ? 'gray' : undefined}
       disabled={isDisabled}
@@ -242,7 +241,6 @@ export const ScanEntryRootBar = ({
           <Flex align="center" gap="2" minWidth="0">
             <Box flexGrow="1" minWidth="0">
               <TextField.Root
-                size="2"
                 value={draft}
                 placeholder={config.placeholder}
                 disabled={isDisabled}
@@ -260,7 +258,6 @@ export const ScanEntryRootBar = ({
             <Box flexShrink="0">
               <Button
                 type="button"
-                size="2"
                 variant="soft"
                 color="gray"
                 disabled={isDisabled}
@@ -354,7 +351,6 @@ export const ScanEntrySetupCard = ({
               <Flex align="center" gap="2" minWidth="0">
                 <Box flexGrow="1" minWidth="0">
                   <TextField.Root
-                    size="2"
                     value={draft}
                     placeholder={config.placeholder}
                     disabled={saving}
@@ -370,7 +366,6 @@ export const ScanEntrySetupCard = ({
                 <Box flexShrink="0">
                   <Button
                     type="button"
-                    size="2"
                     disabled={saving}
                     onClick={() => void pickRoot()}
                   >
@@ -381,7 +376,6 @@ export const ScanEntrySetupCard = ({
                   <Box flexShrink="0">
                     <Button
                       type="button"
-                      size="2"
                       variant="soft"
                       color="gray"
                       disabled={saving}

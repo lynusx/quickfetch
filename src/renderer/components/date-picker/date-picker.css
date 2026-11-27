@@ -1,12 +1,5 @@
 /* 日期选择器：DatePicker。日历样式已拆分至 components/calendar/calendar.css，
-   本文件只保留触发按钮与弹层内边距变量。 */
-
-.date-trigger {
-  width: 100%;
-  justify-content: flex-start;
-  gap: var(--space-2);
-  font-variant-numeric: tabular-nums;
-}
+   触发器排布由 Flex/Box props 承担，本文件只保留弹层内边距变量与装饰图标色。 */
 
 /*
  * Popover.Content 的内边距由 --popover-content-padding 变量控制，
@@ -18,8 +11,4 @@
 
 .date-trigger-icon {
   color: var(--gray-9);
-}
-
-.date-shortcut {
-  width: 100%;
 }

@@ -79,5 +79,5 @@
 /* 有上分隔线，文字必须被推离这条线——这是「有可见边界的盒子」，
    内边距交给外层 Box 的 `pt`，本规则只画线。 */
 .sheet-footer {
-  border-top: 1px solid var(--gray-4);
+  border-top: 1px solid var(--app-border);
 }

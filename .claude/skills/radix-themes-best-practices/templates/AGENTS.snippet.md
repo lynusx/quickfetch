@@ -1,15 +1,13 @@
-<!-- templates/AGENTS.snippet.md —— 把下面这段粘进使用方项目的 AGENTS.md / CLAUDE.md -->
+<!-- templates/AGENTS.snippet.md —— 复制到使用方项目的 AGENTS.md / CLAUDE.md -->
 
-## Radix Themes（本项目 UI 库）
+## Radix Themes UI 约束
 
-本项目用 `@radix-ui/themes`，不引入 shadcn/ui、Tailwind、MUI、Ant Design 等自带主题体系的库。
+本项目使用 `@radix-ui/themes` 构建界面，保持单一主题体系，不混入自带主题或重置体系的其他 UI 库。
 
-- **布局写在 props 里**（`direction` / `gap` / `p` / `minWidth` / `flexGrow`），**外观写在 CSS 里**（`border` / `background` / 伪类）。同一属性只写一处——CSS 后加载会静默吃掉 props，改 prop 不会有任何反应。
-- **文字放进 `Text` / `Heading`**；字号只由 `size` 决定，CSS 不写 `font-size` / `line-height` / `letter-spacing`。
-- **颜色只用令牌**：`var(--accent-9)` / `var(--gray-a5)`；不写 hex，不写 `rgb()`。
-- **间距是单个档位** `"0"`–`"9"`；多值拆成 `py` / `px`，不要写 `p="2 4"`。
-- **主题只在根节点 `<Theme>` 配一次**，只写偏离默认值的项；组件 prop 同理（`<Badge>` 不必写 `size="1"`）。例外：`Text` 没有默认 `size`，不写等于继承父级字号，必须写。
-- **不要手搓已有组件**：`Card` / `Badge` / `Table` / `Callout` / `Separator` / `Progress` / `ScrollArea` 都有。
-- **组件页找不到的 prop 可能来自底层 primitive**：先用 `onEscapeKeyDown` / `open` / `side` / `type` 这类继承 prop，不要自己写 `keydown` 监听或定位计算。
+- **props 管布局，CSS 管外观**：方向、间距、尺寸、弹性、对齐、网格列与区域走 `Box`/`Flex`/`Grid`/`Container`/`Section` 的 props；`border`、`background`、阴影与伪类留 CSS。同一属性只写一处，防止后加载的 CSS 静默吃掉 prop。
+- **叶子组件显式包裹**：`Text`、`Slider`、`Button`、`Badge`、`ScrollArea` 等非布局组件需要控制宽高、弹性或 `minWidth="0"` 截断时，外包 `<Box>` / `<Flex>` 传 props，不在 CSS 类里写尺寸与弹性。
+- **排版与颜色归口 Typography**：文字放进 `Text` / `Heading` / `Code` 等排版组件；字号只从 `size` 派生，等宽文本用 `<Code variant="ghost">`，可读文本颜色只用默认 12 阶与 `color` prop（11/12 阶），所有外观颜色与圆角引用 `var(--accent-*)` / `var(--gray-*)` / `var(--radius-*)` 令牌。
+- **单值档位与 `initial` 断点**：间距档位 `"0"`–`"9"` 只传单值（多值拆 `py`/`px`）；响应式对象必须以 `initial` 作为基线。
+- **省略默认 prop，善用继承 prop**：根节点 `<Theme>` 与各组件只写偏离默认值的 prop（`<Text>` 无默认 `size` 必须显式写）；弹层、下拉、滚动区优先查阅底层 Radix Primitive 继承的交互 prop（如 `onEscapeKeyDown`、`position="popper"`、`type="auto"`）。
 
-改完 UI 后跑项目的类型检查与 lint；细节与排查手册见 `radix-themes-best-practices` skill。
+改完 UI 后运行项目的 `typecheck`、`lint` 与 `build`；详细规则与症状排查见 `radix-themes-best-practices` skill。

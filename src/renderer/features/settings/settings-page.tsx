@@ -56,7 +56,6 @@ import {
   DEFAULT_HISTORY_LIMIT,
   HISTORY_LIMIT_RANGE,
 } from '@shared/historyLimit'
-import './settings-page.css'
 
 /** 分组方式的实际目录形态，光看名字不知道会建几层 */
 const LAYOUT_SAMPLE: Record<CopyLayout, string> = {
@@ -126,7 +125,7 @@ const CONFLICT_HELP = CONFLICTS.map((value, index) => (
   <Fragment key={value}>
     {index > 0 ? <br /> : null}
     {value === 'overwrite' ? (
-      <Text color="red">
+      <Text size="1" color="red">
         {COPY_CONFLICT_LABEL[value]} → {CONFLICT_HINT[value]}
       </Text>
     ) : (
@@ -342,215 +341,218 @@ const SettingsPage = () => {
             <TriangleAlert size={16} strokeWidth={1.75} />
           </Callout.Icon>
           <Callout.Text>
-            <Text weight="medium">保存失败</Text>：{error}
+            <Text size="2" weight="medium">
+              保存失败
+            </Text>
+            ：{error}
           </Callout.Text>
         </Callout.Root>
       ) : null}
 
-      <SettingsGroup id="appearance" title="外观">
-        <SettingsRow label="明暗">
-          <SegmentedControl.Root
-            aria-label="明暗"
-            value={preferences.appearance}
-            onValueChange={(value) =>
-              patch({ appearance: value as ThemeAppearance })
-            }
-          >
-            {THEME_APPEARANCES.map((value) => (
-              <SegmentedControl.Item key={value} value={value}>
-                <Flex align="center" gap="1">
-                  {APPEARANCE_ICON[value]}
-                  <Text size="2">{THEME_APPEARANCE_LABEL[value]}</Text>
-                </Flex>
-              </SegmentedControl.Item>
-            ))}
-          </SegmentedControl.Root>
-        </SettingsRow>
-
-        <SettingsRow
-          label="界面密度"
-          help={
-            <>
-              紧凑 → 收紧界面元素间距，同屏展示更多信息
-              <br />
-              舒适 → 默认留白，阅读更轻松
-            </>
-          }
-        >
-          <SegmentedControl.Root
-            aria-label="界面密度"
-            value={preferences.density}
-            onValueChange={(value) => patch({ density: value as UiDensity })}
-          >
-            {UI_DENSITIES.map((value) => (
-              <SegmentedControl.Item key={value} value={value}>
-                {UI_DENSITY_LABEL[value]}
-              </SegmentedControl.Item>
-            ))}
-          </SegmentedControl.Root>
-        </SettingsRow>
-
-        <SettingsRow
-          label="界面缩放"
-          help="按比例缩放整个应用界面，适配不同分辨率与屏幕尺寸。"
-        >
-          <SegmentedControl.Root
-            aria-label="界面缩放"
-            value={String(preferences.scale)}
-            onValueChange={(value) =>
-              patch({ scale: Number(value) as UiScale })
-            }
-          >
-            {UI_SCALES.map((value) => (
-              <SegmentedControl.Item key={value} value={String(value)}>
-                {value}%
-              </SegmentedControl.Item>
-            ))}
-          </SegmentedControl.Root>
-        </SettingsRow>
-      </SettingsGroup>
-
-      <SettingsGroup id="scan-copy" title="扫描与复制">
-        <SettingsRow label="分组方式" help={LAYOUT_HELP}>
-          <SegmentedControl.Root
-            size="2"
-            aria-label="分组方式"
-            value={preferences.copyLayout}
-            onValueChange={(value) =>
-              patch({ copyLayout: value as CopyLayout })
-            }
-          >
-            {LAYOUTS.map((value) => (
-              <SegmentedControl.Item key={value} value={value}>
-                {LAYOUT_SHORT_LABEL[value]}
-              </SegmentedControl.Item>
-            ))}
-          </SegmentedControl.Root>
-        </SettingsRow>
-
-        <SettingsRow label="同名文件" help={CONFLICT_HELP}>
-          <SegmentedControl.Root
-            size="2"
-            aria-label="同名文件"
-            value={preferences.copyConflict}
-            onValueChange={(value) =>
-              patch({ copyConflict: value as CopyConflictPolicy })
-            }
-          >
-            {CONFLICTS.map((value) => (
-              <SegmentedControl.Item key={value} value={value}>
-                {COPY_CONFLICT_LABEL[value]}
-              </SegmentedControl.Item>
-            ))}
-          </SegmentedControl.Root>
-        </SettingsRow>
-
-        <SliderRow
-          label="历史记录保留条数"
-          help="超出后自动删除最旧的记录。"
-          value={historyLimit}
-          range={HISTORY_LIMIT_RANGE}
-          onChange={(next) => void saveHistoryLimit(next)}
-        />
-      </SettingsGroup>
-
-      <SettingsGroup id="performance" title="性能">
-        <SettingsRow
-          label="性能档位"
-          help={PROFILE_HELP}
-          description={
-            profileEnvNames.length > 0 ? (
-              <>
-                {allProfileOverridden
-                  ? '已由环境变量 '
-                  : '部分参数已由环境变量 '}
-                {profileEnvNames.map((name, index) => (
-                  <Fragment key={name}>
-                    {index > 0 ? '、' : null}
-                    <Code size="1">{name}</Code>
-                  </Fragment>
-                ))}
-                {allProfileOverridden
-                  ? ' 全部接管，此处不生效'
-                  : ' 接管，其余仍随档位生效'}
-              </>
-            ) : undefined
-          }
-        >
-          <SegmentedControl.Root
-            size="2"
-            aria-label="性能档位"
-            aria-disabled={allProfileOverridden || undefined}
-            className={
-              allProfileOverridden ? 'settings-control-disabled' : undefined
-            }
-            value={preferences.performanceProfile}
-            onValueChange={(value) => {
-              if (!allProfileOverridden) {
-                patch({ performanceProfile: value as PerformanceProfile })
+      <Flex direction="column" gap="6">
+        <SettingsGroup id="appearance" title="外观">
+          <SettingsRow label="明暗">
+            <SegmentedControl.Root
+              aria-label="明暗"
+              value={preferences.appearance}
+              onValueChange={(value) =>
+                patch({ appearance: value as ThemeAppearance })
               }
-            }}
+            >
+              {THEME_APPEARANCES.map((value) => (
+                <SegmentedControl.Item key={value} value={value}>
+                  <Flex align="center" gap="1">
+                    {APPEARANCE_ICON[value]}
+                    <Text size="2">{THEME_APPEARANCE_LABEL[value]}</Text>
+                  </Flex>
+                </SegmentedControl.Item>
+              ))}
+            </SegmentedControl.Root>
+          </SettingsRow>
+
+          <SettingsRow
+            label="界面密度"
+            help={
+              <>
+                紧凑 → 收紧界面元素间距，同屏展示更多信息
+                <br />
+                舒适 → 默认留白，阅读更轻松
+              </>
+            }
           >
-            {PERFORMANCE_PROFILES.map((value) => (
-              <SegmentedControl.Item key={value} value={value}>
-                {PERFORMANCE_PROFILE_LABEL[value]}
-              </SegmentedControl.Item>
-            ))}
-          </SegmentedControl.Root>
-        </SettingsRow>
-        <SliderRow
-          label="每批复制文件"
-          help="按批推进复制，每批拷完再开下一批并刷新进度；实际同时复制数不会超过本项（取性能档位复制并发与本项的较小值）。"
-          value={preferences.copyBatchSize}
-          range={PREFERENCE_RANGE.copyBatchSize}
-          envName={envName('copyBatchSize')}
-          onChange={(next) => patch({ copyBatchSize: next })}
-        />
-      </SettingsGroup>
+            <SegmentedControl.Root
+              aria-label="界面密度"
+              value={preferences.density}
+              onValueChange={(value) => patch({ density: value as UiDensity })}
+            >
+              {UI_DENSITIES.map((value) => (
+                <SegmentedControl.Item key={value} value={value}>
+                  {UI_DENSITY_LABEL[value]}
+                </SegmentedControl.Item>
+              ))}
+            </SegmentedControl.Root>
+          </SettingsRow>
 
-      <UpdateSettingsSection />
+          <SettingsRow
+            label="界面缩放"
+            help="按比例缩放整个应用界面，适配不同分辨率与屏幕尺寸。"
+          >
+            <SegmentedControl.Root
+              aria-label="界面缩放"
+              value={String(preferences.scale)}
+              onValueChange={(value) =>
+                patch({ scale: Number(value) as UiScale })
+              }
+            >
+              {UI_SCALES.map((value) => (
+                <SegmentedControl.Item key={value} value={String(value)}>
+                  {value}%
+                </SegmentedControl.Item>
+              ))}
+            </SegmentedControl.Root>
+          </SettingsRow>
+        </SettingsGroup>
 
-      <SettingsGroup id="logging" title="调试日志">
-        <SettingsRow
-          label="启用调试日志"
-          help={
-            <>
-              默认关闭，开启后立即生效。日志按天写入{' '}
-              {logInfo ? (
-                <Code size="1">{logInfo.dir}</Code>
-              ) : logInfoFailed ? (
-                'userData/logs（读取目录失败）'
-              ) : (
-                'userData/logs'
-              )}
-              {'，保留最近 7 天。'}
-            </>
-          }
-        >
-          <Switch
-            checked={preferences.debugLogEnabled}
-            aria-label="启用调试日志"
-            onCheckedChange={(checked) => patch({ debugLogEnabled: checked })}
+        <SettingsGroup id="scan-copy" title="扫描与复制">
+          <SettingsRow label="分组方式" help={LAYOUT_HELP}>
+            <SegmentedControl.Root
+              aria-label="分组方式"
+              value={preferences.copyLayout}
+              onValueChange={(value) =>
+                patch({ copyLayout: value as CopyLayout })
+              }
+            >
+              {LAYOUTS.map((value) => (
+                <SegmentedControl.Item key={value} value={value}>
+                  {LAYOUT_SHORT_LABEL[value]}
+                </SegmentedControl.Item>
+              ))}
+            </SegmentedControl.Root>
+          </SettingsRow>
+
+          <SettingsRow label="同名文件" help={CONFLICT_HELP}>
+            <SegmentedControl.Root
+              aria-label="同名文件"
+              value={preferences.copyConflict}
+              onValueChange={(value) =>
+                patch({ copyConflict: value as CopyConflictPolicy })
+              }
+            >
+              {CONFLICTS.map((value) => (
+                <SegmentedControl.Item key={value} value={value}>
+                  {COPY_CONFLICT_LABEL[value]}
+                </SegmentedControl.Item>
+              ))}
+            </SegmentedControl.Root>
+          </SettingsRow>
+
+          <SliderRow
+            label="历史记录保留条数"
+            help="超出后自动删除最旧的记录。"
+            value={historyLimit}
+            range={HISTORY_LIMIT_RANGE}
+            onChange={(next) => void saveHistoryLimit(next)}
           />
-        </SettingsRow>
+        </SettingsGroup>
 
-        <SettingsRow label="日志目录">
-          <Button variant="soft" color="gray" onClick={() => void openLogDir()}>
-            打开日志目录
-          </Button>
-        </SettingsRow>
-      </SettingsGroup>
+        <SettingsGroup id="performance" title="性能">
+          <SettingsRow
+            label="性能档位"
+            help={PROFILE_HELP}
+            description={
+              profileEnvNames.length > 0 ? (
+                <>
+                  {allProfileOverridden
+                    ? '已由环境变量 '
+                    : '部分参数已由环境变量 '}
+                  {profileEnvNames.map((name, index) => (
+                    <Fragment key={name}>
+                      {index > 0 ? '、' : null}
+                      <Code size="1">{name}</Code>
+                    </Fragment>
+                  ))}
+                  {allProfileOverridden
+                    ? ' 全部接管，此处不生效'
+                    : ' 接管，其余仍随档位生效'}
+                </>
+              ) : undefined
+            }
+          >
+            <SegmentedControl.Root
+              aria-label="性能档位"
+              disabled={allProfileOverridden}
+              value={preferences.performanceProfile}
+              onValueChange={(value) => {
+                if (!allProfileOverridden) {
+                  patch({ performanceProfile: value as PerformanceProfile })
+                }
+              }}
+            >
+              {PERFORMANCE_PROFILES.map((value) => (
+                <SegmentedControl.Item key={value} value={value}>
+                  {PERFORMANCE_PROFILE_LABEL[value]}
+                </SegmentedControl.Item>
+              ))}
+            </SegmentedControl.Root>
+          </SettingsRow>
+          <SliderRow
+            label="每批复制文件"
+            help="按批推进复制，每批拷完再开下一批并刷新进度；实际同时复制数不会超过本项（取性能档位复制并发与本项的较小值）。"
+            value={preferences.copyBatchSize}
+            range={PREFERENCE_RANGE.copyBatchSize}
+            envName={envName('copyBatchSize')}
+            onChange={(next) => patch({ copyBatchSize: next })}
+          />
+        </SettingsGroup>
 
-      <SettingsGroup id="reset" title="重置">
-        <SettingsRow
-          label="复制与性能设置"
-          help="分组方式、同名文件策略、性能档位与每批复制文件回到出厂值；扫描历史与调试日志不受影响。"
-        >
-          <Button variant="soft" color="gray" onClick={restoreCopyDefaults}>
-            恢复默认
-          </Button>
-        </SettingsRow>
-      </SettingsGroup>
+        <UpdateSettingsSection />
+
+        <SettingsGroup id="logging" title="调试日志">
+          <SettingsRow
+            label="启用调试日志"
+            help={
+              <>
+                默认关闭，开启后立即生效。日志按天写入{' '}
+                {logInfo ? (
+                  <Code size="1">{logInfo.dir}</Code>
+                ) : logInfoFailed ? (
+                  'userData/logs（读取目录失败）'
+                ) : (
+                  'userData/logs'
+                )}
+                {'，保留最近 7 天。'}
+              </>
+            }
+          >
+            <Switch
+              checked={preferences.debugLogEnabled}
+              aria-label="启用调试日志"
+              onCheckedChange={(checked) => patch({ debugLogEnabled: checked })}
+            />
+          </SettingsRow>
+
+          <SettingsRow label="日志目录">
+            <Button
+              variant="soft"
+              color="gray"
+              onClick={() => void openLogDir()}
+            >
+              打开日志目录
+            </Button>
+          </SettingsRow>
+        </SettingsGroup>
+
+        <SettingsGroup id="reset" title="重置">
+          <SettingsRow
+            label="复制与性能设置"
+            help="分组方式、同名文件策略、性能档位与每批复制文件回到出厂值；扫描历史与调试日志不受影响。"
+          >
+            <Button variant="soft" color="gray" onClick={restoreCopyDefaults}>
+              恢复默认
+            </Button>
+          </SettingsRow>
+        </SettingsGroup>
+      </Flex>
     </PageShell>
   )
 }

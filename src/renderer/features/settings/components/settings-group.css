@@ -1,11 +1,7 @@
-/* 设置分区：标题 + 白卡。卡片外观来自 `.app-card`，这里只给取值。 */
+/* 设置分区：标题 + 白卡。分区间距由父级 Flex gap 承担，这里只保留锚点偏移与底部分隔线。 */
 
 .settings-group {
   scroll-margin-top: var(--space-4);
-}
-
-.settings-group + .settings-group {
-  margin-top: var(--space-6);
 }
 
 /* 卡片底部区域：状态、进度与操作，不强行塞进右侧控件位。

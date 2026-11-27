@@ -78,7 +78,9 @@ const SheetTablePreview = ({ sheet, mode }: SheetTablePreviewProps) => {
             ))}
             {showColTruncation && (
               <Table.ColumnHeaderCell className="sheet-cell-nowrap">
-                <Text color="gray">还有 {sheet.colCount - MAX_COLS} 列</Text>
+                <Text size="2" color="gray">
+                  还有 {sheet.colCount - MAX_COLS} 列
+                </Text>
               </Table.ColumnHeaderCell>
             )}
           </Table.Row>
@@ -96,7 +98,9 @@ const SheetTablePreview = ({ sheet, mode }: SheetTablePreviewProps) => {
               ))}
               {showColTruncation && (
                 <Table.Cell>
-                  <Text color="gray">…</Text>
+                  <Text size="2" color="gray">
+                    …
+                  </Text>
                 </Table.Cell>
               )}
             </Table.Row>

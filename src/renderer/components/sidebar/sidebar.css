@@ -24,10 +24,6 @@
   -webkit-app-region: no-drag;
 }
 
-.sidebar-group + .sidebar-group {
-  margin-top: var(--space-5);
-}
-
 .sidebar-footer {
   border-top: 1px solid var(--app-border);
 }

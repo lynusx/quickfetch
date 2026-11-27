@@ -245,7 +245,7 @@ const HistoryPanel = ({
                 minHeight="0"
                 overflow="hidden"
               >
-                <ScrollArea type="auto" size="1" scrollbars="vertical">
+                <ScrollArea type="auto" scrollbars="vertical">
                   {visible.map((item) => {
                     const meta = SCAN_STATUS_META[item.status]
                     const busy = loadingTaskId === item.id
@@ -289,7 +289,6 @@ const HistoryPanel = ({
                           >
                             <button
                               type="button"
-                              className="history-summary"
                               onClick={() => handleRestore(item)}
                             >
                               {summarize(item)}

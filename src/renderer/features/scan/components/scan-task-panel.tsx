@@ -161,7 +161,7 @@ export const ScanTaskPanel = ({
                 </Text>
               </Flex>
 
-              <Progress value={task.progress.percent} size="2" />
+              <Progress value={task.progress.percent} />
 
               <Flex align="center" justify="between" gap="3" wrap="wrap">
                 {metricsSummary}
@@ -289,13 +289,13 @@ export const ScanTaskPanel = ({
                   </Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell>机台</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell>状态</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell align="right">
+                  <Table.ColumnHeaderCell justify="end">
                     数量
                   </Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell align="right">
+                  <Table.ColumnHeaderCell justify="end">
                     大小
                   </Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell align="right">
+                  <Table.ColumnHeaderCell justify="end">
                     用时
                   </Table.ColumnHeaderCell>
                 </Table.Row>
@@ -363,7 +363,7 @@ export const ScanTaskPanel = ({
                           statusContent
                         )}
                       </Table.Cell>
-                      <Table.Cell align="right">
+                      <Table.Cell justify="end">
                         <Text
                           size="2"
                           weight="medium"
@@ -373,12 +373,12 @@ export const ScanTaskPanel = ({
                           {row.imagesText}
                         </Text>
                       </Table.Cell>
-                      <Table.Cell align="right">
+                      <Table.Cell justify="end">
                         <Text size="2" color="gray" className="tabular">
                           {row.sizeText}
                         </Text>
                       </Table.Cell>
-                      <Table.Cell align="right">
+                      <Table.Cell justify="end">
                         <Text size="2" color="gray" className="tabular">
                           {row.elapsedText}
                         </Text>

@@ -13,12 +13,15 @@
 
 ## 项目级 skills
 
-通用 skill 只装全局（`~/.claude/skills`），不提交进仓库；`.claude/skills/` 只保留本项目独有的
-`radix-themes-best-practices`。安装技能后若又出现 `skills-lock.json` 或同名目录，不要带进提交。
+通用 skill 只装全局（`~/.claude/skills` 或 `~/.agents/skills`），不提交进仓库；仓库内 `.claude/skills/` 只保留跨项目可复用的 `radix-themes-best-practices`：
+
+- **Claude Code** 原生扫描 `.claude/skills/radix-themes-best-practices/SKILL.md`；
+- **Antigravity (AGY)** 通过根目录 `.agents/skills.json`（`include_only: ["radix-themes-best-practices"]`）直接映射加载同一目录，保持单份源码且避免 Windows 软链接兼容问题。
+- 安装其他技能后若出现 `skills-lock.json` 或额外技能目录，不要带进提交。
 
 ## Radix Themes (@radix-ui/themes) 相关改动
 
-项目统一使用 `@radix-ui/themes` 构建 UI，根节点由 `<Theme>` 包裹，已彻底移除 shadcn/ui 及 Tailwind CSS。
+项目统一使用 `@radix-ui/themes` 构建 UI，根节点由 `<Theme>` 包裹，已彻底移除 shadcn/ui 及 Tailwind CSS。通用规则见 [`skills/radix-themes-best-practices/SKILL.md`](skills/radix-themes-best-practices/SKILL.md)，本项目专属约定与已确认 CSS 例外如下：
 
 - 样式文件：`@radix-ui/themes/styles.css`
 - 每个共享组件一个目录；渲染层组件目录名、组件文件与样式文件统一 kebab-case（如 `components/panel/panel.tsx` + `components/panel/panel.css`、`layouts/app-layout.tsx`）；`index.ts` 只做多组件导出，不放组件实现。全局基线、令牌、共享工具类与 sonner 覆盖在 `src/renderer/index.css`。不要新建 `styles/app.css` 之类的汇总文件
@@ -27,6 +30,12 @@
 - 禁止混用其他组件库与全局 CSS reset；自定义颜色使用 Radix 设计令牌（如 `var(--accent-9)`、`var(--gray-3)`）
 - `@radix-ui/themes` 中不存在的组件（如 `Drawer`、`Empty`、`Calendar` + `DatePicker`、`Sidebar`），优先参考 `shadcn/ui` 的组合式 API 与无头底层，在 `src/renderer/components/<name>/` 中用 Radix Themes 原语与设计令牌移植实现，不引入 Tailwind CSS
 - 类别勾选统一使用基于 Radix Themes 原生组件的 `ChoiceList`（多选）与 `ChoiceRadio`（单选）
+- 外观系统（详见 `docs/adr/0012-appearance-theme-density-scaling.md`）：明暗通过根 `<Theme appearance>` 与主进程 `nativeTheme` 同步；紧凑密度通过 `:root[data-density]` 收紧 `--space-1`~`9`；全局缩放走 Electron `webFrame.setZoomFactor`（支持 `125%`）并以 `--app-zoom` 反向补偿 40px 窗口顶带
+- 本项目已确认的 CSS 例外（改动时保留注释理由，不要误删或扩散）：
+  - `components/calendar/calendar.css`：`react-day-picker` 内部 `.rdp-*` DOM 无法接 Radix `Text` prop，局部使用 `stylelint-disable-next-line` 对齐令牌字号
+  - `index.css` `.app-card`：统一白卡底座，仅归零 `--base-card-padding-*` 并统一描边/底色令牌，内边距交由各面板按 `p`/`px`/`py` 排布
+  - 原生 `<input>` 路径展示（如 `.dir-input`）：`TextField.Root` 无等宽变体 prop，输入控件路径展示允许在 CSS 指定 `var(--code-font-family)`
+  - `components/page-shell/page-shell.css`：`.rt-ScrollAreaViewport` 的 `scroll-padding-top`（避让吸顶页头）以及 `isolation: isolate` 局部层叠内的吸顶磨砂 `PageHeader`（`z-index: 1`）
 
 ## 这个项目的几条硬约束
 
