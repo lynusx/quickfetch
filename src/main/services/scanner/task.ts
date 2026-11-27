@@ -1,4 +1,3 @@
-import { stat } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 
 import type {
@@ -6,7 +5,6 @@ import type {
   ScanCategory,
   ScanTask,
   ScanTaskParams,
-  ScanTaskProgress,
   ScanTaskStatus,
   ScannedImage,
 } from '../../../shared/ipc'
@@ -15,12 +13,11 @@ import { PL_LEVELS } from '../../../shared/ipc'
 import { PREVIEW_LIMIT } from '../../../shared/historyLimit'
 import { timeoutForConcurrency, createAdaptiveGate } from '../../utils/adaptive'
 import type { AdaptiveGate } from '../../utils/adaptive'
-import { toFsPath } from '../../utils/pathx'
 import { createTaskLifecycle } from '../../utils/taskLifecycle'
 import type { TaskLifecycle } from '../../utils/taskLifecycle'
 import { cacheImageSize } from '../copy/measure'
-import { isNetworkError, readDirSafe } from './fsx'
-import type { DirReadResult } from './fsx'
+import { isNetworkError, realScanFs } from './fsx'
+import type { DirReadResult, ScanFs } from './fsx'
 import { describeLeafFailure, summarize } from './diagnosis'
 import { isImageFile } from '../../../shared/imageExtensions'
 import { createLimiter } from './limiter'
@@ -71,34 +68,6 @@ const compareMachineKey = (a: string, b: string): number => {
 const IMAGE_STAT_TIMEOUT_MS = 2_000
 /** 单目录内图片 stat 的局部并发上限，兼顾吞吐与 libuv 线程池余量 */
 const IMAGE_STAT_CONCURRENCY = 4
-
-const statImageMeta = async (
-  absPath: string,
-): Promise<{ size?: number; mtimeMs?: number }> => {
-  const request = stat(toFsPath(absPath))
-
-  request.then(
-    () => {},
-    () => {},
-  )
-
-  let timer: ReturnType<typeof setTimeout> | undefined
-
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      reject(new Error('stat timeout'))
-    }, IMAGE_STAT_TIMEOUT_MS)
-  })
-
-  try {
-    const info = await Promise.race([request, timeout])
-    return { size: info.size, mtimeMs: info.mtimeMs }
-  } catch {
-    return {}
-  } finally {
-    if (timer) clearTimeout(timer)
-  }
-}
 
 /** 并发档位上下限 */
 const MIN_CONCURRENCY = 1
@@ -156,6 +125,8 @@ export interface TaskContext {
   resolver: MachineResolver
   /** 并发与分批参数，缺省走现场机器的保守档 */
   load?: LoadOptions
+  /** 内部文件系统 seam：缺省走真实 fsx，测试可注入确定性 stand-in */
+  fs?: ScanFs
 }
 
 /** 现场机器资源有限，读写强度集中在这里调 */
@@ -165,25 +136,6 @@ export interface LoadOptions {
   /** 每批并行处理的机台数 */
   machineBatchSize?: number
 }
-
-const emptyProgress = (): ScanTaskProgress => ({
-  phase: 'probe',
-  percent: 0,
-  dirsScanned: 0,
-  dirsHit: 0,
-  dirsSkipped: 0,
-  dirsUnreachable: 0,
-  images: 0,
-  currentPath: '',
-  detailsPending: 0,
-  concurrency: DEFAULT_READ_CONCURRENCY,
-  batchIndex: 0,
-  batchTotal: 0,
-  detailTotal: 0,
-  detailDone: 0,
-  machinesPending: 0,
-  etaMs: null,
-})
 
 interface BrokenDetail {
   /** 该层期望的目录名，如 EL、20261030、白班 */
@@ -207,6 +159,7 @@ export class ScanTaskRunner {
   readonly createdAt = Date.now()
 
   private readonly context: TaskContext
+  private readonly fs: ScanFs
   private readonly emit: (task: ScanTask) => void
 
   /** 状态、暂停、中断信号、终态与推送节流统一由 lifecycle 维护 */
@@ -215,9 +168,8 @@ export class ScanTaskRunner {
 
   private branches: ScanBranch[] = []
   private images: ScannedImage[] = []
-  private progress: ScanTaskProgress = emptyProgress()
 
-  /** leaf / 机台 / 明细计数器与 percent、phase、ETA 的唯一 owner */
+  /** `ScanTaskProgress` 全部字段与单机台单调百分比的唯一 owner */
   private readonly ledger: ScanLedger
   /**
    * 最近若干次读取结果（true = 不可达），判断整片断网用。
@@ -260,6 +212,7 @@ export class ScanTaskRunner {
     const sortedMachines = [...params.machines].sort(compareMachineKey)
     this.params = { ...params, machines: sortedMachines }
     this.context = context
+    this.fs = context.fs ?? realScanFs
     this.emit = emit
 
     this.lifecycle = createTaskLifecycle({
@@ -296,11 +249,6 @@ export class ScanTaskRunner {
       images: 0,
     }))
 
-    this.ledger = createScanLedger({
-      machines: sortedMachines.length,
-      leavesPerBranch: this.leavesPerBranch,
-    })
-
     // 现场机器为 8G 内存，并发按保守档起步，必要时再按失败率下调
     this.readConcurrency = clamp(
       context.load?.readConcurrency ?? DEFAULT_READ_CONCURRENCY,
@@ -313,13 +261,26 @@ export class ScanTaskRunner {
       MAX_BATCH_SIZE,
     )
     this.timeoutMs = timeoutFor(this.readConcurrency)
+
+    const batchTotal = Math.max(
+      1,
+      Math.ceil(sortedMachines.length / this.batchSize),
+    )
+
+    this.ledger = createScanLedger({
+      machines: sortedMachines,
+      leavesPerBranch: this.leavesPerBranch,
+      concurrency: this.readConcurrency,
+      batchTotal,
+    })
+
     this.gate = createAdaptiveGate({
       initial: this.readConcurrency,
       min: MIN_CONCURRENCY,
       onChange: (concurrency, ratio) => {
         this.readConcurrency = concurrency
         this.timeoutMs = timeoutFor(concurrency)
-        this.progress.concurrency = concurrency
+        this.ledger.setConcurrency(concurrency)
         this.limiter?.setConcurrency(concurrency)
 
         console.warn(
@@ -335,13 +296,6 @@ export class ScanTaskRunner {
         this.touch('', true)
       },
     })
-
-    this.progress.concurrency = this.readConcurrency
-    this.progress.batchTotal = Math.max(
-      1,
-      Math.ceil(params.machines.length / this.batchSize),
-    )
-    this.progress.batchIndex = params.machines.length > 0 ? 1 : 0
   }
 
   // ---------------------------------------------------------------- 对外操作
@@ -350,6 +304,8 @@ export class ScanTaskRunner {
     // 扫描只启动一次；复制允许 retry，所以 begin() 本身不限制终态
     if (this.lifecycle.status !== 'pending') return this.snapshot()
     if (!this.lifecycle.begin()) return this.snapshot()
+
+    const progress = this.ledger.snapshot(Date.now(), this.lifecycle.startedAt)
 
     logger.info('scan', 'scan.start', {
       taskId: this.id,
@@ -362,7 +318,7 @@ export class ScanTaskRunner {
       readConcurrency: this.readConcurrency,
       machineBatchSize: this.batchSize,
       timeoutMs: this.timeoutMs,
-      batchTotal: this.progress.batchTotal,
+      batchTotal: progress.batchTotal,
     })
 
     this.touch('', true)
@@ -374,12 +330,14 @@ export class ScanTaskRunner {
   pause(reason: 'user' | 'network' = 'user'): ScanTask {
     if (!this.lifecycle.pause(reason)) return this.snapshot()
 
+    const progress = this.ledger.snapshot(Date.now(), this.lifecycle.startedAt)
+
     logger.info('scan', 'scan.pause', {
       taskId: this.id,
       reason,
-      percent: this.progress.percent,
-      machinesPending: this.progress.machinesPending,
-      currentPath: this.progress.currentPath,
+      percent: progress.percent,
+      machinesPending: progress.machinesPending,
+      currentPath: progress.currentPath,
     })
 
     this.touch('', true)
@@ -394,9 +352,11 @@ export class ScanTaskRunner {
     // 带着旧样本继续统计，接回网络后的头几次读取仍然会被算成失败
     this.breaker.reset()
 
+    const progress = this.ledger.snapshot(Date.now(), this.lifecycle.startedAt)
+
     logger.info('scan', 'scan.resume', {
       taskId: this.id,
-      percent: this.progress.percent,
+      percent: progress.percent,
     })
 
     this.touch('', true)
@@ -407,10 +367,12 @@ export class ScanTaskRunner {
   cancel(): ScanTask {
     if (!this.lifecycle.cancel()) return this.snapshot()
 
+    const progress = this.ledger.snapshot(Date.now(), this.lifecycle.startedAt)
+
     logger.info('scan', 'scan.cancel', {
       taskId: this.id,
-      percent: this.progress.percent,
-      images: this.progress.images,
+      percent: progress.percent,
+      images: progress.images,
     })
 
     this.touch('', true)
@@ -420,12 +382,13 @@ export class ScanTaskRunner {
 
   snapshot(): ScanTask {
     const { status, pauseReason, startedAt, finishedAt } = this.lifecycle
+    const now = finishedAt ?? Date.now()
 
     return {
       id: this.id,
       status,
       params: this.params,
-      progress: { ...this.progress },
+      progress: this.ledger.snapshot(now, startedAt),
       branches: this.branches.map((branch) => ({ ...branch })),
       pauseReason,
       error: this.error,
@@ -434,7 +397,7 @@ export class ScanTaskRunner {
       finishedAt,
       totalImages: this.images.length,
       preview: this.images.slice(0, PREVIEW_LIMIT),
-      elapsedMs: (finishedAt ?? Date.now()) - (startedAt ?? this.createdAt),
+      elapsedMs: now - (startedAt ?? this.createdAt),
     }
   }
 
@@ -482,7 +445,7 @@ export class ScanTaskRunner {
       for (let index = 0; index < batches.length; index += 1) {
         await this.checkpoint()
 
-        this.progress.batchIndex = index + 1
+        this.ledger.setBatch(index + 1)
         // 每批开始前清空批内计数；跨批的连续不可达由 breaker 维护
         this.breaker.beginBatch()
         this.touch('', true)
@@ -503,6 +466,10 @@ export class ScanTaskRunner {
         // "失败数 === 已完成数"成立，会被误判成整片断网。
         this.breaker.endBatch()
         const reachability = this.breaker.stats()
+        const batchProgress = this.ledger.snapshot(
+          Date.now(),
+          this.lifecycle.startedAt,
+        )
 
         logger.debug('scan', 'scan.batch.end', {
           taskId: this.id,
@@ -510,11 +477,11 @@ export class ScanTaskRunner {
           batchReachable: reachability.batchReachable,
           batchFailed: reachability.batchFailed,
           unreachableMachineStreak: reachability.unreachableMachineStreak,
-          dirsScanned: this.progress.dirsScanned,
-          dirsHit: this.progress.dirsHit,
-          dirsSkipped: this.progress.dirsSkipped,
-          dirsUnreachable: this.progress.dirsUnreachable,
-          images: this.progress.images,
+          dirsScanned: batchProgress.dirsScanned,
+          dirsHit: batchProgress.dirsHit,
+          dirsSkipped: batchProgress.dirsSkipped,
+          dirsUnreachable: batchProgress.dirsUnreachable,
+          images: batchProgress.images,
         })
 
         // 整批都不通就停下来等用户接网络，不必继续跑下一批去等超时
@@ -525,7 +492,6 @@ export class ScanTaskRunner {
       // 少了这个检查点，刚暂停的任务会被“完成”覆盖，界面看不到断网提示
       await this.checkpoint()
 
-      this.progress.currentPath = ''
       this.ledger.finish()
     } catch (error) {
       if (isAbortError(error)) {
@@ -541,6 +507,7 @@ export class ScanTaskRunner {
 
       const { status, startedAt } = this.lifecycle
       const finishedAt = this.lifecycle.finishedAt ?? Date.now()
+      const progress = this.ledger.snapshot(finishedAt, startedAt)
 
       const branches = this.branches.reduce<Record<string, number>>(
         (counts, branch) => {
@@ -554,12 +521,12 @@ export class ScanTaskRunner {
         taskId: this.id,
         status,
         elapsedMs: finishedAt - (startedAt ?? finishedAt),
-        images: this.progress.images,
-        dirsScanned: this.progress.dirsScanned,
-        dirsHit: this.progress.dirsHit,
-        dirsSkipped: this.progress.dirsSkipped,
-        dirsUnreachable: this.progress.dirsUnreachable,
-        batchTotal: this.progress.batchTotal,
+        images: progress.images,
+        dirsScanned: progress.dirsScanned,
+        dirsHit: progress.dirsHit,
+        dirsSkipped: progress.dirsSkipped,
+        dirsUnreachable: progress.dirsUnreachable,
+        batchTotal: progress.batchTotal,
         branches,
       })
 
@@ -575,11 +542,12 @@ export class ScanTaskRunner {
   private fail(message: string, error?: unknown): void {
     this.lifecycle.finish('failed')
     this.error = message
+    const progress = this.ledger.snapshot(Date.now(), this.lifecycle.startedAt)
 
     logger.error('scan', 'scan.fail', {
       taskId: this.id,
       error: error ?? message,
-      percent: this.progress.percent,
+      percent: progress.percent,
     })
   }
 
@@ -604,6 +572,7 @@ export class ScanTaskRunner {
         branch.elapsedMs = undefined
       } else {
         branch.elapsedMs = Math.max(0, Date.now() - branchStartedAt)
+        this.ledger.machineConcluded(machine)
       }
       this.touch(machine, true)
     }
@@ -722,8 +691,7 @@ export class ScanTaskRunner {
       return
     }
 
-    this.ledger.machineProbed()
-    this.ledger.machineConcluded()
+    this.ledger.machineProbed(machine)
     // 这台机台一路读到了班次目录，网络是通的
     this.breaker.sampleMachine(true)
     if (this.slotless) {
@@ -750,7 +718,7 @@ export class ScanTaskRunner {
     if (missedSlots.length) {
       const skipped =
         missedSlots.length * this.levels.length * this.params.types.length
-      this.ledger.leavesConcluded(0, skipped)
+      this.ledger.leavesConcluded(machine, 0, skipped)
     }
 
     if (!hitSlots.length) {
@@ -786,6 +754,7 @@ export class ScanTaskRunner {
       if (slotRead.status !== 'ok') {
         // 时段目录在列举后被删、或恰好无权限：按跳过处理，不阻断整次任务
         this.ledger.leavesConcluded(
+          machine,
           0,
           this.levels.length * this.params.types.length,
         )
@@ -807,6 +776,7 @@ export class ScanTaskRunner {
 
         if (failRead.status !== 'ok') {
           this.ledger.leavesConcluded(
+            machine,
             0,
             this.levels.length * this.params.types.length,
           )
@@ -823,7 +793,7 @@ export class ScanTaskRunner {
       if (this.shape.hasLevel) {
         for (const level of this.levels) {
           if (!typeRootDirs.includes(level)) {
-            this.ledger.leavesConcluded(0, this.params.types.length)
+            this.ledger.leavesConcluded(machine, 0, this.params.types.length)
             continue
           }
 
@@ -834,7 +804,7 @@ export class ScanTaskRunner {
           })
 
           if (levelRead.status !== 'ok') {
-            this.ledger.leavesConcluded(0, this.params.types.length)
+            this.ledger.leavesConcluded(machine, 0, this.params.types.length)
             continue
           }
 
@@ -849,13 +819,13 @@ export class ScanTaskRunner {
 
         for (const type of this.params.types) {
           if (!level.dirs.includes(type)) {
-            this.ledger.leavesConcluded(0, 1)
+            this.ledger.leavesConcluded(machine, 0, 1)
             continue
           }
 
-          this.ledger.leavesConcluded(1, 0)
+          this.ledger.leavesConcluded(machine, 1, 0)
           detailDirs.push(join(level.dir, type))
-          this.ledger.detailQueued(1)
+          this.ledger.detailQueued(machine, 1)
         }
       }
 
@@ -899,13 +869,13 @@ export class ScanTaskRunner {
 
     for (const type of this.params.types) {
       if (!seen.has(type)) {
-        this.ledger.leavesConcluded(0, 1)
+        this.ledger.leavesConcluded(machine, 0, 1)
         continue
       }
 
-      this.ledger.leavesConcluded(1, 0)
+      this.ledger.leavesConcluded(machine, 1, 0)
       detailDirs.push(join(shiftDir, type))
-      this.ledger.detailQueued(1)
+      this.ledger.detailQueued(machine, 1)
     }
 
     if (!detailDirs.length) {
@@ -928,7 +898,7 @@ export class ScanTaskRunner {
     dirs: string[],
     limiter: Limiter,
   ): Promise<void> {
-    this.ledger.enterCollect(dirs.length > 0)
+    this.touch(dirs[0] ?? machine)
 
     for (const dir of dirs) {
       await this.checkpoint()
@@ -964,9 +934,8 @@ export class ScanTaskRunner {
 
     const typeRead = await limiter(() => this.read(dir))
 
-    this.ledger.detailConcluded(typeRead.status === 'ok')
-
     if (typeRead.status !== 'ok') {
+      this.ledger.detailConcluded(machine, { ok: false })
       logger.debug('scan', 'scan.detail.failed', {
         taskId: this.id,
         machine,
@@ -978,12 +947,10 @@ export class ScanTaskRunner {
       return
     }
 
-    // 只统计成功读取的叶子类型目录，确保不超过笛卡尔积组合数
-    this.progress.dirsScanned += 1
-
     const imageNames = typeRead.files.filter(isImageFile)
 
     if (!imageNames.length) {
+      this.ledger.detailConcluded(machine, { ok: true, hitImages: 0 })
       this.touch(dir)
       return
     }
@@ -1002,7 +969,10 @@ export class ScanTaskRunner {
         statLimiter(async (): Promise<ScannedImage> => {
           const absolutePath = join(dir, name)
           const ext = extname(name).toLowerCase()
-          const meta = await statImageMeta(absolutePath)
+          const meta = await this.fs.statFile(
+            absolutePath,
+            IMAGE_STAT_TIMEOUT_MS,
+          )
 
           if (meta.size !== undefined) {
             cacheImageSize(absolutePath, meta.size)
@@ -1032,8 +1002,10 @@ export class ScanTaskRunner {
     branch.matchedDirs += 1
     branch.images += collected.length
     branch.bytes = (branch.bytes ?? 0) + dirBytes
-    this.progress.dirsHit += 1
-    this.progress.images = this.images.length
+    this.ledger.detailConcluded(machine, {
+      ok: true,
+      hitImages: collected.length,
+    })
     this.touch(dir)
   }
 
@@ -1049,13 +1021,13 @@ export class ScanTaskRunner {
   ): Promise<DirReadResult> {
     await this.checkpoint()
 
-    const result = await readDirSafe(path, { timeoutMs })
+    const result = await this.fs.readDir(path, { timeoutMs })
 
     if (result.status === 'ok') {
       this.breaker.sampleRead(false)
       this.recordSample(false)
     } else if (isNetworkError(result.status)) {
-      this.progress.dirsUnreachable += 1
+      this.ledger.recordUnreachable()
       this.breaker.sampleRead(true)
       this.recordSample(true)
     } else {
@@ -1082,8 +1054,7 @@ export class ScanTaskRunner {
     where: string,
     detail?: BrokenDetail,
   ): void {
-    this.ledger.leavesConcluded(0, this.leavesPerBranch)
-    this.ledger.machineConcluded()
+    this.ledger.leavesConcluded(branch.machine, 0, this.leavesPerBranch)
 
     // 分类、文案、断网样本统一由 diagnosis 决定；这里只落到 branch
     const diagnosis = describeLeafFailure({
@@ -1105,7 +1076,7 @@ export class ScanTaskRunner {
     branch.message = diagnosis.message
     branch.detail = diagnosis.detail
 
-    this.ledger.machineProbed()
+    this.ledger.machineProbed(branch.machine)
 
     const fields = {
       taskId: this.id,
@@ -1143,7 +1114,7 @@ export class ScanTaskRunner {
       unreachable?: ScanBranch['unreachableReason']
     },
   ): void {
-    this.ledger.leavesConcluded(0, this.leavesPerBranch)
+    this.ledger.leavesConcluded(branch.machine, 0, this.leavesPerBranch)
 
     branch.brokenAt = resolved.brokenAt ?? '共享名'
     branch.status = resolved.unreachable ? 'unreachable' : 'missing'
@@ -1152,15 +1123,14 @@ export class ScanTaskRunner {
 
     // 解析阶段的不可达也要计入熔断；否则整片断网时会逐台等超时
     if (resolved.unreachable === 'network') {
-      this.progress.dirsUnreachable += 1
+      this.ledger.recordUnreachable()
     }
     this.breaker.sampleRead(resolved.unreachable === 'network')
     // 只有网络不通才算「这台机台连不上」。未认证/无权限/无共享只是这台
     // 机台自身的问题，把它们算成失败会让新阈值在 39 台未认证时误判断网。
     this.breaker.sampleMachine(resolved.unreachable !== 'network')
 
-    this.ledger.machineProbed()
-    this.ledger.machineConcluded()
+    this.ledger.machineProbed(branch.machine)
 
     logger.warn('scan', 'scan.machine.unresolved', {
       taskId: this.id,
@@ -1176,14 +1146,7 @@ export class ScanTaskRunner {
   // ---------------------------------------------------------------- 进度与节流
 
   private touch(currentPath: string, force = false): void {
-    if (currentPath) this.progress.currentPath = currentPath
-
-    // 计数器与派生值都由 ledger 维护，这里只把结果并进快照
-    Object.assign(
-      this.progress,
-      this.ledger.project(Date.now(), this.lifecycle.startedAt),
-    )
-
+    if (currentPath) this.ledger.setCurrentPath(currentPath)
     this.lifecycle.touch(force)
   }
 

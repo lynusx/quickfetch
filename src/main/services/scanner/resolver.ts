@@ -18,7 +18,7 @@ import { readDirSafe } from './fsx'
 import { classifyFailureStatuses, describePrefixFailure } from './diagnosis'
 import { readShareCandidate } from './shareProbe'
 import type { DirectoryReader } from './shareProbe'
-import type { DirReadResult } from './fsx'
+import type { DirReadResult, ScanFs } from './fsx'
 import { logger } from '../log'
 
 /**
@@ -114,12 +114,13 @@ const tailOf = (base: string, full: string): string[] => {
 export const createElResolver = (
   rootPath: string,
   entry: string,
+  read: ScanFs['readDir'] = readDirSafe,
 ): MachineResolver => ({
   category: 'el',
   validate: () => (rootPath ? null : '尚未配置 DC 根目录'),
   resolve: async (machine) => {
     const base = join(rootPath, machine, entry)
-    const result = await readDirSafe(base)
+    const result = await read(base)
 
     if (result.status === 'ok') return { ok: true, base, reason: '' }
 

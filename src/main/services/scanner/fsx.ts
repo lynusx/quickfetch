@@ -1,4 +1,4 @@
-import { readdir } from 'node:fs/promises'
+import { readdir, stat } from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 
 import { toFsPath } from '../../utils/pathx'
@@ -281,4 +281,57 @@ export const readDirSafe = async (
   } finally {
     if (timer) clearTimeout(timer)
   }
+}
+
+export interface FileStatMeta {
+  size?: number
+  mtimeMs?: number
+}
+
+/** 单文件默认 stat 超时（毫秒）；避免偶发慢盘拖死收图与体积统计 */
+export const DEFAULT_STAT_TIMEOUT_MS = 2_000
+
+/**
+ * 带超时的文件元数据读取；失败或超时返回空对象，不向上抛异常。
+ */
+export const statFileSafe = async (
+  path: string,
+  timeoutMs = DEFAULT_STAT_TIMEOUT_MS,
+): Promise<FileStatMeta> => {
+  const request = stat(toFsPath(path))
+
+  request.then(
+    () => {},
+    () => {},
+  )
+
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error(`stat timeout (${timeoutMs}ms): ${path}`)
+      ;(error as NodeJS.ErrnoException).code = 'ETIMEDOUT'
+      reject(error)
+    }, timeoutMs)
+  })
+
+  try {
+    const info = await Promise.race([request, timeout])
+    return { size: info.size, mtimeMs: info.mtimeMs }
+  } catch {
+    return {}
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+/** 扫描执行器内部使用的文件系统 seam（生产走真实 fsx，测试注入内存 stand-in） */
+export interface ScanFs {
+  readDir: (path: string, options?: ReadOptions) => Promise<DirReadResult>
+  statFile: (path: string, timeoutMs?: number) => Promise<FileStatMeta>
+}
+
+export const realScanFs: ScanFs = {
+  readDir: readDirSafe,
+  statFile: statFileSafe,
 }

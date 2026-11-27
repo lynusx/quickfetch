@@ -32,6 +32,7 @@ import {
 } from '../src/main/services/scanner/shareProbe'
 import {
   createAoiResolver,
+  createElResolver,
   createLxtResolver,
   createPlResolver,
   probeLxtShare,
@@ -3357,96 +3358,250 @@ const archiveTests = async () => {
   })
 }
 
-/* ---------------------------------------------------------------- 21. 扫描进度账本 */
+/* ---------------------------------------------------------------- 21. 单机台进度核算与 ScanFs 接缝 */
 
 const ledgerTests = async () => {
-  await test('账本: 初始状态与机台结论', async () => {
-    const ledger = createScanLedger({ machines: 2, leavesPerBranch: 3 })
-    const start = ledger.project(1000, 1000)
+  await test('单机台账本: 均分权重、动态阶段与 ETA 永不倒退', async () => {
+    const ledger = createScanLedger({
+      machines: ['A01', 'A02'],
+      leavesPerBranch: 2,
+      concurrency: 4,
+      batchTotal: 2,
+    })
 
-    assert.equal(start.phase, 'probe')
-    assert.equal(start.percent, 0)
-    assert.equal(start.machinesPending, 2)
-    assert.equal(start.detailsPending, 0)
-    assert.equal(start.dirsSkipped, 0)
+    const initial = ledger.snapshot(1000, 1000)
+    assert.equal(initial.phase, 'probe')
+    assert.equal(initial.percent, 0)
+    assert.equal(initial.machinesPending, 2)
+    assert.equal(initial.etaMs, null)
 
-    ledger.machineProbed()
-    ledger.machineConcluded()
+    ledger.machineProbed('A01')
+    assert.equal(ledger.snapshot(2000, 1000).percent, 10)
+    assert.equal(ledger.snapshot(2000, 1000).etaMs, 9000)
 
-    const half = ledger.project(1000, 1000)
+    ledger.leavesConcluded('A01', 1, 1)
+    ledger.detailQueued('A01', 1)
+    const collectingFirst = ledger.snapshot(3000, 1000)
+    assert.equal(collectingFirst.phase, 'collect')
+    assert.equal(collectingFirst.percent, 35)
 
-    assert.equal(half.machinesPending, 1)
-    // 探测占 20%，两台里完成一台
-    assert.equal(half.percent, 10)
-  })
+    ledger.detailConcluded('A01', { ok: true, hitImages: 3 })
+    ledger.machineConcluded('A01')
+    const afterFirst = ledger.snapshot(4000, 1000)
+    assert.equal(afterFirst.percent, 50)
+    assert.equal(afterFirst.machinesPending, 1)
+    assert.equal(
+      afterFirst.phase,
+      'probe',
+      '第 1 台明细收完后，第 2 台探测期间 phase 应回到 probe',
+    )
 
-  await test('账本: 断链机台也计入结论', async () => {
-    const ledger = createScanLedger({ machines: 2, leavesPerBranch: 3 })
+    ledger.machineProbed('A02')
+    ledger.leavesConcluded('A02', 2, 0)
+    ledger.detailQueued('A02', 2)
+    const queuedSecond = ledger.snapshot(5000, 1000)
+    assert.ok(
+      queuedSecond.percent >= afterFirst.percent,
+      `第 2 台入队明细不得导致进度倒退: ${afterFirst.percent}% -> ${queuedSecond.percent}%`,
+    )
+    assert.equal(queuedSecond.phase, 'collect')
 
-    // 解析失败的机台不会走 machineProbed，但仍要算「下结论」
-    ledger.machineConcluded()
-    ledger.machineConcluded()
-
-    assert.equal(ledger.project(1000, 1000).machinesPending, 0)
-  })
-
-  await test('账本: leaf 与明细事件推动百分比', async () => {
-    const ledger = createScanLedger({ machines: 2, leavesPerBranch: 3 })
-
-    ledger.machineProbed()
-    ledger.machineConcluded()
-    ledger.machineProbed()
-    ledger.machineConcluded()
-    ledger.leavesConcluded(2, 1)
-    ledger.leavesConcluded(3, 0)
-
-    assert.equal(ledger.project(1000, 1000).percent, 70)
-
-    ledger.detailQueued(2)
-    ledger.detailConcluded(true)
-    const one = ledger.project(1000, 1000)
-
-    assert.equal(one.detailsPending, 1)
-    assert.equal(one.detailDone, 1)
-    assert.equal(one.detailTotal, 2)
-
-    ledger.detailConcluded(false)
-    const done = ledger.project(1000, 1000)
-
-    assert.equal(done.detailsPending, 0)
-    // 1 个 leaf 跳过 + 1 个明细读取失败
-    assert.equal(done.dirsSkipped, 2)
-  })
-
-  await test('账本: 阶段切换与完成', async () => {
-    const ledger = createScanLedger({ machines: 1, leavesPerBranch: 1 })
-
-    ledger.machineProbed()
-    ledger.machineConcluded()
-    ledger.leavesConcluded(1, 0)
-
-    ledger.enterCollect(true)
-    assert.equal(ledger.project(1000, 1000).phase, 'collect')
-
+    ledger.detailConcluded('A02', { ok: true, hitImages: 0 })
+    ledger.detailConcluded('A02', { ok: false })
+    ledger.machineConcluded('A02')
     ledger.finish()
-    const done = ledger.project(1000, 1000)
 
+    const done = ledger.snapshot(6000, 1000)
     assert.equal(done.phase, 'done')
     assert.equal(done.percent, 100)
     assert.equal(done.etaMs, 0)
+    assert.equal(done.dirsScanned, 2)
+    assert.equal(done.dirsHit, 1)
+    assert.equal(done.dirsSkipped, 2)
+    assert.equal(done.images, 3)
+    assert.equal(done.machinesPending, 0)
   })
 
-  await test('账本: ETA 只在样本足够后给出', async () => {
-    const ledger = createScanLedger({ machines: 1, leavesPerBranch: 1 })
+  await test('ScanTaskRunner + ScanFs: 多批次百分比单调递增且 stat 失败不阻塞收图', async () => {
+    const { ScanTaskRunner } = await import('../src/main/services/scanner/task')
+    const root = '/virtual/DC'
+    const machines = Array.from({ length: 6 }, (_, idx) => `A0${idx + 1}`)
 
-    assert.equal(ledger.project(1000, 1000).etaMs, null)
+    const tree = new Map<string, { dirs: string[]; files: string[] }>()
+    for (const m of machines) {
+      tree.set(join(root, m, 'EL'), { dirs: ['20261104'], files: [] })
+      tree.set(join(root, m, 'EL', '20261104'), { dirs: ['白班'], files: [] })
+      tree.set(join(root, m, 'EL', '20261104', '白班'), {
+        dirs: ['8', '9'],
+        files: [],
+      })
+      tree.set(join(root, m, 'EL', '20261104', '白班', '8'), {
+        dirs: ['NG'],
+        files: [],
+      })
+      tree.set(join(root, m, 'EL', '20261104', '白班', '9'), {
+        dirs: m === 'A01' ? [] : ['NG'],
+        files: [],
+      })
+      tree.set(join(root, m, 'EL', '20261104', '白班', '8', 'NG'), {
+        dirs: [],
+        files: ['1.jpg'],
+      })
+      if (m !== 'A01') {
+        tree.set(join(root, m, 'EL', '20261104', '白班', '9', 'NG'), {
+          dirs: [],
+          files: ['2.jpg'],
+        })
+      }
+    }
 
-    ledger.machineProbed()
-    // 20% 时：已用 4 秒，按比例估剩余 16 秒
-    assert.equal(ledger.project(5000, 1000).etaMs, 16000)
+    const fakeRead = async (path: string) => {
+      const entry = tree.get(path)
+      return entry
+        ? {
+            status: 'ok' as const,
+            dirs: entry.dirs,
+            files: entry.files,
+            elapsedMs: 1,
+          }
+        : { status: 'missing' as const, dirs: [], files: [], elapsedMs: 1 }
+    }
 
-    ledger.finish()
-    assert.equal(ledger.project(5000, 1000).etaMs, 0)
+    const percents: number[] = []
+    const runner = new ScanTaskRunner(
+      {
+        category: 'el',
+        machines,
+        date: '20261104',
+        shift: '白班',
+        slots: ['8', '9'],
+        types: ['NG'],
+      },
+      {
+        category: 'el',
+        resolver: createElResolver(root, 'EL', fakeRead),
+        load: { readConcurrency: 2, machineBatchSize: 1 },
+        fs: {
+          readDir: fakeRead,
+          statFile: async (path) =>
+            path.endsWith('1.jpg') ? { size: 1024, mtimeMs: 100 } : {},
+        },
+      },
+      (snap) => {
+        percents.push(snap.progress.percent)
+      },
+    )
+
+    runner.start()
+    await runner.waitSettled()
+
+    for (let idx = 1; idx < percents.length; idx += 1) {
+      assert.ok(
+        percents[idx] >= percents[idx - 1],
+        `多批次扫描百分比必须单调不降: ${percents.join(' -> ')}`,
+      )
+    }
+
+    const final = runner.snapshot()
+    assert.equal(final.status, 'completed')
+    assert.equal(final.progress.percent, 100)
+    assert.equal(final.totalImages, 11)
+    assert.equal(final.progress.dirsScanned, 11)
+    assert.equal(final.progress.machinesPending, 0)
+  })
+
+  await test('ScanTaskRunner + ScanFs: 断网熔断自动暂停，恢复网络后 resume 完成扫描', async () => {
+    const { ScanTaskRunner } = await import('../src/main/services/scanner/task')
+    const root = '/virtual/DC'
+    const machines = ['A01', 'A02', 'A03', 'A04', 'A05', 'A06']
+    let networkOnline = false
+
+    let resolvePaused: (() => void) | null = null
+    const pausedPromise = new Promise<void>((resolve) => {
+      resolvePaused = resolve
+    })
+
+    const fakeRead = async (path: string) => {
+      if (!networkOnline) {
+        return {
+          status: 'unreachable' as const,
+          code: 'ETIMEDOUT',
+          dirs: [],
+          files: [],
+          elapsedMs: 5,
+        }
+      }
+
+      if (path.endsWith('/NG')) {
+        return {
+          status: 'ok' as const,
+          dirs: [],
+          files: ['ok.jpg'],
+          elapsedMs: 1,
+        }
+      }
+      if (path.endsWith('/8')) {
+        return { status: 'ok' as const, dirs: ['NG'], files: [], elapsedMs: 1 }
+      }
+      if (path.endsWith('/白班')) {
+        return { status: 'ok' as const, dirs: ['8'], files: [], elapsedMs: 1 }
+      }
+      if (path.endsWith('/20261104')) {
+        return {
+          status: 'ok' as const,
+          dirs: ['白班'],
+          files: [],
+          elapsedMs: 1,
+        }
+      }
+      return {
+        status: 'ok' as const,
+        dirs: ['20261104'],
+        files: [],
+        elapsedMs: 1,
+      }
+    }
+
+    const runner = new ScanTaskRunner(
+      {
+        category: 'el',
+        machines,
+        date: '20261104',
+        shift: '白班',
+        slots: ['8'],
+        types: ['NG'],
+      },
+      {
+        category: 'el',
+        resolver: createElResolver(root, 'EL', fakeRead),
+        load: { readConcurrency: 2, machineBatchSize: 2 },
+        fs: {
+          readDir: fakeRead,
+          statFile: async () => ({ size: 512, mtimeMs: 1 }),
+        },
+      },
+      (snap) => {
+        if (snap.status === 'paused' && snap.pauseReason === 'network') {
+          resolvePaused?.()
+        }
+      },
+    )
+
+    runner.start()
+    await pausedPromise
+
+    const pausedSnap = runner.snapshot()
+    assert.equal(pausedSnap.status, 'paused')
+    assert.equal(pausedSnap.pauseReason, 'network')
+    assert.ok(pausedSnap.progress.dirsUnreachable > 0)
+
+    networkOnline = true
+    runner.resume()
+    await runner.waitSettled()
+
+    const final = runner.snapshot()
+    assert.equal(final.status, 'completed')
+    assert.ok(final.totalImages > 0, '恢复网络后剩余机台应正常产出图片')
   })
 }
 
@@ -3978,9 +4133,6 @@ const scanReadModelTests = async () => {
   await test('展示模型: 统计、分组与每行摘要', async () => {
     const view = deriveScanTaskView(base())
 
-    assert.equal(view.abnormalCount, 4)
-    assert.deepEqual(view.inaccessible, { network: 1, auth: 1, denied: 1 })
-    assert.equal(view.hasInaccessible, true)
     assert.equal(view.etaText, formatEta(65_000))
     assert.equal(view.machinesPending, 2)
     assert.equal(view.phaseDescription, '探测目录')

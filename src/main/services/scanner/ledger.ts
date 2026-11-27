@@ -1,100 +1,147 @@
 import type { ScanPhase, ScanTaskProgress } from '../../../shared/ipc'
 
 /**
- * 扫描进度账本。
+ * 扫描进度账本（单机台均分单调模型）：`ScanTaskProgress` 全部 16 个字段的唯一 owner。
  *
- * 以前 doneLeaves、dirsSkipped、detailTotal/detailDone、finishedMachines、
- * probedMachines 由执行器在十二个交错位置手工递增，percent/phase/ETA 又从
- * 这些计数器反推；「每个结束的 leaf 恰好计一次」没有 owner，每处递增的
- * 注释都是一次线上 bug。
+ * ADR-0010 将扫描改为按机台升序分批流水线（单台完成前缀探测 → 叶子展开 → 目录收图与 stat）。
+ * 旧的全局 `detailDone / detailTotal` 公式会在第 1 台读完时吃满 30% 明细权重，第 2 台入队时又把
+ * 百分比拉回倒退，且 `phase` 在第 1 台收图后永久卡在 `collect`。
  *
- * 这里把不变量收进一个 module，interface 是事件而不是计数器：执行器说
- * 「这台机台下结论了」「这批 leaf 命中/跳过」「明细入队/读完」，账本自己
- * 维护 phase、percent、ETA、machinesPending 与跳过数。
+ * 现在每台机台均分 `1 / M` 总进度份额：
+ * - 单台内按「前缀探测 20% → 叶子展开 50% → 明细读取 30%」单调推进；
+ * - 断链、无匹配时段或无匹配类型的机台在得出结论时直接结清本台 100% 份额；
+ * - `phase` 按当前是否存在在途明细读取动态反映 `probe` / `collect`，`finish()` 后定格为 `done`。
  */
 
-/** 探测阶段在进度条上占的权重，其余留给收图 */
-const PROBE_WEIGHT = 20
-/** 逐目录读文件明细占的权重 */
-const DETAIL_WEIGHT = 30
+const MACHINE_PROBE_SHARE = 0.2
+const MACHINE_LEAF_SHARE = 0.5
+const MACHINE_DETAIL_SHARE = 0.3
 
-export interface ScanLedgerOptions {
-  machines: number
-  /** 单个机台分支的叶子数：有效时段 × 等级 × 类型 */
-  leavesPerBranch: number
+interface MachineProgressSlot {
+  probed: boolean
+  concluded: boolean
+  leavesDone: number
+  detailTotal: number
+  detailDone: number
 }
 
-/** 账本负责的派生字段；执行器把它合并进 progress */
-export type ScanLedgerProjection = Pick<
-  ScanTaskProgress,
-  | 'phase'
-  | 'percent'
-  | 'etaMs'
-  | 'machinesPending'
-  | 'detailsPending'
-  | 'detailTotal'
-  | 'detailDone'
-  | 'dirsSkipped'
->
+export interface ScanLedgerOptions {
+  machines: readonly string[]
+  /** 单台机台的笛卡尔积叶子数（时段 × 等级 × 类型） */
+  leavesPerBranch: number
+  concurrency: number
+  batchTotal: number
+}
+
+export interface DetailReadOutcome {
+  ok: boolean
+  hitImages?: number
+}
 
 export interface ScanLedger {
-  /** 机台探测成功（能继续往下读） */
-  machineProbed: () => void
-  /** 机台已经下结论：探测完成、解析失败、中途断链都算 */
-  machineConcluded: () => void
-  /** 一批 leaf 出了结论；hit + skipped 都要计入完成 */
-  leavesConcluded: (hit: number, skipped: number) => void
-  /** 待读明细入队 */
-  detailQueued: (count: number) => void
-  /** 一个明细读完；失败同时计入目录跳过 */
-  detailConcluded: (ok: boolean) => void
-  /** 进入明细阶段；没有待读目录时保持探测阶段 */
-  enterCollect: (hasQueue: boolean) => void
-  /** 全部完成 */
+  /** 更新当前批次号（1-based） */
+  setBatch: (batchIndex: number) => void
+  /** 更新自适应并发档位 */
+  setConcurrency: (concurrency: number) => void
+  /** 更新当前正在访问的路径 */
+  setCurrentPath: (currentPath: string) => void
+  /** 记录一次网络层不可达计数 */
+  recordUnreachable: () => void
+  /** 单台机台读通到班次目录 */
+  machineProbed: (machine: string) => void
+  /** 单台机台下有若干叶子得出存在/缺失结论 */
+  leavesConcluded: (machine: string, hit: number, skipped: number) => void
+  /** 单台机台确认了待读取明细的叶子类型目录数 */
+  detailQueued: (machine: string, count: number) => void
+  /** 单台机台读完一个叶子类型目录的文件明细 */
+  detailConcluded: (machine: string, outcome: DetailReadOutcome) => void
+  /** 单台机台完整结束（无论命中、空目录、缺失还是不可达） */
+  machineConcluded: (machine: string) => void
+  /** 全部机台扫描流程收尾 */
   finish: () => void
-  /** 按当前事件流算出派生值 */
-  project: (now: number, startedAt: number | null) => ScanLedgerProjection
+  /** 生成完整的进度快照 */
+  snapshot: (now: number, startedAt: number | null) => ScanTaskProgress
 }
 
 export const createScanLedger = ({
   machines,
   leavesPerBranch,
+  concurrency: initialConcurrency,
+  batchTotal,
 }: ScanLedgerOptions): ScanLedger => {
-  const totalLeaves = machines * leavesPerBranch
+  const slots = new Map<string, MachineProgressSlot>(
+    machines.map((machine) => [
+      machine,
+      {
+        probed: false,
+        concluded: false,
+        leavesDone: 0,
+        detailTotal: 0,
+        detailDone: 0,
+      },
+    ]),
+  )
 
-  let probedMachines = 0
-  let finishedMachines = 0
-  let doneLeaves = 0
-
+  let dirsScanned = 0
+  let dirsHit = 0
+  let dirsSkipped = 0
+  let dirsUnreachable = 0
+  let images = 0
+  let currentPath = ''
+  let concurrency = initialConcurrency
+  let batchIndex = machines.length > 0 ? 1 : 0
   let detailTotal = 0
   let detailDone = 0
-  let dirsSkipped = 0
+  let finishedMachines = 0
+  let done = false
+  let highWaterPercent = 0
 
-  let phase: ScanPhase = 'probe'
+  const slotOf = (machine: string): MachineProgressSlot | undefined =>
+    slots.get(machine)
 
-  const percent = (): number => {
-    if (phase === 'done') return 100
+  const machineRatio = (slot: MachineProgressSlot): number => {
+    if (slot.concluded) return 1
 
-    const machineTotal = machines || 1
-    const leafTotal = totalLeaves || 1
+    const probePart = slot.probed ? MACHINE_PROBE_SHARE : 0
+    const leafPart =
+      leavesPerBranch > 0
+        ? Math.min(1, slot.leavesDone / leavesPerBranch) * MACHINE_LEAF_SHARE
+        : slot.probed
+          ? MACHINE_LEAF_SHARE
+          : 0
+    const detailPart =
+      slot.detailTotal > 0
+        ? Math.min(1, slot.detailDone / slot.detailTotal) * MACHINE_DETAIL_SHARE
+        : 0
 
-    const probeRatio = Math.min(1, probedMachines / machineTotal)
-    const leafRatio = Math.min(1, doneLeaves / leafTotal)
-    const detailRatio =
-      detailTotal > 0 ? Math.min(1, detailDone / detailTotal) : 0
-
-    // 探测 20%、叶子确定 50%、逐目录读明细 30%，三者都完成才是 100%
-    return Math.min(
-      100,
-      Math.round(
-        probeRatio * PROBE_WEIGHT +
-          leafRatio * (100 - PROBE_WEIGHT - DETAIL_WEIGHT) +
-          detailRatio * DETAIL_WEIGHT,
-      ),
-    )
+    return Math.min(1, probePart + leafPart + detailPart)
   }
 
-  const eta = (current: number, now: number, startedAt: number | null) => {
+  const computePercent = (): number => {
+    if (done) return 100
+    if (machines.length === 0) return 0
+
+    let sum = 0
+    for (const slot of slots.values()) {
+      sum += machineRatio(slot)
+    }
+
+    const raw = Math.min(100, Math.round((sum / machines.length) * 100))
+    highWaterPercent = Math.max(highWaterPercent, raw)
+
+    return highWaterPercent
+  }
+
+  const computePhase = (): ScanPhase => {
+    if (done) return 'done'
+    return detailTotal > detailDone ? 'collect' : 'probe'
+  }
+
+  const computeEta = (
+    current: number,
+    now: number,
+    startedAt: number | null,
+  ): number | null => {
     if (current >= 100) return 0
     if (current < 5 || startedAt === null) return null
 
@@ -107,41 +154,79 @@ export const createScanLedger = ({
   }
 
   return {
-    machineProbed: () => {
-      probedMachines += 1
+    setBatch: (next) => {
+      batchIndex = next
     },
-    machineConcluded: () => {
-      finishedMachines += 1
+    setConcurrency: (next) => {
+      concurrency = next
     },
-    leavesConcluded: (hit, skipped) => {
-      doneLeaves += hit + skipped
+    setCurrentPath: (next) => {
+      currentPath = next
+    },
+    recordUnreachable: () => {
+      dirsUnreachable += 1
+    },
+    machineProbed: (machine) => {
+      const slot = slotOf(machine)
+      if (slot) slot.probed = true
+    },
+    leavesConcluded: (machine, hit, skipped) => {
+      const slot = slotOf(machine)
+      if (slot) slot.leavesDone += hit + skipped
       dirsSkipped += skipped
     },
-    detailQueued: (count) => {
+    detailQueued: (machine, count) => {
+      const slot = slotOf(machine)
+      if (slot) slot.detailTotal += count
       detailTotal += count
     },
-    detailConcluded: (ok) => {
+    detailConcluded: (machine, { ok, hitImages = 0 }) => {
+      const slot = slotOf(machine)
+      if (slot) slot.detailDone += 1
       detailDone += 1
-      if (!ok) dirsSkipped += 1
+
+      if (!ok) {
+        dirsSkipped += 1
+        return
+      }
+
+      dirsScanned += 1
+      if (hitImages > 0) {
+        dirsHit += 1
+        images += hitImages
+      }
     },
-    enterCollect: (hasQueue) => {
-      phase = hasQueue ? 'collect' : 'probe'
+    machineConcluded: (machine) => {
+      const slot = slotOf(machine)
+      if (!slot || slot.concluded) return
+      slot.concluded = true
+      finishedMachines += 1
     },
     finish: () => {
-      phase = 'done'
+      done = true
+      currentPath = ''
+      highWaterPercent = 100
     },
-    project: (now, startedAt) => {
-      const current = percent()
+    snapshot: (now, startedAt) => {
+      const percent = computePercent()
 
       return {
-        phase,
-        percent: current,
-        etaMs: eta(current, now, startedAt),
-        machinesPending: Math.max(0, machines - finishedMachines),
+        phase: computePhase(),
+        percent,
+        dirsScanned,
+        dirsHit,
+        dirsSkipped,
+        dirsUnreachable,
+        images,
+        currentPath,
         detailsPending: Math.max(0, detailTotal - detailDone),
+        concurrency,
+        batchIndex,
+        batchTotal,
         detailTotal,
         detailDone,
-        dirsSkipped,
+        machinesPending: Math.max(0, machines.length - finishedMachines),
+        etaMs: computeEta(percent, now, startedAt),
       }
     },
   }
