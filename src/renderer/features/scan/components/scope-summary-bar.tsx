@@ -1,16 +1,11 @@
 import { ChevronDown, Search } from 'lucide-react'
 import { Badge, Box, Button, Flex, Text, Tooltip } from '@radix-ui/themes'
-import { useShallow } from 'zustand/react/shallow'
 
 import { Panel } from '@/components/panel'
-import { scanScopeOf } from '../scanScope'
+import { useSettingsStore } from '@/features/settings'
 import type { ScanCategory } from '@shared/ipc'
-import { AOI_IMAGE_KIND_LABEL, plantLabel } from '@shared/ipc'
 
-const formatDateLabel = (date: string): string =>
-  date.length === 8
-    ? `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6)}`
-    : date
+import { useScanScopeView } from '../scanScope'
 
 interface ScopeSummaryBarProps {
   category: ScanCategory
@@ -21,68 +16,18 @@ interface ScopeSummaryBarProps {
 /**
  * 折叠态的单行扫描范围摘要条（Scope Summary Bar）。
  *
- * 扫描启动或历史恢复后替换展开态的 Scope Parameter Matrix，
- * 用单行紧凑标签保留当前筛选上下文，把首屏空间让给任务进度与结果表。
+ * 摘要分段与悬停明细直接来自 `Scan Scope` 派生模型，不再维护第二份按类别分支规则。
  */
 export const ScopeSummaryBar = ({
   category,
   busy,
   onExpand,
 }: ScopeSummaryBarProps) => {
-  const scope = scanScopeOf(category)
-  const state = scope.store(
-    useShallow((store) => ({
-      plant: store.plant,
-      selectedMachines: store.selectedMachines,
-      date: store.date,
-      shift: store.shift,
-      slots: store.slots,
-      types: store.types,
-      levels: store.levels,
-      imageKind: store.imageKind,
-    })),
+  const settings = useSettingsStore((state) => state.settings)
+  const { summarySegments, summaryTooltip } = useScanScopeView(
+    category,
+    settings,
   )
-
-  const segments: string[] = []
-  const plantText = state.plant ? plantLabel(state.plant) : ''
-  segments.push(
-    plantText
-      ? `${plantText} ${state.selectedMachines.length} 台`
-      : `${state.selectedMachines.length} 台机台`,
-  )
-
-  if (state.date) {
-    segments.push(`${formatDateLabel(state.date)} ${state.shift}`)
-  }
-
-  if (category !== 'aoi' && state.slots.length > 0) {
-    segments.push(`${state.slots.length} 时段`)
-  }
-
-  if (category === 'pl' && state.levels.length > 0) {
-    segments.push(`等级 ${state.levels.join('/')}`)
-  }
-
-  if (category === 'aoi') {
-    segments.push(AOI_IMAGE_KIND_LABEL[state.imageKind])
-  }
-
-  if (state.types.length > 0) {
-    segments.push(
-      state.types.length <= 2
-        ? state.types.join('、')
-        : `${state.types.slice(0, 2).join('、')} 等 ${state.types.length} 类`,
-    )
-  }
-
-  const tooltipDetail = [
-    state.selectedMachines.length > 0
-      ? `机台：${state.selectedMachines.join('、')}`
-      : null,
-    state.types.length > 0 ? `类型：${state.types.join('、')}` : null,
-  ]
-    .filter(Boolean)
-    .join('\n')
 
   return (
     <Panel>
@@ -100,10 +45,10 @@ export const ScopeSummaryBar = ({
             </Flex>
           </Box>
 
-          <Tooltip content={tooltipDetail || '当前扫描范围'}>
+          <Tooltip content={summaryTooltip || '当前扫描范围'}>
             <Box minWidth="0" flexGrow="1">
               <Text size="2" weight="medium" truncate className="tabular">
-                {segments.join(' · ')}
+                {summarySegments.join(' · ')}
               </Text>
             </Box>
           </Tooltip>

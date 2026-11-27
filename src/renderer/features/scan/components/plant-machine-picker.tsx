@@ -1,5 +1,3 @@
-import type { ReactNode } from 'react'
-import { useEffect, useMemo } from 'react'
 import { Building2, Monitor, RefreshCw, Search } from 'lucide-react'
 import {
   Box,
@@ -15,134 +13,80 @@ import {
 import { BulkActions } from '@/components/bulk-actions/bulk-actions'
 import { ChoiceList, ChoiceRadio } from '@/components/choice-list'
 import { Field } from '@/components/field'
+import { useSettingsStore } from '@/features/settings'
 import { useToast } from '@/hooks/useToast'
-import type { PlantFilterStore } from '../stores/plantFilterStore'
-import type { EntrySetupResult, Plant } from '@shared/ipc'
-import { plantLabel } from '@shared/ipc'
+import type {
+  AoiImageKind,
+  AoiSide,
+  EntrySetupResult,
+  ScanCategory,
+} from '@shared/ipc'
 import {
-  compareMachineName,
-  compareNatural,
-  defaultSelectedKeys,
-  machinePath,
-} from './plant-machine-model'
-import type { MachineListFilter, PickableMachine } from './plant-machine-model'
+  AOI_IMAGE_DIRS,
+  AOI_IMAGE_KIND_LABEL,
+  AOI_SIDE_LABEL,
+  plantLabel,
+} from '@shared/ipc'
+import { SCAN_CATEGORY_META } from '@shared/scanCategories'
 
-export type { MachineListFilter, PickableMachine } from './plant-machine-model'
+import { scanScopeOf } from '../scanScope'
+import { machinePath } from './plant-machine-model'
 
 interface PlantMachinePickerProps {
-  /** 已识别的机台（含 stale），由页面从 settings 里传进来 */
-  machines: PickableMachine[]
-  entryRoot: string | null
-  saving?: boolean
-  error?: string | null
-  /** 该页的筛选状态，两类各有自己的实例 */
-  filter: PlantFilterStore
-  onSetup?: (entryRoot: string) => Promise<EntrySetupResult | null>
-  onRefresh: () => Promise<EntrySetupResult | null>
-  /** 厂区与机台之间的额外字段（森标 AOI 的检测面） */
-  beforeMachineList?: ReactNode
-  /** 机台列表之后的额外字段（森标 AOI 的图片类型） */
-  afterMachineList?: ReactNode
-  /** 机台列表的额外过滤（森标 AOI 的检测面） */
-  machineFilter?: MachineListFilter
-  /** 只有文案不同，结构与交互完全一致；缺省值保持入口类页面的现有文案 */
-  labels: {
-    searchPlaceholder: string
-    rootPlaceholder?: string
-    rootHint?: string
-    rootLabel?: string
-    pickTitle?: string
-    refreshLabel?: string
-    emptyText?: string
-    unconfiguredText?: string
-    /** EL 在输入路径但尚未保存时显示「正在识别」；不传则保持入口类文案 */
-    recognizingText?: string
-  }
-  onChanged?: () => void
+  category: ScanCategory
 }
 
 /**
- * 厂区与机台选择器。
+ * Plant Machine Picker（厂区与机台选择器）。
  *
- * 入口目录已上提至页面吸顶标题栏，此处专注于厂区与机台的筛选与多选。
+ * `Entry Root` 已上提至 `Page Header Actions`，本模块专注于厂区切换、
+ * AOI 检测面与图片类型切换、机台过滤与多选；默认勾选与裁剪规则统一在 `Scan Scope`。
  */
-const PlantMachinePicker = ({
-  machines,
-  entryRoot,
-  saving = false,
-  error = null,
-  filter,
-  onRefresh,
-  beforeMachineList,
-  afterMachineList,
-  machineFilter,
-  labels,
-  onChanged,
-}: PlantMachinePickerProps) => {
+const PlantMachinePicker = ({ category }: PlantMachinePickerProps) => {
   const { showToast } = useToast()
+  const scope = scanScopeOf(category)
+  const meta = SCAN_CATEGORY_META[category]
 
-  const plant = filter((state) => state.plant)
-  const keyword = filter((state) => state.keyword)
-  const selectedMachines = filter((state) => state.selectedMachines)
-  const setPlant = filter((state) => state.setPlant)
-  const setKeyword = filter((state) => state.setKeyword)
-  const setSelectedMachines = filter((state) => state.setSelectedMachines)
+  const settings = useSettingsStore((state) => state.settings)
+  const saving = useSettingsStore((state) => state.saving)
+  const error = useSettingsStore((state) => state.error)
+  const refreshEl = useSettingsStore((state) => state.refresh)
+  const refreshLxt = useSettingsStore((state) => state.refreshLxt)
+  const refreshPl = useSettingsStore((state) => state.refreshPl)
+  const refreshAoi = useSettingsStore((state) => state.refreshAoi)
 
-  const active = useMemo(
-    () =>
-      machines
-        .filter((item) => !item.stale)
-        .sort((a, b) => compareMachineName(a.name, b.name)),
-    [machines],
+  const { plant, keyword, selectedMachines, side, imageKind } = scope.useSlice(
+    (state) => ({
+      plant: state.plant,
+      keyword: state.keyword,
+      selectedMachines: state.selectedMachines,
+      side: state.side,
+      imageKind: state.imageKind,
+    }),
   )
 
-  // 厂区从机台列表去重后动态生成：以后多一个「三区」只需新建文件夹
-  const plants = useMemo(() => {
-    const names = [...new Set(active.map((item) => item.plant))]
-    return names.sort((a, b) => compareNatural(plantLabel(a), plantLabel(b)))
-  }, [active])
+  const {
+    configured,
+    activeMachines,
+    plants,
+    visibleMachines,
+    allVisibleSelected,
+    sideCounts,
+  } = scope.projectMachines(settings)
 
-  // 当前厂区被删掉或首次进来时，自动落到第一个厂区并默认选中除 LX 外的所有机台
-  useEffect(() => {
-    if (!plants.length) return
-    if (!plants.includes(plant)) {
-      const firstPlant = plants[0]
-      setPlant(firstPlant)
-      setSelectedMachines(
-        defaultSelectedKeys(active, firstPlant, machineFilter),
-      )
+  const handleRefresh = async () => {
+    let result: EntrySetupResult | null = null
+
+    if (category === 'el') {
+      await refreshEl()
+    } else if (category === 'lxt') {
+      result = await refreshLxt()
+    } else if (category === 'pl') {
+      result = await refreshPl()
+    } else {
+      result = await refreshAoi()
     }
-  }, [plants, plant, active, machineFilter, setPlant, setSelectedMachines])
 
-  const handlePlantChange = (nextPlant: Plant) => {
-    if (nextPlant === plant) return
-    setPlant(nextPlant)
-    setSelectedMachines(defaultSelectedKeys(active, nextPlant, machineFilter))
-  }
-
-  /** 当前厂区的机台，调用方的额外过滤在这之上做第二次筛选 */
-  const inPlant = useMemo(
-    () => active.filter((item) => item.plant === plant),
-    [active, plant],
-  )
-
-  const visible = useMemo(() => {
-    const filtered = machineFilter
-      ? inPlant.filter((item) => machineFilter.test(item))
-      : inPlant
-    const key = keyword.trim().toUpperCase()
-
-    return key
-      ? filtered.filter((item) => item.name.toUpperCase().includes(key))
-      : filtered
-  }, [inPlant, keyword, machineFilter])
-
-  // 入口重新识别后，被标成 stale 的机台要从选中里剔掉，否则会一直挂在那里
-  useEffect(() => {
-    filter.getState().pruneSelected(active.map((item) => item.key))
-  }, [active, filter])
-
-  const announce = (result: EntrySetupResult | null) => {
     if (!result) return
 
     const parts = [`${result.added} 台新增`]
@@ -150,33 +94,17 @@ const PlantMachinePicker = ({
     if (result.relocated) parts.push(`${result.relocated} 台位置已更新`)
 
     showToast('机台识别完成', parts.join('，') || '机台列表无变化', 'info')
-    onChanged?.()
   }
-
-  const toggleAll = () => {
-    const currentKeys = visible.map((m) => m.key)
-    const allSelected = currentKeys.every((k) => selectedMachines.includes(k))
-    if (allSelected) {
-      setSelectedMachines(
-        selectedMachines.filter((k) => !currentKeys.includes(k)),
-      )
-    } else {
-      const merged = new Set([...selectedMachines, ...currentKeys])
-      setSelectedMachines([...merged])
-    }
-  }
-
-  const configured = Boolean(entryRoot)
 
   return (
     <Flex direction="column" gap="4">
-      {error && (
+      {error ? (
         <Callout.Root color="red" size="1">
           <Callout.Text>{error}</Callout.Text>
         </Callout.Root>
-      )}
+      ) : null}
 
-      {configured && active.length > 0 ? (
+      {configured && activeMachines.length > 0 ? (
         <Flex direction="column" gap="4">
           <Field
             label="厂区"
@@ -186,29 +114,48 @@ const PlantMachinePicker = ({
             <ChoiceRadio
               layout="inline"
               value={plant}
-              onValueChange={handlePlantChange}
-              options={plants.map((name) => ({
-                value: name,
-                label: plantLabel(name),
-                meta: active.filter((item) => item.plant === name).length,
+              onValueChange={(nextPlant) =>
+                scope.changePlant(nextPlant, settings)
+              }
+              options={plants.map((item) => ({
+                value: item.value,
+                label: item.label,
+                meta: item.count,
               }))}
             />
           </Field>
 
-          {beforeMachineList}
+          {meta.hasSideFilter ? (
+            <Field label="检测面">
+              <ChoiceRadio
+                layout="inline"
+                value={side}
+                onValueChange={(value) =>
+                  scope.changeSide(value as AoiSide, settings)
+                }
+                options={(['all', 'front', 'back'] as AoiSide[]).map(
+                  (value) => ({
+                    value,
+                    label: AOI_SIDE_LABEL[value],
+                    meta: sideCounts[value],
+                  }),
+                )}
+              />
+            </Field>
+          ) : null}
 
           <Field
             label="机台"
             icon={<Monitor size={15} strokeWidth={1.75} />}
-            count={`${selectedMachines.length}/${visible.length}`}
+            count={`${selectedMachines.length}/${visibleMachines.length}`}
             actions={
               <>
                 <Box width="200px">
                   <TextField.Root
                     value={keyword}
-                    placeholder={labels.searchPlaceholder}
+                    placeholder={meta.searchPlaceholder}
                     spellCheck={false}
-                    onChange={(e) => setKeyword(e.target.value)}
+                    onChange={(event) => scope.setKeyword(event.target.value)}
                   >
                     <TextField.Slot side="left">
                       <Search size={14} strokeWidth={1.75} />
@@ -216,12 +163,9 @@ const PlantMachinePicker = ({
                   </TextField.Root>
                 </Box>
                 <BulkActions
-                  onToggleAll={toggleAll}
-                  allSelected={
-                    visible.length > 0 &&
-                    visible.every((item) => selectedMachines.includes(item.key))
-                  }
-                  toggleDisabled={visible.length === 0}
+                  onToggleAll={() => scope.toggleVisibleMachines(settings)}
+                  allSelected={allVisibleSelected}
+                  toggleDisabled={visibleMachines.length === 0}
                   selectLabel="全选本区"
                   cancelLabel="清空本区"
                   toggleIcon
@@ -230,10 +174,10 @@ const PlantMachinePicker = ({
                       type="button"
                       variant="soft"
                       color="gray"
-                      aria-label={labels.refreshLabel ?? '重新识别入口'}
+                      aria-label={meta.refreshLabel}
                       disabled={saving}
-                      onClick={async () => announce(await onRefresh())}
-                      title={labels.refreshLabel ?? '重新识别入口'}
+                      onClick={() => void handleRefresh()}
+                      title={meta.refreshLabel}
                     >
                       {saving ? (
                         <Spinner size="1" />
@@ -246,15 +190,15 @@ const PlantMachinePicker = ({
               </>
             }
           >
-            {visible.length ? (
+            {visibleMachines.length ? (
               <ChoiceList
                 layout="inline"
                 itemWidth="128px"
                 scroll
                 scrollMaxHeight="180px"
                 value={selectedMachines}
-                onValueChange={setSelectedMachines}
-                options={visible.map((machine) => {
+                onValueChange={scope.setSelectedMachines}
+                options={visibleMachines.map((machine) => {
                   const path = machinePath(machine)
 
                   return {
@@ -278,19 +222,35 @@ const PlantMachinePicker = ({
               <Text size="2" color="gray">
                 {keyword.trim()
                   ? `没有匹配「${keyword}」的机台`
-                  : (machineFilter?.emptyText ?? '没有可用机台')}
+                  : meta.hasSideFilter && side !== 'all'
+                    ? '当前检测面下没有机台'
+                    : '没有可用机台'}
               </Text>
             )}
           </Field>
 
-          {afterMachineList}
+          {meta.hasImageKind ? (
+            <Field label="图片类型">
+              <ChoiceRadio
+                layout="inline"
+                value={imageKind}
+                onValueChange={(value) =>
+                  scope.setImageKind(value as AoiImageKind)
+                }
+                options={(['whole', 'partial'] as AoiImageKind[]).map(
+                  (value) => ({
+                    value,
+                    label: AOI_IMAGE_KIND_LABEL[value],
+                    tooltip: AOI_IMAGE_DIRS[value],
+                  }),
+                )}
+              />
+            </Field>
+          ) : null}
         </Flex>
       ) : (
         <Text size="2" color="gray">
-          {configured
-            ? (labels.emptyText ?? '入口里没有可用机台，请检查快捷方式')
-            : (labels.unconfiguredText ??
-              '在顶部选择入口目录后，会自动识别各厂区机台')}
+          {configured ? meta.emptyMachinesText : meta.unconfiguredText}
         </Text>
       )}
     </Flex>

@@ -75,9 +75,8 @@ Windows 上实际位置是 `%APPDATA%\QuickFetch\`，**和开发态是同一个�
 
 **诊断、探测与页面派生各有唯一落点**：目录读取失败的状态 → 原因 → 文案 → 断网样本只在
 `src/main/services/scanner/diagnosis.ts`；LXT/PL 的共享名两步读取、30 天日期窗口与网络重试只在
-`src/main/services/scanner/shareProbe.ts`。渲染层的 ready/missing/参数指纹、历史回填、
-按 catalog/入口裁剪与类别差异只在 `features/scan/scanScopePlan.ts`（纯规则）+
-`scanScope.ts`（接 store）；`usePlantScanPage` 只订阅 store；扫描页的 scan/copy/history 接线走
+`src/main/services/scanner/shareProbe.ts`。渲染层的 `Scan Scope`（默认播种、班次/厂区/检测面切换、历史原子回填、按 catalog/入口裁剪、ready/missing/参数指纹与 `Scope Summary Bar` 摘要）统一在
+`features/scan/scanScope.ts`；扫描页的 scan/copy/history 接线走
 `useScanSession`；复制的 done/percent/有效目录走 `copyReadModel`，扫描面板的统计、不可访问
 分组、阶段文案、ETA 与每行摘要走 `features/scan/scanReadModel.ts`；任务容量与淘汰走
 `src/main/utils/taskTable.ts`。扫描结果的落盘资格、幂等、裁剪与 live-vs-历史查找只在

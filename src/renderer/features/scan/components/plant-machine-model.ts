@@ -1,5 +1,4 @@
-import type { ReactNode } from 'react'
-import type { Plant } from '@shared/ipc'
+import type { AppSettings, MachineInfo, Plant, ScanCategory } from '@shared/ipc'
 
 export interface PickableMachine {
   plant: Plant
@@ -14,16 +13,43 @@ export interface PickableMachine {
   stale: boolean
 }
 
+const trimTrailingSep = (value: string): string => value.replace(/[\\/]+$/, '')
+
 /**
- * 机台列表的额外过滤与空态文案。
+ * EL 机台映射到共享 picker 的形状。
  *
- * 用带 `test` 的函数而不是布尔开关：调用方决定「筛掉哪些机台」，
- * 基座只负责在厂区过滤之后、关键词之前应用，不关心为什么筛。
+ * key 必须是纯机台名：EL 按名字首字母判厂区，一旦拼成「厂区/机台」，
+ * 切换厂区或传入主进程时 key 会失配。
  */
-export interface MachineListFilter {
-  test: (machine: PickableMachine) => boolean
-  /** 过滤后列表为空时的文案；不传用「没有可用机台」 */
-  emptyText?: ReactNode
+export const elPickableMachines = (
+  machines: MachineInfo[],
+  entryRoot?: string | null,
+): PickableMachine[] => {
+  const root = entryRoot ? trimTrailingSep(entryRoot) : ''
+
+  return machines.map((machine) => ({
+    plant: machine.plant,
+    name: machine.name,
+    key: machine.name,
+    host: root ? `${root}\\${machine.name}` : '',
+    share: null,
+    stale: false,
+  }))
+}
+
+/** 按类别从配置提取统一形状的机台列表（含 stale） */
+export const pickableMachinesFromSettings = (
+  category: ScanCategory,
+  settings: AppSettings | null,
+): PickableMachine[] => {
+  if (!settings) return []
+
+  if (category === 'el') {
+    const el = settings.categories.el
+    return elPickableMachines(el.machines, el.entryRoot)
+  }
+
+  return settings.categories[category].machines
 }
 
 /** 机台名按自然序升序：7A 排在 10A 之前，跟现场习惯一致 */
@@ -31,7 +57,7 @@ export const compareNatural = (a: string, b: string): number =>
   a.localeCompare(b, 'zh-CN', { numeric: true })
 
 /** 是否为 LX 类机台（如 A-LXJC-01、LX2）；自动默认选中时排除、排序置后，手动全选不排除 */
-const isLxMachine = (name: string): boolean => /lx/i.test(name)
+export const isLxMachine = (name: string): boolean => /lx/i.test(name)
 
 /** 机台排序：普通机台在前、LX 机台置后，两组内部各自按自然数字升序 */
 export const compareMachineName = (a: string, b: string): number => {
@@ -41,18 +67,16 @@ export const compareMachineName = (a: string, b: string): number => {
   return compareNatural(a, b)
 }
 
-/** 计算指定厂区下默认选中的机台键（排除 stale 与 LX，并尊重调用方的额外过滤如 AOI 检测面） */
+/** 计算指定厂区下默认选中的机台键（排除 stale 与 LX，并按可选谓词过滤） */
 export const defaultSelectedKeys = (
   machines: PickableMachine[],
   targetPlant: Plant,
-  machineFilter?: MachineListFilter,
+  predicate?: (machine: PickableMachine) => boolean,
 ): string[] => {
   const inTarget = machines.filter(
     (item) => !item.stale && item.plant === targetPlant,
   )
-  const filtered = machineFilter
-    ? inTarget.filter((item) => machineFilter.test(item))
-    : inTarget
+  const filtered = predicate ? inTarget.filter(predicate) : inTarget
 
   return filtered
     .filter((item) => !isLxMachine(item.name))
@@ -61,13 +85,9 @@ export const defaultSelectedKeys = (
 
 /**
  * 机台悬停展示的绝对路径（从主机名到机台固定标识或共享目录）。
- *
- * - EL：host 已拼好 `entryRoot\机台名`，share 为 null
- * - 力禧特 / 利珀：有 share 时拼 `host\share`，未探测或无共享仅展示 host
- * - 森标 AOI：share 恒为 null，仅展示 host
  */
 export const machinePath = (machine: PickableMachine): string => {
-  const base = machine.host.replace(/[\\/]+$/, '')
+  const base = trimTrailingSep(machine.host)
   if (!base) return ''
 
   return machine.share ? `${base}\\${machine.share}` : base

@@ -64,15 +64,13 @@ import {
   createHistoryStore,
   toTask,
 } from '../src/main/services/scanner/history'
-import { deriveScanParams } from '../src/renderer/features/scan/scanParams'
-import { elPickableMachines } from '../src/renderer/features/scan/components/el-machine-model'
+import { elPickableMachines } from '../src/renderer/features/scan/components/plant-machine-model'
 import {
   ENTRY_CATEGORIES,
   ENTRY_DESCRIPTORS,
 } from '../src/main/services/discovery/categories'
 import { mergeLxtMachines } from '../src/main/services/discovery/lxt'
 import { decideSignatureChange } from '../src/renderer/features/scan/sessionTransitions'
-import { pruneMachinesToSide } from '../src/renderer/features/scan/stores/plantFilterStore'
 import {
   SCAN_CATEGORIES,
   SCAN_CATEGORY_META,
@@ -100,13 +98,7 @@ import { createTaskTable } from '../src/main/utils/taskTable'
 import { createTaskLifecycle } from '../src/main/utils/taskLifecycle'
 import { createTaskArchive } from '../src/main/services/scanner/archive'
 import { createScanLedger } from '../src/main/services/scanner/ledger'
-import {
-  activeMachineKeys,
-  aliveTypes,
-  deriveScope,
-  planFilterRestore,
-} from '../src/renderer/features/scan/scanScopePlan'
-import type { PlantFilterSlice } from '../src/renderer/features/scan/stores/plantFilterStore'
+import { createScanScope } from '../src/renderer/features/scan/scanScope'
 import {
   deriveScanTaskView,
   elapsedLabel,
@@ -2044,94 +2036,6 @@ const shareProbeTests = async () => {
 }
 
 const scanParamsTests = async () => {
-  const base = {
-    configured: true,
-    plant: '东区',
-    selectedMachines: ['东区/1A'],
-    date: '20261104',
-    shift: '夜班' as const,
-    slots: ['20'],
-    types: ['NG'],
-    levels: [],
-    typeCatalog: ['NG'],
-  }
-
-  await test('页面参数: 标准类别包含时段与厂区指纹', async () => {
-    const derived = deriveScanParams({
-      ...base,
-      hasSlots: true,
-      requiresLevels: false,
-    })
-
-    assert.equal(derived.ready, true)
-    assert.deepEqual(derived.missing, [])
-    assert.equal(derived.params.slots[0], '20')
-    assert.ok(derived.filterSignature.startsWith('东区|20261104'))
-    assert.ok(derived.filterSignature.includes('20'))
-  })
-
-  await test('页面参数: AOI 无时段层、利珀需要等级', async () => {
-    const aoi = deriveScanParams({
-      ...base,
-      slots: ['20'],
-      hasSlots: false,
-      requiresLevels: false,
-    })
-    assert.equal(aoi.ready, true)
-    assert.deepEqual(aoi.params.slots, [])
-    assert.equal(
-      aoi.filterSignature.split('|')[3],
-      '',
-      '无时段层的类别不应把时段写进指纹',
-    )
-
-    const pl = deriveScanParams({
-      ...base,
-      levels: [],
-      hasSlots: true,
-      requiresLevels: true,
-    })
-    assert.equal(pl.ready, false)
-    assert.ok(pl.missing.includes('等级'))
-
-    const plWithLevel = deriveScanParams({
-      ...base,
-      levels: ['A'],
-      hasSlots: true,
-      requiresLevels: true,
-    })
-    assert.equal(plWithLevel.ready, true)
-    assert.deepEqual(plWithLevel.params.levels, ['A'])
-  })
-
-  await test('页面参数: 类别 descriptor 驱动四类派生', async () => {
-    for (const category of SCAN_CATEGORIES) {
-      const meta = SCAN_CATEGORY_META[category]
-      const derived = deriveScanParams({
-        ...base,
-        slots: ['20'],
-        levels: meta.requiresLevels ? ['A'] : [],
-        hasSlots: meta.hasSlots,
-        requiresLevels: meta.requiresLevels,
-        imageKind: meta.hasImageKind ? 'whole' : undefined,
-        types: ['NG'],
-        typeCatalog: ['NG'],
-      })
-
-      assert.equal(derived.ready, true, `${category} 应可扫描`)
-      assert.deepEqual(
-        derived.params.slots,
-        meta.hasSlots ? ['20'] : [],
-        `${category} 的时段层应与 descriptor 一致`,
-      )
-      assert.equal(
-        'aoiImageKind' in derived.params,
-        meta.hasImageKind,
-        `${category} 的图片类型字段应与 descriptor 一致`,
-      )
-    }
-  })
-
   await test('类别 descriptor: 清单穷尽且默认配置形状一致', async () => {
     assert.deepEqual(
       [...SCAN_CATEGORIES].sort(),
@@ -2144,6 +2048,7 @@ const scanParamsTests = async () => {
     for (const category of SCAN_CATEGORIES) {
       const meta = SCAN_CATEGORY_META[category]
       assert.ok(meta.label && meta.networkHint, category)
+      assert.ok(meta.typePlaceholder && meta.searchPlaceholder, category)
       assert.ok(
         Array.isArray(settings.categories[category].typeCatalog),
         `${category} 的类型清单不在配置里`,
@@ -2151,63 +2056,16 @@ const scanParamsTests = async () => {
     }
   })
 
-  await test('页面参数: AOI 图片类型进参数与指纹', async () => {
-    const whole = deriveScanParams({
-      ...base,
-      hasSlots: false,
-      requiresLevels: false,
-      imageKind: 'whole',
-    })
-    const partial = deriveScanParams({
-      ...base,
-      hasSlots: false,
-      requiresLevels: false,
-      imageKind: 'partial',
-    })
-
-    assert.equal(whole.params.aoiImageKind, 'whole')
-    assert.equal(partial.params.aoiImageKind, 'partial')
-    assert.notEqual(
-      whole.filterSignature,
-      partial.filterSignature,
-      '整体/局部读的是两个目录，换一种就等于换了扫描范围',
-    )
-
-    // 非 AOI 类别不传 imageKind 时不能把字段带进参数
-    const el = deriveScanParams({
-      ...base,
-      hasSlots: true,
-      requiresLevels: false,
-    })
-    assert.equal('aoiImageKind' in el.params, false)
-  })
-
   await test('会话时序: 指纹变化只在用户改范围时清结果', async () => {
-    // 首次只记基线
     assert.equal(decideSignatureChange(null, 'a', 'completed'), 'adopt')
     assert.equal(decideSignatureChange('a', 'a', 'completed'), 'ignore')
 
-    // 用户改范围：已结束的才清，运行中不清
     assert.equal(decideSignatureChange('a', 'b', 'completed'), 'reset')
     assert.equal(decideSignatureChange('a', 'b', 'interrupted'), 'reset')
     assert.equal(decideSignatureChange('a', 'b', 'running'), 'adopt')
     assert.equal(decideSignatureChange('a', 'b', null), 'adopt')
 
-    // 恢复历史把基线推进到恢复后的指纹后，同一个指纹不再算变化
     assert.equal(decideSignatureChange('b', 'b', 'completed'), 'ignore')
-  })
-
-  await test('页面参数: 类型清单为空时提示去编辑', async () => {
-    const derived = deriveScanParams({
-      ...base,
-      types: [],
-      typeCatalog: [],
-      hasSlots: true,
-      requiresLevels: false,
-    })
-
-    assert.equal(derived.ready, false)
-    assert.ok(derived.missing.includes('类型（点「编辑」添加）'))
   })
 
   await test('EL picker: 机台映射保持纯机台名', async () => {
@@ -2447,17 +2305,6 @@ const aoiTests = async () => {
       '混选时必须回到全部，否则恢复后有机台被列表藏起来',
     )
     assert.equal(aoiSideOfMachines(['东区/1A']), 'all')
-  })
-
-  await test('检测面: 切换时裁掉另一侧已选机台', async () => {
-    const selected = ['东区/1A正检', '东区/1A背检', '东区/2A正检']
-
-    assert.deepEqual(pruneMachinesToSide(selected, 'front'), [
-      '东区/1A正检',
-      '东区/2A正检',
-    ])
-    assert.deepEqual(pruneMachinesToSide(selected, 'back'), ['东区/1A背检'])
-    assert.deepEqual(pruneMachinesToSide(selected, 'all'), selected)
   })
 }
 
@@ -3646,7 +3493,102 @@ const ipcContractTests = async () => {
 /* ---------------------------------------------------------------- 23. 扫描范围 */
 
 const scanScopeTests = async () => {
-  const item = (
+  const dayClock = () => new Date(2026, 10, 4, 10, 15, 0) // 2026-11-04 10:15 白班 -> ['8','9','10']
+
+  const makeSettings = () => {
+    const settings = defaultSettings()
+
+    settings.categories.el.entryRoot = '\\\\10.0.0.1\\DC'
+    settings.categories.el.machines = [
+      { plant: 'east', name: 'A01' },
+      { plant: 'east', name: 'A-LXJC-01' },
+      { plant: 'west', name: 'B02' },
+    ]
+    settings.categories.el.typeCatalog = ['NG_脏污_D']
+
+    settings.categories.lxt.entryRoot = '\\\\10.0.0.1\\lxt'
+    settings.categories.lxt.machines = [
+      {
+        plant: '东区',
+        name: '7A',
+        key: '东区/7A',
+        host: '\\\\10.0.0.11',
+        share: 'SaveImages',
+        stale: false,
+      },
+      {
+        plant: '东区',
+        name: 'LX2',
+        key: '东区/LX2',
+        host: '\\\\10.0.0.12',
+        share: null,
+        stale: false,
+      },
+      {
+        plant: '东区',
+        name: '7B',
+        key: '东区/7B',
+        host: '\\\\10.0.0.13',
+        share: null,
+        stale: true,
+      },
+      {
+        plant: '西区',
+        name: '8A',
+        key: '西区/8A',
+        host: '\\\\10.0.0.14',
+        share: 'el',
+        stale: false,
+      },
+    ]
+    settings.categories.lxt.typeCatalog = ['NG']
+
+    settings.categories.pl.entryRoot = '\\\\10.0.0.1\\pl'
+    settings.categories.pl.machines = [
+      {
+        plant: '东区',
+        name: '6B',
+        key: '东区/6B',
+        host: '\\\\10.0.0.21',
+        share: 'pl-6b',
+        stale: false,
+      },
+    ]
+    settings.categories.pl.typeCatalog = ['脏污', '划伤']
+
+    settings.categories.aoi.entryRoot = '\\\\10.0.0.1\\aoi'
+    settings.categories.aoi.machines = [
+      {
+        plant: '东区',
+        name: '1A正检',
+        key: '东区/1A正检',
+        host: '\\\\10.0.0.31',
+        share: null,
+        stale: false,
+      },
+      {
+        plant: '东区',
+        name: '1A背检',
+        key: '东区/1A背检',
+        host: '\\\\10.0.0.32',
+        share: null,
+        stale: false,
+      },
+      {
+        plant: '东区',
+        name: 'LX1正检',
+        key: '东区/LX1正检',
+        host: '\\\\10.0.0.33',
+        share: null,
+        stale: false,
+      },
+    ]
+    settings.categories.aoi.typeCatalog = ['色差']
+
+    return settings
+  }
+
+  const historyItem = (
     category: ScanCategory,
     params: Partial<ScanTaskParams> & { machines: string[] },
   ): ScanHistoryItem => ({
@@ -3655,13 +3597,13 @@ const scanScopeTests = async () => {
     category,
     params: {
       category,
-      date: '20261104',
+      date: '20261103',
       shift: '夜班',
-      slots: ['8'],
+      slots: ['20', '21'],
       types: ['NG'],
       ...params,
     },
-    totalImages: 1,
+    totalImages: 3,
     hitMachines: 1,
     machineCount: params.machines.length,
     elapsedMs: 1000,
@@ -3671,116 +3613,175 @@ const scanScopeTests = async () => {
     restorable: true,
   })
 
-  const slice = (patch: Partial<PlantFilterSlice> = {}): PlantFilterSlice => ({
-    plant: '',
-    keyword: '',
-    selectedMachines: ['东区/1A'],
-    date: '20261104',
-    shift: '夜班',
-    slots: ['8'],
-    types: ['NG'],
-    levels: [],
-    imageKind: 'whole',
-    side: 'all',
-    ...patch,
-  })
+  await test('Scan Scope: 四类默认播种（日期/班次/补零时段/等级/排除 LX 机台）', async () => {
+    const settings = makeSettings()
 
-  await test('范围: EL 历史回填按首台机台定厂区', async () => {
-    const plan = planFilterRestore(
-      'el',
-      item('el', { machines: ['A7B', 'B8C'] }),
+    const el = createScanScope('el', { now: dayClock })
+    el.reconcile(settings)
+    assert.equal(el.getState().date, '20261104')
+    assert.equal(el.getState().shift, '白班')
+    assert.deepEqual(el.getState().slots, ['8', '9', '10'])
+    assert.equal(el.getState().plant, 'east')
+    assert.deepEqual(
+      el.getState().selectedMachines,
+      ['A01'],
+      '默认选中应排除 LX 机台并保持纯机台名',
     )
 
-    assert.equal(plan.plant, elPlantOf('A7B'))
-    assert.deepEqual(plan.machines, ['A7B', 'B8C'])
-    assert.deepEqual(plan.slots, ['8'])
-    assert.equal(plan.levels, undefined)
+    const pl = createScanScope('pl', { now: dayClock })
+    pl.reconcile(settings)
+    assert.deepEqual(
+      pl.getState().slots,
+      ['08', '09', '10'],
+      '利珀时段必须补零为两位',
+    )
+    assert.deepEqual(pl.getState().levels, ['A', 'B', 'C'])
+
+    const aoi = createScanScope('aoi', { now: dayClock })
+    aoi.reconcile(settings)
+    assert.deepEqual(aoi.getState().slots, [])
+    assert.deepEqual(aoi.getState().selectedMachines, [
+      '东区/1A背检',
+      '东区/1A正检',
+    ])
   })
 
-  await test('范围: 力禧特从复合键取厂区，不带等级', async () => {
-    const plan = planFilterRestore(
-      'lxt',
-      item('lxt', {
-        machines: ['东区/7A', '东区/7B'],
-        levels: ['A'],
+  await test('Scan Scope: 用户切班次重播时段，跨班次恢复历史绝不清空时段或漂移指纹', async () => {
+    const settings = makeSettings()
+    const lxt = createScanScope('lxt', { now: dayClock })
+    lxt.reconcile(settings)
+
+    lxt.changeShift('夜班')
+    assert.equal(lxt.getState().shift, '夜班')
+    assert.deepEqual(lxt.getState().slots, [])
+
+    lxt.changeShift('白班')
+    assert.deepEqual(lxt.getState().slots, ['8', '9', '10'])
+
+    lxt.restore(
+      historyItem('lxt', {
+        machines: ['西区/8A'],
+        shift: '夜班',
+        slots: ['20', '21'],
+        types: ['NG'],
       }),
+      settings,
     )
+    const baseline = lxt.project(settings).filterSignature
 
-    assert.equal(plan.plant, '东区')
-    assert.deepEqual(plan.machines, ['东区/7A', '东区/7B'])
-    assert.equal(plan.levels, undefined)
+    lxt.reconcile(settings)
+    const afterReconcile = lxt.project(settings)
+
+    assert.equal(lxt.getState().shift, '夜班')
+    assert.deepEqual(
+      lxt.getState().slots,
+      ['20', '21'],
+      '跨班次恢复历史后时段不得被清空',
+    )
+    assert.equal(afterReconcile.ready, true)
+    assert.equal(
+      decideSignatureChange(
+        baseline,
+        afterReconcile.filterSignature,
+        'completed',
+      ),
+      'ignore',
+      '恢复历史后的 reconcile 不得触发结果重置',
+    )
   })
 
-  await test('范围: 利珀保留等级', async () => {
-    const plan = planFilterRestore(
-      'pl',
-      item('pl', { machines: ['东区/6B'], levels: ['A', 'B'] }),
+  await test('Scan Scope: 切厂区与切 AOI 检测面默认重选非 LX 机台并保证单厂区互斥', async () => {
+    const settings = makeSettings()
+    const aoi = createScanScope('aoi', { now: dayClock })
+    aoi.reconcile(settings)
+
+    aoi.changeSide('front', settings)
+    assert.equal(aoi.getState().side, 'front')
+    assert.deepEqual(
+      aoi.getState().selectedMachines,
+      ['东区/1A正检'],
+      '切正检时自动勾选正检非 LX 机台并剔除背检',
     )
 
-    assert.deepEqual(plan.levels, ['A', 'B'])
+    aoi.changeSide('back', settings)
+    assert.deepEqual(aoi.getState().selectedMachines, ['东区/1A背检'])
+
+    const lxt = createScanScope('lxt', { now: dayClock })
+    lxt.reconcile(settings)
+    assert.deepEqual(lxt.getState().selectedMachines, ['东区/7A'])
+
+    lxt.changePlant('西区', settings)
+    assert.equal(lxt.getState().plant, '西区')
+    assert.deepEqual(lxt.getState().selectedMachines, ['西区/8A'])
+
+    lxt.setSelectedMachines(['东区/7A', '西区/8A'])
+    assert.deepEqual(lxt.getState().selectedMachines, ['西区/8A'])
   })
 
-  await test('范围: AOI 无时段、图片类型与检测面', async () => {
-    const plan = planFilterRestore(
-      'aoi',
-      item('aoi', { machines: ['东区/1A正检'], aoiImageKind: 'partial' }),
-    )
-
-    assert.deepEqual(plan.slots, [])
-    assert.equal(plan.imageKind, 'partial')
-    assert.equal(plan.side, 'front')
-  })
-
-  await test('范围: 按入口与类型清单裁剪', async () => {
-    const settings = defaultSettings()
-
-    settings.categories.el.machines = [
-      { plant: '东区', name: 'A1', deleted: false },
-    ] as never
-    settings.categories.el.typeCatalog = ['NG']
-    settings.categories.lxt.typeCatalog = ['NG']
-    settings.categories.lxt.machines = [
-      {
-        plant: '东区',
-        name: '7A',
-        key: '东区/7A',
-        host: '\\\\10.0.0.1',
-        share: null,
-        stale: false,
+  await test('Scan Scope: 历史回填、过期机台/类型裁剪、持久化与摘要派生', async () => {
+    const settings = makeSettings()
+    const sharedMap = new Map<string, string>()
+    const storage = {
+      getItem: (name: string) => sharedMap.get(name) ?? null,
+      setItem: (name: string, value: string) => {
+        sharedMap.set(name, value)
       },
-      {
-        plant: '东区',
-        name: '7B',
-        key: '东区/7B',
-        host: '\\\\10.0.0.2',
-        share: null,
-        stale: true,
+      removeItem: (name: string) => {
+        sharedMap.delete(name)
       },
-    ]
+    }
 
-    assert.deepEqual(activeMachineKeys('el', settings), ['A1'])
-    assert.deepEqual(activeMachineKeys('lxt', settings), ['东区/7A'])
-    assert.deepEqual(aliveTypes('lxt', settings, ['NG', 'OLD']), ['NG'])
-    assert.deepEqual(aliveTypes('el', settings, ['NG', 'OLD']), ['NG'])
-    assert.deepEqual(activeMachineKeys('pl', null), [])
-  })
+    const el = createScanScope('el', { now: dayClock, storage })
+    el.restore(
+      historyItem('el', {
+        machines: ['B02'],
+        types: ['NG_脏污_D', '已删类型'],
+      }),
+      settings,
+    )
+    assert.equal(el.getState().plant, 'west')
+    assert.deepEqual(el.getState().selectedMachines, ['B02'])
+    assert.deepEqual(el.getState().types, ['NG_脏污_D'])
 
-  await test('范围: deriveScope 注入类别差异', async () => {
-    const aoi = deriveScope(
-      'aoi',
-      slice({ imageKind: 'partial', side: 'front' }),
-      true,
-      ['NG'],
+    const elReloaded = createScanScope('el', { now: dayClock, storage })
+    elReloaded.reconcile(null)
+    assert.deepEqual(
+      elReloaded.getState().types,
+      ['NG_脏污_D'],
+      '配置尚未异步加载完成前不能把持久化类型裁空',
     )
 
-    assert.equal(aoi.ready, true)
-    assert.deepEqual(aoi.params.slots, [])
-    assert.equal(aoi.params.aoiImageKind, 'partial')
+    const aoi = createScanScope('aoi', { now: dayClock })
+    aoi.restore(
+      historyItem('aoi', {
+        machines: ['东区/1A正检'],
+        aoiImageKind: 'partial',
+        slots: ['20'],
+        types: ['色差'],
+      }),
+      settings,
+    )
+    const partialView = aoi.project(settings)
+    assert.equal(aoi.getState().side, 'front')
+    assert.deepEqual(partialView.params.slots, [])
+    assert.equal(partialView.params.aoiImageKind, 'partial')
+    assert.ok(partialView.summarySegments.includes('局部'))
 
-    const pl = deriveScope('pl', slice({ levels: [] }), true, ['NG'])
+    aoi.setImageKind('whole')
+    assert.notEqual(
+      aoi.project(settings).filterSignature,
+      partialView.filterSignature,
+      '切换整体/局部必须改变范围指纹',
+    )
 
-    assert.equal(pl.ready, false)
-    assert.ok(pl.missing.includes('等级'))
+    const pl = createScanScope('pl', { now: dayClock })
+    settings.categories.pl.typeCatalog = []
+    pl.reconcile(settings)
+    pl.setLevels([])
+    const plView = pl.project(settings)
+    assert.equal(plView.ready, false)
+    assert.ok(plView.missing.includes('等级'))
+    assert.ok(plView.missing.includes('类型（点「编辑」添加）'))
   })
 }
 

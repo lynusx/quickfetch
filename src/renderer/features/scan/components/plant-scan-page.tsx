@@ -1,5 +1,4 @@
-import type { ReactNode } from 'react'
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ChevronUp, Play, Search, TriangleAlert } from 'lucide-react'
 import {
   Badge,
@@ -14,51 +13,51 @@ import {
 } from '@radix-ui/themes'
 
 import { Collapse } from '@/components/collapse'
-import { HistoryPanel } from '@/features/history'
 import { PageShell } from '@/components/page-shell/page-shell'
 import { Panel, PanelBody, PanelHeader } from '@/components/panel'
+import { HistoryPanel } from '@/features/history'
+import { useSettingsStore } from '@/features/settings'
+import { useToast } from '@/hooks/useToast'
+import type { ScanCategory, ScanHistoryItem } from '@shared/ipc'
+import { NETWORK_HINT } from '@shared/networkHint'
+import { SCAN_CATEGORY_LABEL } from '@shared/scanCategories'
+
+import { useScanSession } from '../hooks/useScanSession'
+import { scanScopeOf, useScanScopeView } from '../scanScope'
+import PlantFilterPanel from './plant-filter-panel'
 import { ScanEntryRootBar, ScanEntrySetupCard } from './scan-entry-root-bar'
 import { ScanStatusBadge } from './scan-status-badge'
 import { ScanTaskPanel } from './scan-task-panel'
 import { ScopeSummaryBar } from './scope-summary-bar'
-import { useScanSession } from '../hooks/useScanSession'
-import { useToast } from '@/hooks/useToast'
-import type { ScanCategory, ScanHistoryItem, ScanTaskParams } from '@shared/ipc'
-import { SCAN_CATEGORY_LABEL } from '@shared/scanCategories'
 import '../scan.css'
+
+const NETWORK_RESUME_HINT = `${NETWORK_HINT}；点「继续」即可接着扫，已扫到的结果不会丢`
 
 interface PlantScanPageProps {
   category: ScanCategory
-  configured: boolean
-  hasMachines: boolean
-  networkHint: string
-  ready: boolean
-  missing?: string[]
-  getParams: () => Omit<ScanTaskParams, 'category'>
-  /**
-   * 当前扫描范围的指纹。任一项变化就收起上一轮的结果，
-   * 避免"切了日期，下方还挂着上一次的结论"。
-   */
-  filterSignature: string
-  /** 按 store 当前状态重算指纹；历史恢复后用它推进基线 */
-  getSignature: () => string
-  /** 扫描范围表单内容（按时间 → 厂区/机台 → 类型顺序排布） */
-  scopeForm: ReactNode
 }
 
-const PlantScanPage = ({
-  category,
-  configured,
-  hasMachines,
-  networkHint,
-  ready,
-  missing,
-  getParams,
-  filterSignature,
-  getSignature,
-  scopeForm,
-}: PlantScanPageProps) => {
+const PlantScanPage = ({ category }: PlantScanPageProps) => {
   const { showToast } = useToast()
+  const settings = useSettingsStore((state) => state.settings)
+  const load = useSettingsStore((state) => state.load)
+
+  const scope = scanScopeOf(category)
+  const { configured, hasMachines, ready, missing, filterSignature, params } =
+    useScanScopeView(category, settings)
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  useEffect(() => {
+    scope.reconcile(settings)
+  }, [scope, settings])
+
+  const getSignature = useCallback(
+    () => scope.project(useSettingsStore.getState().settings).filterSignature,
+    [scope],
+  )
 
   const {
     task,
@@ -76,7 +75,7 @@ const PlantScanPage = ({
   } = useScanSession({
     category,
     showToast,
-    getParams,
+    getParams: () => params,
     filterSignature,
     getSignature,
   })
@@ -164,7 +163,7 @@ const PlantScanPage = ({
                       data-readonly={busy ? 'true' : undefined}
                       aria-disabled={busy || undefined}
                     >
-                      {scopeForm}
+                      <PlantFilterPanel category={category} />
                     </Flex>
 
                     {!task && other && otherLabel ? (
@@ -199,7 +198,7 @@ const PlantScanPage = ({
                           wrap="wrap"
                         >
                           <Text size="2" color="gray">
-                            {!ready && missing?.length
+                            {!ready && missing.length
                               ? `请先选择：${missing.join('、')}`
                               : '范围已就绪'}
                           </Text>
@@ -244,7 +243,7 @@ const PlantScanPage = ({
               error={error}
               other={other}
               otherLabel={otherLabel}
-              networkHint={networkHint}
+              networkHint={NETWORK_RESUME_HINT}
               showToast={showToast}
               onStart={() => void start()}
               onPause={() => void pause()}

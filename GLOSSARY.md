@@ -20,6 +20,10 @@ _Avoid_: Top bar controls, navigation actions, window toolbar
 The top-down vertical page layout where scan parameter configuration (Scope Parameter Matrix, collapsing into the Scope Summary Bar once active) sits on top, and the Single-Column Task Stream sits below, eliminating cross-column height asymmetries.
 _Avoid_: Two-column scan layout, split-screen workspace, side-by-side scan view
 
+**Scan Scope**:
+The category-specific selection state and domain invariants governing a scan workspace—covering the active plant, selected machines, date, shift, time slots, optional AOI inspection side and image kind, optional PL defect levels, defect types, readiness validation, and scope fingerprint—powering both the Scope Parameter Matrix and Scope Summary Bar.
+_Avoid_: Filter store, scan params, scope plan
+
 **Scope Parameter Matrix**:
 The collapsible single-column vertical parameter card at the top of the scan workspace that flows paired date/shift and time slots first, followed by plant/machines (with AOI side/image kind), PL levels, and defect types from top to bottom using borderless inline Radix Radio/Checkbox controls; collapses into the Scope Summary Bar during scanning or result inspection.
 _Avoid_: Left filter panel, scan scope drawer, filter column, 3-column parameter matrix

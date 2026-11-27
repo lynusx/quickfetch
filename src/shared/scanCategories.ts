@@ -4,12 +4,8 @@ import { NETWORK_HINT } from './networkHint'
 /**
  * 扫描类别的唯一描述表。
  *
- * 「一个扫描类别是什么」以前散在五张手写 Record、一条四臂 if 链和四份
- * 几乎一样的 page 里；加一类要跳七个模块。这里把能共享的部分收在一处：
- * 文案、路径形态、有没有图片类型、类型清单存在哪个字段。
- *
- * 不能共享的仍留在各自的地方：main 的 resolver 构造、renderer 的 store
- * 实例、页面上的入口/机台选择器。
+ * 把四类扫描的文案、路径形态、时段格式、检索占位与能力开关集中在一处，
+ * 新增或修改类别差异时不再跨页面、表单、选择器与摘要条逐个同步。
  */
 
 /** 有稳定顺序：侧边栏、页面装配、穷尽性检查都按它走 */
@@ -40,10 +36,26 @@ export interface ScanCategoryMeta {
   networkHint: string
   /** 路径里有没有时段层 */
   hasSlots: boolean
+  /** 时段目录是否补零为两位（利珀 08/09） */
+  paddedSlots: boolean
   /** 路径里有没有缺陷等级层（利珀） */
   requiresLevels: boolean
+  /** 有没有「正检 / 背检」检测面筛选（森标 AOI） */
+  hasSideFilter: boolean
   /** 有没有「整体 / 局部」图片类型（森标 AOI） */
   hasImageKind: boolean
+  /** 编辑类型弹窗输入框占位 */
+  typePlaceholder: string
+  /** 空类型提示示例 */
+  typeExample: string
+  /** 机台搜索输入框占位 */
+  searchPlaceholder: string
+  /** 机台刷新按钮无障碍名称与悬停提示 */
+  refreshLabel: string
+  /** 已配置入口但没有可用机台时的空状态提示 */
+  emptyMachinesText: string
+  /** 未配置入口时的提示 */
+  unconfiguredText: string
 }
 
 export const SCAN_CATEGORY_META = {
@@ -51,29 +63,61 @@ export const SCAN_CATEGORY_META = {
     label: 'EL',
     networkHint: `共享盘连接中断，任务已暂停。${NETWORK_HINT}`,
     hasSlots: true,
+    paddedSlots: false,
     requiresLevels: false,
+    hasSideFilter: false,
     hasImageKind: false,
+    typePlaceholder: 'NG_脏污_D',
+    typeExample: 'NG_脏污_B',
+    searchPlaceholder: '按机台名搜索，如 A03',
+    refreshLabel: '重新识别机台',
+    emptyMachinesText: 'DC 根目录下没有可用机台，请点刷新重新识别',
+    unconfiguredText: '在顶部配置根目录后，这里会出现厂区与机台列表',
   },
   lxt: {
     label: '力禧特EL',
     networkHint: `连不上力禧特机台，任务已暂停。${NETWORK_HINT}`,
     hasSlots: true,
+    paddedSlots: false,
     requiresLevels: false,
+    hasSideFilter: false,
     hasImageKind: false,
+    typePlaceholder: 'NG_脏污_A-',
+    typeExample: 'NG_脏污_A-',
+    searchPlaceholder: '搜索机台，如 7 或 LX',
+    refreshLabel: '重新识别入口并探测共享',
+    emptyMachinesText: '入口里没有可用机台，请检查快捷方式',
+    unconfiguredText: '在顶部选择入口目录后，会自动识别各厂区机台',
   },
   pl: {
     label: '利珀PL',
     networkHint: `连不上利珀机台，任务已暂停。${NETWORK_HINT}`,
     hasSlots: true,
+    paddedSlots: true,
     requiresLevels: true,
+    hasSideFilter: false,
     hasImageKind: false,
+    typePlaceholder: '脏污',
+    typeExample: '脏污、面划伤',
+    searchPlaceholder: '搜索机台，如 6 或 LX',
+    refreshLabel: '重新识别入口并探测共享',
+    emptyMachinesText: '入口里没有可用机台，请检查快捷方式',
+    unconfiguredText: '在顶部选择入口目录后，会自动识别各厂区机台',
   },
   aoi: {
     label: '森标 AOI',
     networkHint: `连不上森标 AOI 机台，任务已暂停。${NETWORK_HINT}`,
     hasSlots: false,
+    paddedSlots: false,
     requiresLevels: false,
+    hasSideFilter: true,
     hasImageKind: true,
+    typePlaceholder: '色差',
+    typeExample: '色差、色斑、大饼片',
+    searchPlaceholder: '搜索机台，如 1A 或 背检',
+    refreshLabel: '重新识别入口',
+    emptyMachinesText: '入口里没有可用机台，请检查快捷方式',
+    unconfiguredText: '在顶部选择入口目录后，会自动识别各厂区机台',
   },
 } as const satisfies Record<ScanCategory, ScanCategoryMeta>
 
