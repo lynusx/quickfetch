@@ -26,10 +26,5 @@ export const registerHistoryIpc = (): void => {
     return archive.list()
   })
 
-  handle('setHistoryLimit', async (_event, limit: number) => {
-    const settings = await saveHistoryLimit(limit)
-
-    await getArchive().trim(settings.historyLimit)
-    return settings
-  })
+  handle('setHistoryLimit', (_event, limit: number) => saveHistoryLimit(limit))
 }

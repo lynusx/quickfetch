@@ -12,19 +12,26 @@ import { join } from 'node:path'
 import { DEFAULT_PREFERENCES } from '../shared/ipc'
 import { registerIpcHandlers } from './ipc'
 import {
+  applyThemeAppearance,
   initAppearanceService,
+  rememberUiScale,
   resolveTitleBarOverlay,
   resolveWindowBackground,
   syncWindowScale,
 } from './services/appearance'
-import { cleanupSettingsTempFiles, readSettings } from './services/settings'
+import {
+  cleanupSettingsTempFiles,
+  onSettingsChange,
+  readSettings,
+} from './services/settings'
 import { initLogger, logger } from './services/log'
 import {
+  applyUpdatePreferences,
   disposeUpdateService,
   initUpdateService,
   isInstallingUpdate,
 } from './services/update'
-import { persistUnfinished } from './services/scanner'
+import { getArchive, persistUnfinished } from './services/scanner'
 
 // electron-vite 在开发模式下注入渲染层 dev server 地址
 const rendererDevUrl = process.env['ELECTRON_RENDERER_URL']
@@ -237,6 +244,47 @@ if (!hasSingleInstanceLock) {
 
     // 自动更新：启动后按设置延迟检查一次；免安装版只检查不安装
     initUpdateService(settings?.preferences ?? null)
+
+    // 单点订阅配置落盘后的运行期联动（日志开关、主题、缩放、更新检查与历史条数裁剪）
+    onSettingsChange(async (previous, next) => {
+      if (
+        next.preferences.debugLogEnabled !==
+        previous.preferences.debugLogEnabled
+      ) {
+        if (next.preferences.debugLogEnabled) {
+          logger.setEnabled(true)
+          logger.info('settings', 'debug-log.changed', {
+            enabled: true,
+            source: 'settings-page',
+          })
+        } else {
+          logger.info('settings', 'debug-log.changed', {
+            enabled: false,
+            source: 'settings-page',
+          })
+          logger.setEnabled(false)
+        }
+      }
+
+      if (next.preferences.appearance !== previous.preferences.appearance) {
+        applyThemeAppearance(next.preferences.appearance)
+      }
+
+      if (next.preferences.scale !== previous.preferences.scale) {
+        rememberUiScale(next.preferences.scale)
+      }
+
+      if (
+        next.preferences.updateAutoCheckEnabled !==
+        previous.preferences.updateAutoCheckEnabled
+      ) {
+        applyUpdatePreferences(next.preferences)
+      }
+
+      if (next.historyLimit !== previous.historyLimit) {
+        await getArchive().trim(next.historyLimit)
+      }
+    })
 
     registerIpcHandlers()
     createWindow()

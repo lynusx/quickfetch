@@ -16,6 +16,11 @@ import { logger } from '../log'
  * 无法用临时目录测试。现在内核只认 `file` 与 `normalize`。
  */
 
+export type SettingsChangeListener<T> = (
+  previous: T,
+  next: T,
+) => void | Promise<void>
+
 export interface SettingsStoreOptions<T> {
   /** 配置文件的绝对路径；生产用 userData，测试用临时目录 */
   file: string
@@ -27,6 +32,8 @@ export interface SettingsStoreOptions<T> {
   normalize: (value: Record<string, unknown>) => T
   /** 落盘前去掉运行期字段；缺省原样序列化 */
   serialize?: (value: T) => unknown
+  /** 可选初始变更观察者，每次原子写盘成功后收到规范化前后的快照 */
+  onChange?: SettingsChangeListener<T>
 }
 
 export interface SettingsStore<T> {
@@ -34,6 +41,8 @@ export interface SettingsStore<T> {
   read: () => Promise<T>
   /** 在串行队列里完成一次读改写；返回同一对象表示无需落盘 */
   update: (mutate: (current: T) => T | Promise<T>) => Promise<T>
+  /** 订阅落盘成功后的配置变更；返回取消订阅函数 */
+  subscribe: (listener: SettingsChangeListener<T>) => () => void
   /** 等待当前排队的写入全部落盘；失败也放行 */
   flush: () => Promise<void>
   /** 清理上次进程被强杀时留下的临时文件 */
@@ -49,7 +58,10 @@ export const createSettingsStore = <T>({
   isSupported,
   normalize,
   serialize,
+  onChange,
 }: SettingsStoreOptions<T>): SettingsStore<T> => {
+  const listeners = new Set<SettingsChangeListener<T>>()
+  if (onChange) listeners.add(onChange)
   /**
    * 把损坏/版本不认识的配置留档，避免下一次写入把现场配置直接覆盖掉。
    * 留档失败不阻塞启动，只记录日志。
@@ -146,10 +158,29 @@ export const createSettingsStore = <T>({
       const current = await read()
       const next = await mutate(current)
 
-      if (next !== current) await write(next)
+      if (next !== current) {
+        await write(next)
+        for (const listener of listeners) {
+          try {
+            await listener(current, next)
+          } catch (error) {
+            logger.error('settings', 'settings.listener.failed', {
+              path: file,
+              error,
+            })
+          }
+        }
+      }
 
       return next
     })
+
+  const subscribe = (listener: SettingsChangeListener<T>): (() => void) => {
+    listeners.add(listener)
+    return () => {
+      listeners.delete(listener)
+    }
+  }
 
   /**
    * 清理上次进程被强杀时留下的 `<file>.*.tmp`。
@@ -179,6 +210,7 @@ export const createSettingsStore = <T>({
     file,
     read,
     update,
+    subscribe,
     flush: () =>
       queue.then(
         () => undefined,

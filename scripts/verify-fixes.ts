@@ -63,6 +63,7 @@ import {
   normalizeTypeCatalog,
 } from '../src/main/services/settings'
 import { createSettingsStore } from '../src/main/services/settings/store'
+import { createRendererSettingsStore } from '../src/renderer/features/settings/settingsStore'
 import {
   createHistoryStore,
   toTask,
@@ -4243,6 +4244,150 @@ const settingsStoreTests = async () => {
     assert.equal(existsSync(tmp), false)
     assert.equal(existsSync(join(dir, 'keep.txt')), true)
     assert.equal(existsSync(file), true)
+  })
+
+  await test('设置内核: subscribe 仅在实际落盘后触发，观察者异常不影响已落盘结果', async () => {
+    const { store } = await make()
+    const observed: Array<[number, number, number]> = []
+
+    const unsubscribe = store.subscribe(async (prev, next) => {
+      const onDisk = await store.read()
+      observed.push([prev.count, next.count, onDisk.count])
+    })
+
+    // 返回原引用不写盘、不通知观察者
+    await store.update((current) => current)
+    assert.equal(observed.length, 0)
+
+    await store.update((current) => ({ ...current, count: 5 }))
+    assert.deepEqual(observed, [[0, 5, 5]])
+
+    // 观察者抛错时已落盘的写入依然成功返回，不会误导调用方回滚界面
+    store.subscribe(() => {
+      throw new Error('observer boom')
+    })
+    const saved = await store.update((current) => ({ ...current, count: 9 }))
+    assert.equal(saved.count, 9)
+    assert.deepEqual(observed, [
+      [0, 5, 5],
+      [5, 9, 9],
+    ])
+
+    unsubscribe()
+    await store.update((current) => ({ ...current, count: 12 }))
+    assert.equal(observed.length, 2, '取消订阅后不再收到通知')
+  })
+
+  await test('渲染端设置 Store: 水合去重、切页短路与交错乐观提交/回滚保护', async () => {
+    let readCalls = 0
+    let pendingPrefReject: ((error: Error) => void) | null = null
+    let pendingCatalogResolve: ((saved: AppSettings) => void) | null = null
+
+    const serverState = defaultSettings()
+
+    const useStore = createRendererSettingsStore({
+      readSettings: async () => {
+        readCalls += 1
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        return structuredClone(serverState)
+      },
+      setupEntryRoot: async () => ({
+        settings: structuredClone(serverState),
+        added: 0,
+        removed: 0,
+        relocated: 0,
+      }),
+      refreshEntryMachines: async () => ({
+        settings: structuredClone(serverState),
+        added: 0,
+        removed: 0,
+        relocated: 0,
+      }),
+      reprobeShares: async () => structuredClone(serverState),
+      setHistoryLimit: async (limit) => {
+        if (limit > 900) throw new Error('超出范围')
+        serverState.historyLimit = limit
+        return structuredClone(serverState)
+      },
+      savePreferences: (patch) => {
+        if (patch.scale === 'lg') {
+          return new Promise<AppSettings>((_resolve, reject) => {
+            pendingPrefReject = reject
+          })
+        }
+        serverState.preferences = { ...serverState.preferences, ...patch }
+        return Promise.resolve(structuredClone(serverState))
+      },
+      setTypeCatalog: (category, types) =>
+        new Promise<AppSettings>((resolve) => {
+          serverState.categories[category].typeCatalog = [...types]
+          pendingCatalogResolve = () => resolve(structuredClone(serverState))
+        }),
+    })
+
+    // 1) 首屏多组件并发 load() 合并为 1 次 IPC；水合完成后切页再调 load() 零 IPC 短路
+    await Promise.all([
+      useStore.getState().load(),
+      useStore.getState().load(),
+      useStore.getState().load(),
+    ])
+    assert.equal(readCalls, 1, '并发水合应合并为单次 readSettings')
+    assert.equal(useStore.getState().loading, false)
+
+    await useStore.getState().load()
+    assert.equal(readCalls, 1, '已水合后切页不得重复读盘')
+
+    await useStore.getState().load({ force: true })
+    assert.equal(readCalls, 2, 'force=true 允许显式强刷')
+
+    // 2) 交错乐观修改：第一笔改 appearance='dark' + scale='lg'（在途），第二笔改 appearance='light'（先完成）
+    //    随后第一笔失败回滚：只回滚仍等于补丁值的 scale，绝不把已被用户改成 light 的 appearance 倒退回 system
+    const firstSave = useStore
+      .getState()
+      .savePreferences({ appearance: 'dark', scale: 'lg' })
+    assert.equal(useStore.getState().settings?.preferences.appearance, 'dark')
+    assert.equal(useStore.getState().settings?.preferences.scale, 'lg')
+
+    await useStore.getState().savePreferences({ appearance: 'light' })
+    assert.equal(useStore.getState().settings?.preferences.appearance, 'light')
+
+    pendingPrefReject?.(new Error('模拟写盘失败'))
+    await firstSave
+
+    assert.equal(
+      useStore.getState().settings?.preferences.appearance,
+      'light',
+      '已被新操作覆盖的字段不得被旧请求回滚',
+    )
+    assert.equal(
+      useStore.getState().settings?.preferences.scale,
+      serverState.preferences.scale,
+      '未被覆盖的失败字段应回滚至修改前的值',
+    )
+
+    // 3) saveHistoryLimit 乐观更新与失败回滚
+    const beforeLimit = useStore.getState().settings?.historyLimit
+    await useStore.getState().saveHistoryLimit(999)
+    assert.equal(useStore.getState().settings?.historyLimit, beforeLimit)
+    assert.match(useStore.getState().error ?? '', /超出范围/)
+
+    // 4) addType 在途期间并发修改偏好，setTypeCatalog 返回时只提交该类清单而不覆盖新偏好
+    const catalogPromise = useStore.getState().addType('el', 'NG_断栅')
+    assert.deepEqual(useStore.getState().settings?.categories.el.typeCatalog, [
+      'NG_断栅',
+    ])
+    await useStore.getState().savePreferences({ copyBatchSize: 15 })
+    pendingCatalogResolve?.(serverState)
+    await catalogPromise
+
+    assert.equal(
+      useStore.getState().settings?.preferences.copyBatchSize,
+      15,
+      '类型清单保存返回不得覆盖并发更新的其它配置分片',
+    )
+    assert.deepEqual(useStore.getState().settings?.categories.el.typeCatalog, [
+      'NG_断栅',
+    ])
   })
 }
 

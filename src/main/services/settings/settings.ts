@@ -47,7 +47,9 @@ import { probeLxtShare, probePlShare } from '../scanner/resolver'
 import { toFsPath } from '../../utils/pathx'
 import { envOverriddenKeys } from './load'
 import { createSettingsStore } from './store'
-import type { SettingsStore } from './store'
+import type { SettingsChangeListener, SettingsStore } from './store'
+
+export type { SettingsChangeListener } from './store'
 
 const SETTINGS_VERSION = 2 as const
 
@@ -642,6 +644,7 @@ export const createCategoryEntryActions = (
 
 let store: SettingsStore<AppSettings> | null = null
 let entryActions: ReturnType<typeof createCategoryEntryActions> | null = null
+const settingsListeners = new Set<SettingsChangeListener<AppSettings>>()
 
 const settingsStore = (): SettingsStore<AppSettings> =>
   (store ??= createSettingsStore({
@@ -650,7 +653,22 @@ const settingsStore = (): SettingsStore<AppSettings> =>
     isSupported: isAppSettings,
     normalize: normalizeSettings,
     serialize: ({ envOverrides: _runtime, ...persisted }) => persisted,
+    onChange: async (previous, next) => {
+      for (const listener of settingsListeners) {
+        await listener(previous, next)
+      }
+    },
   }))
+
+/** 订阅主进程配置落盘后的规范化变更；可在 store 惰性初始化之前提前注册 */
+export const onSettingsChange = (
+  listener: SettingsChangeListener<AppSettings>,
+): (() => void) => {
+  settingsListeners.add(listener)
+  return () => {
+    settingsListeners.delete(listener)
+  }
+}
 
 const defaultEntryActions = () =>
   (entryActions ??= createCategoryEntryActions(settingsStore()))
@@ -695,43 +713,16 @@ export const saveHistoryLimit = (limit: number): Promise<AppSettings> =>
     historyLimit: normalizeHistoryLimit(limit),
   }))
 
-export const savePreferences = async (
+export const savePreferences = (
   patch: Partial<AppPreferences>,
-): Promise<AppSettings> => {
-  let wasLogEnabled = false
-
-  const next = await updateSettings((current) => {
-    wasLogEnabled = current.preferences.debugLogEnabled
-
-    return {
-      ...current,
-      preferences: normalizePreferences({
-        ...current.preferences,
-        ...patch,
-      }),
-    }
-  })
-
-  const logEnabled = next.preferences.debugLogEnabled
-
-  if (logEnabled !== wasLogEnabled) {
-    if (logEnabled) {
-      logger.setEnabled(true)
-      logger.info('settings', 'debug-log.changed', {
-        enabled: true,
-        source: 'settings-page',
-      })
-    } else {
-      logger.info('settings', 'debug-log.changed', {
-        enabled: false,
-        source: 'settings-page',
-      })
-      logger.setEnabled(false)
-    }
-  }
-
-  return next
-}
+): Promise<AppSettings> =>
+  updateSettings((current) => ({
+    ...current,
+    preferences: normalizePreferences({
+      ...current.preferences,
+      ...patch,
+    }),
+  }))
 
 export const saveTypeCatalog = (
   category: ScanCategory,

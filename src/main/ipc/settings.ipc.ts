@@ -6,7 +6,6 @@ import type {
   DirectoryInfo,
   ScanCategory,
 } from '../../shared/ipc'
-import { applyThemeAppearance, rememberUiScale } from '../services/appearance'
 import {
   readSettings,
   refreshEntryMachines,
@@ -16,7 +15,6 @@ import {
   settingsFilePath,
   setupEntryRoot,
 } from '../services/settings'
-import { applyUpdatePreferences } from '../services/update'
 import { handle } from './handle'
 
 export const getParentWindow = (
@@ -65,23 +63,9 @@ export const registerSettingsIpc = (): void => {
     refreshEntryMachines(category),
   )
 
-  handle('savePreferences', async (_event, patch: Partial<AppPreferences>) => {
-    const next = await savePreferences(patch)
-
-    if ('appearance' in patch) {
-      applyThemeAppearance(next.preferences.appearance)
-    }
-
-    if ('scale' in patch) {
-      rememberUiScale(next.preferences.scale)
-    }
-
-    if ('updateAutoCheckEnabled' in patch) {
-      applyUpdatePreferences(next.preferences)
-    }
-
-    return next
-  })
+  handle('savePreferences', (_event, patch: Partial<AppPreferences>) =>
+    savePreferences(patch),
+  )
 
   handle('setTypeCatalog', (_event, category: ScanCategory, types: string[]) =>
     saveTypeCatalog(category, types),
