@@ -1,64 +1,67 @@
-import type {
-  AoiMachine,
-  AppSettings,
-  CategoryConfig,
-  LxtMachine,
-  PlMachine,
-} from '../../../shared/ipc'
+import type { AoiMachine, LxtMachine, PlMachine } from '../../../shared/ipc'
+import { SCAN_CATEGORY_LABEL } from '../../../shared/scanCategories'
 
-import { updateAoi, updateLxt, updatePl } from '../settings'
-import { discoverAoi, mergeAoiMachines } from './aoi'
-import { discoverLxt, mergeLxtMachines } from './lxt'
-import { discoverPl, mergePlMachines } from './pl'
+import { createShortcutEntry } from './shortcuts'
 import type {
   DiscoveredLink,
-  Discovery,
   MergeableMachine,
-  MergeResult,
+  ShortcutEntry,
 } from './shortcuts'
 
 /**
- * 入口类类别（力禧特 / 利珀 / 森标 AOI）的装配描述表。
+ * 快捷方式入口类（力禧特 / 利珀 / 森标 AOI）的统一识别与合并描述表。
  *
- * 识别、合并与配置更新本来就只差这三个函数；setup / refresh / reprobe
- * 之前各写一遍同形分支，加一类要改五处。这里把它们收成数据。
- * EL 不是入口类（直接读 DC 根目录），刻意不在表里。
+ * 三者的目录结构都是「入口根目录 / 厂区 / 机台.lnk」，仅报错提示中的类别名称不同；
+ * 不再拆成三份克隆文件，也不反向依赖 settings，方便在配置与任务装配层自由组合。
  */
-export interface EntryDescriptor<TMachine extends MergeableMachine> {
+
+const createEntryMachine = <TMachine extends MergeableMachine>(
+  link: DiscoveredLink,
+  key: string,
+): TMachine =>
+  ({
+    plant: link.plant,
+    name: link.name,
+    key,
+    host: link.host,
+    share: null,
+    stale: false,
+  }) as TMachine
+
+export interface ShortcutEntryDescriptor<
+  TMachine extends MergeableMachine,
+> extends ShortcutEntry<TMachine> {
   label: string
-  discover: (entryRoot: string) => Promise<Discovery>
-  merge: (
-    previous: TMachine[],
-    discovered: DiscoveredLink[],
-  ) => MergeResult<TMachine>
-  update: (
-    mutate: (current: CategoryConfig<TMachine>) => CategoryConfig<TMachine>,
-  ) => Promise<AppSettings>
 }
 
 export const ENTRY_DESCRIPTORS = {
   lxt: {
-    label: '力禧特EL',
-    discover: discoverLxt,
-    merge: mergeLxtMachines,
-    update: updateLxt,
-  } satisfies EntryDescriptor<LxtMachine>,
+    label: SCAN_CATEGORY_LABEL.lxt,
+    ...createShortcutEntry<LxtMachine>(
+      SCAN_CATEGORY_LABEL.lxt,
+      createEntryMachine,
+    ),
+  } satisfies ShortcutEntryDescriptor<LxtMachine>,
   pl: {
-    label: '利珀PL',
-    discover: discoverPl,
-    merge: mergePlMachines,
-    update: updatePl,
-  } satisfies EntryDescriptor<PlMachine>,
+    label: SCAN_CATEGORY_LABEL.pl,
+    ...createShortcutEntry<PlMachine>(
+      SCAN_CATEGORY_LABEL.pl,
+      createEntryMachine,
+    ),
+  } satisfies ShortcutEntryDescriptor<PlMachine>,
   aoi: {
-    label: '森标 AOI',
-    discover: discoverAoi,
-    merge: mergeAoiMachines,
-    update: updateAoi,
-  } satisfies EntryDescriptor<AoiMachine>,
+    label: SCAN_CATEGORY_LABEL.aoi,
+    ...createShortcutEntry<AoiMachine>(
+      SCAN_CATEGORY_LABEL.aoi,
+      createEntryMachine,
+    ),
+  } satisfies ShortcutEntryDescriptor<AoiMachine>,
 } as const
 
 export type EntryCategory = keyof typeof ENTRY_DESCRIPTORS
 
-export const ENTRY_CATEGORIES = Object.keys(
-  ENTRY_DESCRIPTORS,
-) as EntryCategory[]
+export const ENTRY_CATEGORIES = [
+  'lxt',
+  'pl',
+  'aoi',
+] as const satisfies readonly EntryCategory[]

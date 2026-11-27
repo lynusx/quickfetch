@@ -257,10 +257,6 @@ export interface EntrySetupResult {
   relocated: number
 }
 
-export type LxtSetupResult = EntrySetupResult
-export type PlSetupResult = EntrySetupResult
-export type AoiSetupResult = EntrySetupResult
-
 /**
  * 利珀的一台机台：入口里的一个 .lnk 解析出来的结果。
  *
@@ -925,10 +921,17 @@ export interface ElectronAPI {
   readSettings: () => Promise<AppSettings>
   /** 设置文件的绝对路径；设置页用来展示备份位置 */
   getSettingsPath: () => Promise<string>
-  /** 保存根目录并重新识别机台；路径非法时抛出可读错误 */
-  saveRootPath: (rootPath: string) => Promise<AppSettings>
-  /** 按当前根目录重新识别机台列表 */
-  refreshMachines: () => Promise<AppSettings>
+  /**
+   * 设置某类扫描的入口根目录并识别机台：
+   * - EL 校验并枚举 DC 根目录下的机台子目录；
+   * - 力禧特 / 利珀 / 森标 AOI 解析子目录中的 .lnk（只读入口目录，不连机台网络）。
+   */
+  setupEntryRoot: (
+    category: ScanCategory,
+    entryRoot: string,
+  ) => Promise<EntrySetupResult>
+  /** 按某类已配置的入口根目录重新识别机台并与已有配置增量合并 */
+  refreshEntryMachines: (category: ScanCategory) => Promise<EntrySetupResult>
   /** 局部更新复制与性能偏好，返回落盘后的完整配置 */
   savePreferences: (patch: Partial<AppPreferences>) => Promise<AppSettings>
   /** 覆盖某类扫描的可选不良清单，返回落盘后的完整配置 */
@@ -943,31 +946,6 @@ export interface ElectronAPI {
   openLogDir: () => Promise<string | null>
   /** 单向上报渲染层未捕获错误；不等待主进程，也不返回结果 */
   logRenderer: (entry: RendererLogEntry) => void
-
-  /**
-   * 设置力禧特入口根目录并解析其中的 .lnk。
-   * 只读入口目录，不碰机台网络 —— 入口在办公网、机台在专用内网，
-   * 识别阶段去连机台只会让界面卡在超时上。
-   */
-  setupLxtRoot: (entryRoot: string) => Promise<LxtSetupResult>
-  /** 按当前入口重新识别，与已有配置增量合并 */
-  refreshLxtMachines: () => Promise<LxtSetupResult>
-
-  /**
-   * 设置利珀入口根目录并解析其中的 .lnk。
-   * 与力禧特一样只读入口目录，不碰机台网络 —— 标识目录留到扫描时再探。
-   */
-  setupPlRoot: (entryRoot: string) => Promise<PlSetupResult>
-  /** 按当前入口重新识别利珀机台 */
-  refreshPlMachines: () => Promise<PlSetupResult>
-
-  /**
-   * 设置森标 AOI 入口根目录并解析其中的 .lnk。
-   * 与力禧特/利珀一样只读入口目录，机台网络留到扫描时再连。
-   */
-  setupAoiRoot: (entryRoot: string) => Promise<AoiSetupResult>
-  /** 按当前入口重新识别森标 AOI 机台 */
-  refreshAoiMachines: () => Promise<AoiSetupResult>
 
   /** 创建扫描任务（状态 pending），创建瞬间即可拿到进度快照 */
   createScanTask: (params: ScanTaskParams) => Promise<ScanTask>
@@ -1086,20 +1064,13 @@ export const IPC_INVOKE = {
 
   readSettings: 'settings:read',
   getSettingsPath: 'settings:path',
-  saveRootPath: 'settings:save-root',
-  refreshMachines: 'settings:refresh',
+  setupEntryRoot: 'settings:setup-entry-root',
+  refreshEntryMachines: 'settings:refresh-entry-machines',
   savePreferences: 'settings:save-preferences',
   setTypeCatalog: 'settings:set-type-catalog',
 
   getLogInfo: 'logs:info',
   openLogDir: 'logs:open',
-
-  setupLxtRoot: 'lxt:setup-root',
-  refreshLxtMachines: 'lxt:refresh',
-  setupPlRoot: 'pl:setup-root',
-  refreshPlMachines: 'pl:refresh',
-  setupAoiRoot: 'aoi:setup-root',
-  refreshAoiMachines: 'aoi:refresh',
 
   createScanTask: 'scan:create',
   startScanTask: 'scan:start',

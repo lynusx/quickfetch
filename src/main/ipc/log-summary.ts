@@ -82,7 +82,6 @@ const buildSummary = (
     case 'clearScanHistory':
     case 'readSettings':
     case 'getSettingsPath':
-    case 'refreshMachines':
     case 'getVersion':
     case 'getLogInfo':
     case 'openLogDir':
@@ -92,21 +91,15 @@ const buildSummary = (
     case 'installUpdate':
     case 'openUpdateReleasePage':
       return {}
-    case 'saveRootPath':
-      return { rootPath: truncatePath(args[0]) }
+    case 'setupEntryRoot':
+      return { category: args[0], entryRoot: truncatePath(args[1]) }
+    case 'refreshEntryMachines':
+      return { category: args[0] }
     case 'savePreferences': {
       const patch = asRecord(args[0])
 
       return { keys: Object.keys(patch), values: patch }
     }
-    case 'setupLxtRoot':
-    case 'setupPlRoot':
-    case 'setupAoiRoot':
-      return { entryRoot: truncatePath(args[0]) }
-    case 'refreshLxtMachines':
-    case 'refreshPlMachines':
-    case 'refreshAoiMachines':
-      return {}
     case 'reprobeShares':
       return { category: args[0], keys: sample(args[1]) }
     case 'previewCopyPlan':

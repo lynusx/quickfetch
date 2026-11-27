@@ -15,12 +15,7 @@ import { ChoiceList, ChoiceRadio } from '@/components/choice-list'
 import { Field } from '@/components/field'
 import { useSettingsStore } from '@/features/settings'
 import { useToast } from '@/hooks/useToast'
-import type {
-  AoiImageKind,
-  AoiSide,
-  EntrySetupResult,
-  ScanCategory,
-} from '@shared/ipc'
+import type { AoiImageKind, AoiSide, ScanCategory } from '@shared/ipc'
 import {
   AOI_IMAGE_DIRS,
   AOI_IMAGE_KIND_LABEL,
@@ -50,10 +45,7 @@ const PlantMachinePicker = ({ category }: PlantMachinePickerProps) => {
   const settings = useSettingsStore((state) => state.settings)
   const saving = useSettingsStore((state) => state.saving)
   const error = useSettingsStore((state) => state.error)
-  const refreshEl = useSettingsStore((state) => state.refresh)
-  const refreshLxt = useSettingsStore((state) => state.refreshLxt)
-  const refreshPl = useSettingsStore((state) => state.refreshPl)
-  const refreshAoi = useSettingsStore((state) => state.refreshAoi)
+  const refreshEntry = useSettingsStore((state) => state.refreshEntry)
 
   const { plant, keyword, selectedMachines, side, imageKind } = scope.useSlice(
     (state) => ({
@@ -75,19 +67,8 @@ const PlantMachinePicker = ({ category }: PlantMachinePickerProps) => {
   } = scope.projectMachines(settings)
 
   const handleRefresh = async () => {
-    let result: EntrySetupResult | null = null
-
-    if (category === 'el') {
-      await refreshEl()
-    } else if (category === 'lxt') {
-      result = await refreshLxt()
-    } else if (category === 'pl') {
-      result = await refreshPl()
-    } else {
-      result = await refreshAoi()
-    }
-
-    if (!result) return
+    const result = await refreshEntry(category)
+    if (!result || category === 'el') return
 
     const parts = [`${result.added} 台新增`]
     if (result.removed) parts.push(`${result.removed} 台已从入口移除`)

@@ -50,6 +50,7 @@ import {
   serializeLogValue,
 } from '../src/main/services/log'
 import {
+  createCategoryEntryActions,
   defaultSettings,
   isAppSettings,
   loadFrom,
@@ -58,6 +59,7 @@ import {
   normalizeLxt,
   normalizePl,
   normalizePreferences,
+  normalizeSettings,
   normalizeTypeCatalog,
 } from '../src/main/services/settings'
 import { createSettingsStore } from '../src/main/services/settings/store'
@@ -65,12 +67,12 @@ import {
   createHistoryStore,
   toTask,
 } from '../src/main/services/scanner/history'
+import { prepareScanTask } from '../src/main/services/scanner/workspace'
 import { elPickableMachines } from '../src/renderer/features/scan/components/plant-machine-model'
 import {
   ENTRY_CATEGORIES,
   ENTRY_DESCRIPTORS,
 } from '../src/main/services/discovery/categories'
-import { mergeLxtMachines } from '../src/main/services/discovery/lxt'
 import { decideSignatureChange } from '../src/renderer/features/scan/sessionTransitions'
 import {
   SCAN_CATEGORIES,
@@ -3375,16 +3377,18 @@ const ledgerTests = async () => {
     assert.equal(initial.machinesPending, 2)
     assert.equal(initial.etaMs, null)
 
+    // 第 1 台进入探测 + 叶子展开 + 1 个明细入队：phase 变为 collect
     ledger.machineProbed('A01')
-    assert.equal(ledger.snapshot(2000, 1000).percent, 10)
+    assert.equal(ledger.snapshot(2000, 1000).percent, 10) // (0.2 + 0) / 2 = 10%
     assert.equal(ledger.snapshot(2000, 1000).etaMs, 9000)
 
     ledger.leavesConcluded('A01', 1, 1)
     ledger.detailQueued('A01', 1)
     const collectingFirst = ledger.snapshot(3000, 1000)
     assert.equal(collectingFirst.phase, 'collect')
-    assert.equal(collectingFirst.percent, 35)
+    assert.equal(collectingFirst.percent, 35) // (0.7 + 0) / 2 = 35%
 
+    // 第 1 台读完唯一明细并结清：只拿满本台 50% 份额，不会提前吃掉第 2 台的 30% 明细权重
     ledger.detailConcluded('A01', { ok: true, hitImages: 3 })
     ledger.machineConcluded('A01')
     const afterFirst = ledger.snapshot(4000, 1000)
@@ -3396,6 +3400,7 @@ const ledgerTests = async () => {
       '第 1 台明细收完后，第 2 台探测期间 phase 应回到 probe',
     )
 
+    // 第 2 台入队 2 个明细时，百分比绝不倒退（从 50% 推向 85%）
     ledger.machineProbed('A02')
     ledger.leavesConcluded('A02', 2, 0)
     ledger.detailQueued('A02', 2)
@@ -3417,7 +3422,7 @@ const ledgerTests = async () => {
     assert.equal(done.etaMs, 0)
     assert.equal(done.dirsScanned, 2)
     assert.equal(done.dirsHit, 1)
-    assert.equal(done.dirsSkipped, 2)
+    assert.equal(done.dirsSkipped, 2) // 1 叶子缺失 + 1 明细读取失败
     assert.equal(done.images, 3)
     assert.equal(done.machinesPending, 0)
   })
@@ -3483,6 +3488,7 @@ const ledgerTests = async () => {
         load: { readConcurrency: 2, machineBatchSize: 1 },
         fs: {
           readDir: fakeRead,
+          // 模拟一半文件 stat 缺失（超时兜底返回 {}），验证收图不中断
           statFile: async (path) =>
             path.endsWith('1.jpg') ? { size: 1024, mtimeMs: 100 } : {},
         },
@@ -3505,7 +3511,7 @@ const ledgerTests = async () => {
     const final = runner.snapshot()
     assert.equal(final.status, 'completed')
     assert.equal(final.progress.percent, 100)
-    assert.equal(final.totalImages, 11)
+    assert.equal(final.totalImages, 11) // A01 1 张 + A02..A06 各 2 张
     assert.equal(final.progress.dirsScanned, 11)
     assert.equal(final.progress.machinesPending, 0)
   })
@@ -3595,6 +3601,7 @@ const ledgerTests = async () => {
     assert.equal(pausedSnap.pauseReason, 'network')
     assert.ok(pausedSnap.progress.dirsUnreachable > 0)
 
+    // 恢复网络并继续扫描，剩余批次正常收图结束
     networkOnline = true
     runner.resume()
     await runner.waitSettled()
@@ -3806,13 +3813,16 @@ const scanScopeTests = async () => {
     const lxt = createScanScope('lxt', { now: dayClock })
     lxt.reconcile(settings)
 
+    // 白班期间用户手动切到夜班 -> 非当前班次清空时段
     lxt.changeShift('夜班')
     assert.equal(lxt.getState().shift, '夜班')
     assert.deepEqual(lxt.getState().slots, [])
 
+    // 切回白班 -> 重新带出当前白班已过时段
     lxt.changeShift('白班')
     assert.deepEqual(lxt.getState().slots, ['8', '9', '10'])
 
+    // 在白班时刻恢复一条夜班历史记录（含 20, 21 时段与西区机台）
     lxt.restore(
       historyItem('lxt', {
         machines: ['西区/8A'],
@@ -3824,6 +3834,7 @@ const scanScopeTests = async () => {
     )
     const baseline = lxt.project(settings).filterSignature
 
+    // 模拟组件重渲染 / 配置再次 reconcile：不得覆写夜班时段，指纹保持稳定
     lxt.reconcile(settings)
     const afterReconcile = lxt.project(settings)
 
@@ -3869,6 +3880,7 @@ const scanScopeTests = async () => {
     assert.equal(lxt.getState().plant, '西区')
     assert.deepEqual(lxt.getState().selectedMachines, ['西区/8A'])
 
+    // 跨厂区传入机台键时自动过滤掉非当前厂区
     lxt.setSelectedMachines(['东区/7A', '西区/8A'])
     assert.deepEqual(lxt.getState().selectedMachines, ['西区/8A'])
   })
@@ -3886,6 +3898,7 @@ const scanScopeTests = async () => {
       },
     }
 
+    // EL 按首台机台推断厂区
     const el = createScanScope('el', { now: dayClock, storage })
     el.restore(
       historyItem('el', {
@@ -3898,6 +3911,7 @@ const scanScopeTests = async () => {
     assert.deepEqual(el.getState().selectedMachines, ['B02'])
     assert.deepEqual(el.getState().types, ['NG_脏污_D'])
 
+    // 同一 storage 下重建实例可恢复已记住的勾选类型，且在 settings=null 时不误清空
     const elReloaded = createScanScope('el', { now: dayClock, storage })
     elReloaded.reconcile(null)
     assert.deepEqual(
@@ -3906,6 +3920,7 @@ const scanScopeTests = async () => {
       '配置尚未异步加载完成前不能把持久化类型裁空',
     )
 
+    // AOI 图片类型进入参数、指纹与摘要条；恢复历史自动推断检测面并清空时段
     const aoi = createScanScope('aoi', { now: dayClock })
     aoi.restore(
       historyItem('aoi', {
@@ -3929,6 +3944,7 @@ const scanScopeTests = async () => {
       '切换整体/局部必须改变范围指纹',
     )
 
+    // 利珀等级缺失与空类型清单提示
     const pl = createScanScope('pl', { now: dayClock })
     settings.categories.pl.typeCatalog = []
     pl.reconcile(settings)
@@ -4340,7 +4356,6 @@ const discoveryTests = async () => {
       assert.ok(descriptor.label, category)
       assert.equal(typeof descriptor.discover, 'function', category)
       assert.equal(typeof descriptor.merge, 'function', category)
-      assert.equal(typeof descriptor.update, 'function', category)
     }
   })
 
@@ -4364,7 +4379,7 @@ const discoveryTests = async () => {
       },
     ]
 
-    const merged = mergeLxtMachines(previous, [
+    const merged = ENTRY_DESCRIPTORS.lxt.merge(previous, [
       { plant: '东区', name: '7A', host: '\\\\10.0.0.9' },
       { plant: '东区', name: '7C', host: '\\\\10.0.0.3' },
     ])
@@ -4381,6 +4396,157 @@ const discoveryTests = async () => {
     assert.equal(byKey.get('东区/7A')?.share, null, '地址变化必须清掉共享缓存')
     assert.equal(byKey.get('东区/7B')?.stale, true)
     assert.equal(byKey.get('东区/7C')?.stale, false)
+  })
+
+  await test('统一入口动作与共享批量落盘: 46 台 reprobeShares 只触发 1 次写盘', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'qf-entry-actions-'))
+    const file = join(dir, 'settings.json')
+    let serializeCount = 0
+
+    const store = createSettingsStore<AppSettings>({
+      file,
+      fallback: defaultSettings,
+      isSupported: isAppSettings,
+      normalize: normalizeSettings,
+      serialize: ({ envOverrides: _runtime, ...persisted }) => {
+        serializeCount += 1
+        return persisted
+      },
+    })
+
+    let elList: Array<{ name: string; plant: string }> = [
+      { name: 'A01', plant: 'east' },
+      { name: 'B01', plant: 'west' },
+    ]
+
+    const actions = createCategoryEntryActions(store, {
+      discoverEl: async () => elList,
+      discoverShortcut: async () => ({
+        machines: Array.from({ length: 46 }, (_, i) => ({
+          plant: '东区',
+          name: `${i + 1}A`,
+          host: `\\\\10.0.0.${i + 1}`,
+        })),
+        skipped: [],
+      }),
+      probeLxt: async (host) => (host.endsWith('.1') ? null : 'SaveImages'),
+      today: () => '20261104',
+    })
+
+    // EL setup + refresh 统计新增与移除
+    const firstEl = await actions.setupEntry('el', '\\\\10.0.0.9\\DC')
+    assert.equal(firstEl.added, 2)
+    assert.equal(firstEl.removed, 0)
+
+    elList = [
+      { name: 'A01', plant: 'east' },
+      { name: 'A02', plant: 'east' },
+    ]
+    const refreshedEl = await actions.refreshEntry('el')
+    assert.equal(refreshedEl.added, 1)
+    assert.equal(refreshedEl.removed, 1)
+
+    // LXT 46 台重探：1 台返回 null 保留原缓存，45 台合并为单次原子写盘
+    await actions.setupEntry('lxt', '\\\\10.0.0.9\\lxt')
+    serializeCount = 0
+
+    const afterReprobe = await actions.reprobeShares('lxt')
+    assert.equal(
+      serializeCount,
+      1,
+      '46 台机台探测结果必须合并为 1 次原子写盘，不得逐台写 45 次',
+    )
+    assert.equal(afterReprobe.categories.lxt.machines[0]?.share, null)
+    assert.equal(
+      afterReprobe.categories.lxt.machines.filter(
+        (m) => m.share === 'SaveImages',
+      ).length,
+      45,
+    )
+  })
+
+  await test('扫描任务装配: 四类统一校验、单厂区拦截、过期机台剔除与 AOI 归一化', async () => {
+    const settings = defaultSettings()
+    settings.categories.el.entryRoot = '\\\\10.0.0.1\\DC'
+    settings.categories.el.machines = [
+      { name: 'A01', plant: 'east' },
+      { name: 'B01', plant: 'west' },
+    ]
+    settings.categories.lxt.entryRoot = '\\\\10.0.0.1\\lxt'
+    settings.categories.lxt.machines = [
+      {
+        plant: '东区',
+        name: '7A',
+        key: '东区/7A',
+        host: '\\\\10.0.0.11',
+        share: 'SaveImages',
+        stale: false,
+      },
+      {
+        plant: '东区',
+        name: '7B',
+        key: '东区/7B',
+        host: '\\\\10.0.0.12',
+        share: null,
+        stale: true,
+      },
+      {
+        plant: '西区',
+        name: '8A',
+        key: '西区/8A',
+        host: '\\\\10.0.0.13',
+        share: 'el',
+        stale: false,
+      },
+    ]
+    settings.categories.aoi.entryRoot = '\\\\10.0.0.1\\aoi'
+    settings.categories.aoi.machines = [
+      {
+        plant: '东区',
+        name: '1A正检',
+        key: '东区/1A正检',
+        host: '\\\\10.0.0.31',
+        share: null,
+        stale: false,
+      },
+    ]
+
+    // 跨厂区混扫必须拒绝
+    assert.throws(
+      () =>
+        prepareScanTask(settings, {
+          category: 'el',
+          machines: ['A01', 'B01'],
+          date: '20261104',
+          shift: '白班',
+          slots: ['8'],
+          types: ['NG'],
+        }),
+      /只能选择一个厂区/,
+    )
+
+    // LXT 自动剔除 stale 机台
+    const lxtPrepared = prepareScanTask(settings, {
+      category: 'lxt',
+      machines: ['东区/7A', '东区/7B'],
+      date: '20261104',
+      shift: '白班',
+      slots: ['8'],
+      types: ['NG'],
+    })
+    assert.deepEqual(lxtPrepared.params.machines, ['东区/7A'])
+
+    // AOI 强制清空 slots 并把缺省图片类型补齐为 whole
+    const aoiPrepared = prepareScanTask(settings, {
+      category: 'aoi',
+      machines: ['东区/1A正检'],
+      date: '20261104',
+      shift: '白班',
+      slots: ['8', '9'],
+      types: ['色差'],
+    })
+    assert.deepEqual(aoiPrepared.params.slots, [])
+    assert.equal(aoiPrepared.params.aoiImageKind, 'whole')
   })
 }
 

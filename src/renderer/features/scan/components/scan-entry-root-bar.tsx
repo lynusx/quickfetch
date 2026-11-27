@@ -17,13 +17,7 @@ import {
 
 import { Panel, PanelBody } from '@/components/panel'
 import { useToast } from '@/hooks/useToast'
-import {
-  selectAoi,
-  selectEl,
-  selectLxt,
-  selectPl,
-  useSettingsStore,
-} from '@/features/settings'
+import { selectCategoryConfig, useSettingsStore } from '@/features/settings'
 import type { EntrySetupResult, ScanCategory, SkippedLink } from '@shared/ipc'
 import { SCAN_CATEGORY_LABEL } from '@shared/scanCategories'
 
@@ -73,39 +67,14 @@ const useEntryRootActions = (
 ) => {
   const { showToast } = useToast()
 
-  const lxt = useSettingsStore(selectLxt)
-  const pl = useSettingsStore(selectPl)
-  const aoi = useSettingsStore(selectAoi)
-  const el = useSettingsStore(selectEl)
-
+  const categoryConfig = useSettingsStore(selectCategoryConfig(category))
   const saving = useSettingsStore((state) => state.saving)
   const error = useSettingsStore((state) => state.error)
-  const setupLxt = useSettingsStore((state) => state.setupLxt)
-  const setupPl = useSettingsStore((state) => state.setupPl)
-  const setupAoi = useSettingsStore((state) => state.setupAoi)
-  const saveRoot = useSettingsStore((state) => state.saveRoot)
-  const refreshLxt = useSettingsStore((state) => state.refreshLxt)
-  const refreshPl = useSettingsStore((state) => state.refreshPl)
-  const refreshAoi = useSettingsStore((state) => state.refreshAoi)
-  const refreshEl = useSettingsStore((state) => state.refresh)
+  const setupEntry = useSettingsStore((state) => state.setupEntry)
+  const refreshEntry = useSettingsStore((state) => state.refreshEntry)
 
-  const entryRoot =
-    category === 'lxt'
-      ? lxt.entryRoot
-      : category === 'pl'
-        ? pl.entryRoot
-        : category === 'aoi'
-          ? aoi.entryRoot
-          : el.entryRoot
-
-  const skipped: SkippedLink[] =
-    category === 'lxt'
-      ? lxt.skipped
-      : category === 'pl'
-        ? pl.skipped
-        : category === 'aoi'
-          ? aoi.skipped
-          : []
+  const entryRoot = categoryConfig.entryRoot
+  const skipped: SkippedLink[] = category === 'el' ? [] : categoryConfig.skipped
 
   const [draft, setDraft] = useState(entryRoot ?? '')
   const [prevEntryRoot, setPrevEntryRoot] = useState(entryRoot)
@@ -116,6 +85,8 @@ const useEntryRootActions = (
   }
 
   const announce = (result: EntrySetupResult | null, path?: string) => {
+    if (!result) return
+
     if (category === 'el') {
       showToast(
         path ? 'DC 根目录已更新' : '机台已重新识别',
@@ -126,7 +97,6 @@ const useEntryRootActions = (
       return
     }
 
-    if (!result) return
     const parts = [`${result.added} 台新增`]
     if (result.removed) parts.push(`${result.removed} 台已从入口移除`)
     if (result.relocated) parts.push(`${result.relocated} 台位置已更新`)
@@ -135,30 +105,8 @@ const useEntryRootActions = (
     onChanged?.()
   }
 
-  const runSetup = async (path: string): Promise<EntrySetupResult | null> => {
-    if (category === 'lxt') return setupLxt(path)
-    if (category === 'pl') return setupPl(path)
-    if (category === 'aoi') return setupAoi(path)
-
-    await saveRoot(path)
-    return null
-  }
-
   const runRefresh = async (): Promise<void> => {
-    if (category === 'lxt') {
-      announce(await refreshLxt())
-      return
-    }
-    if (category === 'pl') {
-      announce(await refreshPl())
-      return
-    }
-    if (category === 'aoi') {
-      announce(await refreshAoi())
-      return
-    }
-    await refreshEl()
-    announce(null)
+    announce(await refreshEntry(category))
   }
 
   const pickRoot = async () => {
@@ -169,14 +117,14 @@ const useEntryRootActions = (
     if (!picked) return
 
     setDraft(picked.path)
-    const result = await runSetup(picked.path)
+    const result = await setupEntry(category, picked.path)
     announce(result, picked.path)
   }
 
   const commitDraft = async () => {
     const trimmed = draft.trim()
     if (!trimmed || trimmed === (entryRoot ?? '')) return
-    const result = await runSetup(trimmed)
+    const result = await setupEntry(category, trimmed)
     announce(result, trimmed)
   }
 

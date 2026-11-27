@@ -3,20 +3,14 @@ import { devtools } from 'zustand/middleware'
 
 import { DEFAULT_PREFERENCES } from '@shared/ipc'
 import type {
-  AoiSettings,
-  AoiSetupResult,
   AppPreferences,
   AppSettings,
   CategoryConfig,
   EntrySetupResult,
-  LxtSettings,
-  LxtSetupResult,
-  MachineInfo,
-  PlSettings,
-  PlSetupResult,
   PreferenceKey,
   ScanCategory,
 } from '@shared/ipc'
+import { SCAN_CATEGORY_LABEL } from '@shared/scanCategories'
 import { toErrorMessage } from '@/utils/error'
 
 interface SettingsState {
@@ -28,30 +22,18 @@ interface SettingsState {
 
 interface SettingsAction {
   load: () => Promise<void>
-  saveRoot: (rootPath: string) => Promise<boolean>
-  refresh: () => Promise<void>
+  /** 设置某类入口根目录并识别机台；返回增量识别结果 */
+  setupEntry: (
+    category: ScanCategory,
+    entryRoot: string,
+  ) => Promise<EntrySetupResult | null>
+  /** 按某类当前入口重新识别机台（力禧特/利珀自动串联共享重探） */
+  refreshEntry: (category: ScanCategory) => Promise<EntrySetupResult | null>
   /** 调整历史保留条数，主进程会立即裁剪超额记录 */
   saveHistoryLimit: (limit: number) => Promise<void>
   /** 局部更新复制与性能偏好；界面先改再落盘，写失败会回滚 */
   savePreferences: (patch: Partial<AppPreferences>) => Promise<void>
-  /** 设置力禧特入口并解析其中的 .lnk；成功时返回本次识别的增量信息 */
-  setupLxt: (entryRoot: string) => Promise<LxtSetupResult | null>
-  /** 按当前入口重新识别，与已有配置增量合并 */
-  refreshLxt: () => Promise<LxtSetupResult | null>
-  /** 设置利珀入口并解析其中的 .lnk */
-  setupPl: (entryRoot: string) => Promise<PlSetupResult | null>
-  /** 按当前入口重新识别利珀机台 */
-  refreshPl: () => Promise<PlSetupResult | null>
-  /** 设置森标 AOI 入口并解析其中的 .lnk */
-  setupAoi: (entryRoot: string) => Promise<AoiSetupResult | null>
-  /** 按当前入口重新识别森标 AOI 机台 */
-  refreshAoi: () => Promise<AoiSetupResult | null>
-  /**
-   * 强制重新探测共享目录并写回配置。
-   *
-   * 现场换了共享名、或当初添加机台时没连上网络，都靠这个动作补救；
-   * 自动探测只在 share 为 null 时跑一次，不会自己重来。
-   */
+  /** 强制重新探测共享目录并写回配置 */
   reprobeShares: (category: 'lxt' | 'pl') => Promise<boolean>
   /** 往某类的可选不良清单里加一项；界面先改再落盘，写失败会回滚 */
   addType: (category: ScanCategory, type: string) => Promise<void>
@@ -66,12 +48,11 @@ export const selectPreferences = (state: {
 }): AppPreferences => state.settings?.preferences ?? DEFAULT_PREFERENCES
 
 /**
- * 各类入口配置的稳定空值。
+ * 未加载配置时的稳定空类别配置。
  *
- * 必须用模块级常量：settings 为空时若每次返回一个新对象，
- * useSyncExternalStore 会认为快照一直在变，直接在首屏触发无限更新。
+ * 必须使用模块级常量引用，避免 `useSyncExternalStore` 因每次返回新对象无限重渲染。
  */
-const EMPTY_LXT: LxtSettings = {
+const EMPTY_CATEGORY: CategoryConfig<never> = {
   entryRoot: null,
   machines: [],
   skipped: [],
@@ -79,113 +60,17 @@ const EMPTY_LXT: LxtSettings = {
   typeCatalog: [],
 }
 
-const EMPTY_PL: PlSettings = {
-  entryRoot: null,
-  machines: [],
-  skipped: [],
-  updatedAt: null,
-  typeCatalog: [],
-}
-
-const EMPTY_AOI: AoiSettings = {
-  entryRoot: null,
-  machines: [],
-  skipped: [],
-  updatedAt: null,
-  typeCatalog: [],
-}
-
-/** 力禧特配置，未读回配置时给空值 */
-export const selectLxt = (state: {
-  settings: AppSettings | null
-}): LxtSettings => state.settings?.categories.lxt ?? EMPTY_LXT
-
-/** 利珀配置，未读回配置时给空值 */
-export const selectPl = (state: { settings: AppSettings | null }): PlSettings =>
-  state.settings?.categories.pl ?? EMPTY_PL
-
-/** 森标 AOI 配置，未读回配置时给空值 */
-export const selectAoi = (state: {
-  settings: AppSettings | null
-}): AoiSettings => state.settings?.categories.aoi ?? EMPTY_AOI
-
-/** EL 配置；没有入口类选择器，单独给一个稳定空值 */
-const EMPTY_EL: CategoryConfig<MachineInfo> = {
-  entryRoot: null,
-  machines: [],
-  skipped: [],
-  updatedAt: null,
-  typeCatalog: [],
-}
-
-export const selectEl = (state: {
-  settings: AppSettings | null
-}): CategoryConfig<MachineInfo> => state.settings?.categories.el ?? EMPTY_EL
+export const selectCategoryConfig =
+  <K extends ScanCategory>(category: K) =>
+  (state: { settings: AppSettings | null }): AppSettings['categories'][K] =>
+    (state.settings?.categories[category] ??
+      EMPTY_CATEGORY) as AppSettings['categories'][K]
 
 /** 被环境变量接管、设置页里改了也不生效的项 */
 export const selectEnvOverrides = (state: {
   settings: AppSettings | null
 }): PreferenceKey[] => state.settings?.envOverrides ?? []
 
-type SettingsSet = (partial: Partial<SettingsState>) => void
-
-/**
- * 入口识别/重新识别的共同状态机：saving、error 与 settings 写回。
- * 三个类别只差请求与失败文案，流程不再各写一遍。
- */
-const runEntryAction = async (
-  set: SettingsSet,
-  request: () => Promise<EntrySetupResult>,
-  errorLabel: string,
-): Promise<EntrySetupResult | null> => {
-  set({ saving: true, error: null })
-
-  try {
-    const result = await request()
-
-    set({ settings: result.settings })
-    return result
-  } catch (error) {
-    set({ error: toErrorMessage(error, errorLabel) })
-    return null
-  } finally {
-    set({ saving: false })
-  }
-}
-
-/**
- * 力禧特 / 利珀的刷新流程：先重新识别入口，再自动串联重新探测共享。
- *
- * 整个过程保持 saving=true，第一步落盘后立即更新机台列表，
- * 第二步探测完成后再回写最新共享缓存。
- */
-const runRefreshWithReprobe = async (
-  set: SettingsSet,
-  category: 'lxt' | 'pl',
-  request: () => Promise<EntrySetupResult>,
-): Promise<EntrySetupResult | null> => {
-  set({ saving: true, error: null })
-
-  try {
-    const result = await request()
-    set({ settings: result.settings })
-
-    const reprobed = await window.electronAPI.reprobeShares(category)
-    set({ settings: reprobed })
-
-    return { ...result, settings: reprobed }
-  } catch (error) {
-    set({ error: toErrorMessage(error, '重新识别入口并探测共享失败') })
-    return null
-  } finally {
-    set({ saving: false })
-  }
-}
-
-/**
- * 根目录与机台列表由主进程持久化在 userData/settings.json，
- * 这里只做一层内存镜像，不再走 localStorage —— 主进程扫描时读的是磁盘上的配置。
- */
 export const useSettingsStore = create<SettingsState & SettingsAction>()(
   devtools((set, get) => ({
     settings: null,
@@ -204,25 +89,47 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
       }
     },
 
-    saveRoot: async (rootPath) => {
+    setupEntry: async (category, entryRoot) => {
       set({ saving: true, error: null })
+      const label =
+        category === 'el'
+          ? '保存根目录失败'
+          : `识别${SCAN_CATEGORY_LABEL[category]}入口失败`
+
       try {
-        set({ settings: await window.electronAPI.saveRootPath(rootPath) })
-        return true
+        const result = await window.electronAPI.setupEntryRoot(
+          category,
+          entryRoot,
+        )
+        set({ settings: result.settings })
+        return result
       } catch (error) {
-        set({ error: toErrorMessage(error, '保存根目录失败') })
-        return false
+        set({ error: toErrorMessage(error, label) })
+        return null
       } finally {
         set({ saving: false })
       }
     },
 
-    refresh: async () => {
+    refreshEntry: async (category) => {
       set({ saving: true, error: null })
+      const hasShares = category === 'lxt' || category === 'pl'
+      const label = hasShares
+        ? '重新识别入口并探测共享失败'
+        : '重新识别机台失败'
+
       try {
-        set({ settings: await window.electronAPI.refreshMachines() })
+        const result = await window.electronAPI.refreshEntryMachines(category)
+        set({ settings: result.settings })
+
+        if (!hasShares) return result
+
+        const reprobed = await window.electronAPI.reprobeShares(category)
+        set({ settings: reprobed })
+        return { ...result, settings: reprobed }
       } catch (error) {
-        set({ error: toErrorMessage(error, '重新识别机台失败') })
+        set({ error: toErrorMessage(error, label) })
+        return null
       } finally {
         set({ saving: false })
       }
@@ -240,7 +147,6 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
     savePreferences: async (patch) => {
       const before = get().settings
 
-      // 先把界面上的值改掉，滑杆与单选不会等一次 IPC 往返才跟手
       if (before) {
         set((state) =>
           state.settings
@@ -257,15 +163,12 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
       try {
         const saved = await window.electronAPI.savePreferences(patch)
 
-        // 只合并本次 patch 的字段：并发的另一个 patch 可能已经更新了
-        // 其他字段，整份替换会把它的结果盖掉。
         set((state) => {
           if (!state.settings) return { settings: saved, error: null }
 
           const preferences = { ...state.settings.preferences }
 
           for (const key of Object.keys(patch) as (keyof AppPreferences)[]) {
-            // 同一字段若已被后一次写入改过，不要用这次较早的响应覆盖
             if (preferences[key] === patch[key]) {
               Object.assign(preferences, { [key]: saved.preferences[key] })
             }
@@ -281,8 +184,6 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
           }
         })
       } catch (error) {
-        // 只回滚本次字段，且仅当它仍是本次乐观写入的值；
-        // 已经被后续写入改过的字段保持不变。
         set((state) => {
           if (!state.settings) {
             return { error: toErrorMessage(error, '保存设置失败') }
@@ -303,44 +204,6 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
         })
       }
     },
-
-    setupLxt: (entryRoot) =>
-      runEntryAction(
-        set,
-        () => window.electronAPI.setupLxtRoot(entryRoot),
-        '识别力禧特EL入口失败',
-      ),
-
-    refreshLxt: () =>
-      runRefreshWithReprobe(set, 'lxt', () =>
-        window.electronAPI.refreshLxtMachines(),
-      ),
-
-    setupPl: (entryRoot) =>
-      runEntryAction(
-        set,
-        () => window.electronAPI.setupPlRoot(entryRoot),
-        '识别利珀PL入口失败',
-      ),
-
-    refreshPl: () =>
-      runRefreshWithReprobe(set, 'pl', () =>
-        window.electronAPI.refreshPlMachines(),
-      ),
-
-    setupAoi: (entryRoot) =>
-      runEntryAction(
-        set,
-        () => window.electronAPI.setupAoiRoot(entryRoot),
-        '识别森标 AOI 入口失败',
-      ),
-
-    refreshAoi: () =>
-      runEntryAction(
-        set,
-        () => window.electronAPI.refreshAoiMachines(),
-        '重新识别入口失败',
-      ),
 
     reprobeShares: async (category) => {
       set({ saving: true, error: null })
@@ -370,11 +233,6 @@ export const useSettingsStore = create<SettingsState & SettingsAction>()(
   })),
 )
 
-/**
- * 乐观更新某类清单再落盘；失败只回滚这个类别，且仅当它仍是本次写入的值。
- *
- * 与 savePreferences 同一套语义：连续点几下时，较早的失败不能把后一次的结果盖掉。
- */
 async function patchTypeCatalog(
   category: ScanCategory,
   mutate: (types: string[]) => string[],
@@ -410,7 +268,6 @@ async function patchTypeCatalog(
 
       const current = state.settings.categories[category].typeCatalog
 
-      // 期间又被改过：保留新值，不回滚
       if (
         current.length !== next.length ||
         current.some((type, index) => type !== next[index])
@@ -426,7 +283,6 @@ async function patchTypeCatalog(
   }
 }
 
-/** 计算键会收窄 categories 的联合类型，这里按整体结构写回 */
 const withTypeCatalog = (
   settings: AppSettings,
   category: ScanCategory,
