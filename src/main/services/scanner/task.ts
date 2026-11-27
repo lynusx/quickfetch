@@ -15,7 +15,6 @@ import { timeoutForConcurrency, createAdaptiveGate } from '../../utils/adaptive'
 import type { AdaptiveGate } from '../../utils/adaptive'
 import { createTaskLifecycle } from '../../utils/taskLifecycle'
 import type { TaskLifecycle } from '../../utils/taskLifecycle'
-import { cacheImageSize } from '../copy/measure'
 import { isNetworkError, realScanFs } from './fsx'
 import type { DirReadResult, ScanFs } from './fsx'
 import { describeLeafFailure, summarize } from './diagnosis'
@@ -973,10 +972,6 @@ export class ScanTaskRunner {
             absolutePath,
             IMAGE_STAT_TIMEOUT_MS,
           )
-
-          if (meta.size !== undefined) {
-            cacheImageSize(absolutePath, meta.size)
-          }
 
           return {
             path: [...segments, name].join('/'),

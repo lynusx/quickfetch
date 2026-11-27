@@ -286,13 +286,15 @@ export const readDirSafe = async (
 export interface FileStatMeta {
   size?: number
   mtimeMs?: number
+  /** 仅在明确命中 NETWORK_CODES（含 ETIMEDOUT）时为 true，供受限探测熔断共享根 */
+  networkError?: boolean
 }
 
 /** 单文件默认 stat 超时（毫秒）；避免偶发慢盘拖死收图与体积统计 */
 export const DEFAULT_STAT_TIMEOUT_MS = 2_000
 
 /**
- * 带超时的文件元数据读取；失败或超时返回空对象，不向上抛异常。
+ * 带超时的文件元数据读取；失败或超时返回状态对象，不向上抛异常。
  */
 export const statFileSafe = async (
   path: string,
@@ -318,8 +320,9 @@ export const statFileSafe = async (
   try {
     const info = await Promise.race([request, timeout])
     return { size: info.size, mtimeMs: info.mtimeMs }
-  } catch {
-    return {}
+  } catch (error) {
+    const code = codeOf(error)
+    return code && NETWORK_CODES.has(code) ? { networkError: true } : {}
   } finally {
     if (timer) clearTimeout(timer)
   }

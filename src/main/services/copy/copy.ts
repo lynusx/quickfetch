@@ -19,7 +19,8 @@ import { createTaskLifecycle } from '../../utils/taskLifecycle'
 import type { TaskLifecycle } from '../../utils/taskLifecycle'
 import { toFsPath } from '../../utils/pathx'
 import { logger } from '../log'
-import { cachedSizeOf, measureImageSizes } from './measure'
+import type { FileStatMeta } from '../scanner/fsx'
+import { measureImageSizes } from './measure'
 import { buildCopyPlan, folderOf, selectCopyImages } from './plan'
 import type { PlanItem } from './plan'
 
@@ -166,6 +167,8 @@ export interface CopyRunnerOptions {
   /** 来源扫描类别；主进程 IPC 入口会显式派生，测试可缺省为 el */
   category?: ScanCategory
   load?: CopyLoadOptions
+  /** 可选 stat 注入接缝，供回归测试观测调用次数或模拟离线共享盘 */
+  statFile?: (path: string, timeoutMs?: number) => Promise<FileStatMeta>
 }
 
 /**
@@ -185,6 +188,10 @@ export class CopyTaskRunner {
 
   private readonly source: ScannedImage[]
   private readonly emit: (task: CopyTask) => void
+  private readonly statFile?: (
+    path: string,
+    timeoutMs?: number,
+  ) => Promise<FileStatMeta>
   private concurrency: number
   private readonly batchSize: number
   /** 失败率采样器，与扫描共用同一套降档逻辑 */
@@ -241,6 +248,7 @@ export class CopyTaskRunner {
     this.params = options.params
     this.source = options.images
     this.emit = options.emit
+    this.statFile = options.statFile
     this.concurrency = Math.max(
       1,
       Math.floor(options.load?.concurrency ?? DEFAULT_COPY_CONCURRENCY),
@@ -630,44 +638,24 @@ export class CopyTaskRunner {
   /**
    * 量一遍待复制源文件的大小。
    *
-   * 只 stat 真正要写盘的项；跳过项不落盘，没必要为它们跑网络 IO。
-   * 失败只记 sizeUnknown，不能让 stat 问题阻断复制本身。
+   * 只解析真正要写盘的项；自带 `image.size` 或命中旧记录缓存的项直接零 IO 回填（不受 5000 张上限影响），
+   * 仅对缺失 `size` 的未知项执行带超时与共享根熔断的受限探测。
    */
   private async measurePlan(): Promise<void> {
     const items = this.plan.filter((item) => item.action === 'copy')
 
-    this.totalBytes = 0
-    this.sizeUnknown = 0
+    const measured = await measureImageSizes(
+      items.map((item) => item.image),
+      {
+        statFile: this.statFile,
+        onSize: (index, size) => {
+          items[index].size = size
+        },
+      },
+    )
 
-    // 极端大任务不在开跑前逐张 stat：几千次网络往返会让「开始复制」
-    // 看起来像卡住。此时展示层回退为按张数估算。
-    if (items.length > 5000) {
-      this.sizeUnknown = items.length
-
-      logger.info('copy', 'copy.measure', {
-        copyId: this.id,
-        items: items.length,
-        totalBytes: 0,
-        sizeUnknown: this.sizeUnknown,
-        skippedStat: true,
-      })
-
-      return
-    }
-
-    await this.pool(items, async (item) => {
-      // 预检查已经量过的项直接命中缓存，不再为同一批文件重复打网络 IO
-      const size = await cachedSizeOf(item.from)
-
-      if (size === null) {
-        // 源文件不可读时复制本来就会失败，大小按未知处理即可
-        this.sizeUnknown += 1
-        return
-      }
-
-      item.size = size
-      this.totalBytes += size
-    })
+    this.totalBytes = measured.totalBytes
+    this.sizeUnknown = measured.sizeUnknown
 
     logger.info('copy', 'copy.measure', {
       copyId: this.id,

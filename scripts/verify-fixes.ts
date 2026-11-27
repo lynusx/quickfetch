@@ -131,10 +131,7 @@ import {
   isActiveCopyFor,
   planPreview,
 } from '../src/main/services/copy/copy'
-import {
-  cachedSizeOf,
-  measureImageSizes,
-} from '../src/main/services/copy/measure'
+import { measureImageSizes } from '../src/main/services/copy/measure'
 import {
   copyStoreOf,
   createCopyStore,
@@ -812,43 +809,158 @@ const copyTests = async () => {
     assert.equal(preview.sizeUnknown, 1)
   })
 
-  await test('复制预览: 超过 5000 张跳过 stat，全部按未知', async () => {
-    const many = Array.from({ length: 5001 }, (_, i) => ({
+  await test('复制预览: 超过 5000 张未知项跳过 stat，但自带 ScannedImage.size 的超大图集零 IO 精确汇总', async () => {
+    const unknownMany = Array.from({ length: 5001 }, (_, i) => ({
       path: `A02-A/EL/20261103/白班/8/NG_脏污_B/${i}.jpg`,
       absolutePath: join(src, `${i}.jpg`),
       name: `${i}.jpg`,
       machine: 'A02-A',
     }))
 
-    const preview = await planPreview(many, {
+    const unknownPreview = await planPreview(unknownMany, {
       machines: ['A02-A'],
       layout: 'flat',
       conflict: 'rename',
     })
 
-    assert.equal(preview.total, 5001)
-    assert.equal(preview.totalBytes, 0)
-    assert.equal(preview.sizeUnknown, 5001)
+    assert.equal(unknownPreview.total, 5001)
+    assert.equal(unknownPreview.totalBytes, 0)
+    assert.equal(unknownPreview.sizeUnknown, 5001)
+
+    let statCalls = 0
+    const knownMany = Array.from({ length: 5005 }, (_, i) => ({
+      path: `A02-A/EL/20261103/白班/8/NG_脏污_B/known-${i}.jpg`,
+      absolutePath: join(src, `known-${i}.jpg`),
+      name: `known-${i}.jpg`,
+      machine: 'A02-A',
+      size: 100,
+    }))
+
+    const knownTotals = await measureImageSizes(knownMany, {
+      statFile: async () => {
+        statCalls += 1
+        return { size: 999 }
+      },
+    })
+
+    assert.equal(statCalls, 0, '自带 image.size 时不得发起任何 stat IO')
+    assert.equal(knownTotals.totalBytes, 500_500)
+    assert.equal(knownTotals.sizeUnknown, 0)
+
+    const mixedTotals = await measureImageSizes(
+      [...knownMany.slice(0, 2), ...unknownMany],
+      {
+        statFile: async () => {
+          statCalls += 1
+          return { size: 999 }
+        },
+      },
+    )
+    assert.equal(statCalls, 0)
+    assert.equal(mixedTotals.totalBytes, 200, '未知项超限时仍保留已知项字节和')
+    assert.equal(mixedTotals.sizeUnknown, 5001)
   })
 
-  await test('体积缓存: 预检查与复制量测复用同一份 size', async () => {
+  await test('体积解析与受限探测: CopyTaskRunner 直通 ScannedImage.size、旧记录缓存复用与共享根熔断', async () => {
     const file = join(src, 'cache-me.jpg')
     await writeFile(file, 'abcd')
-    const image = {
+    const legacyImage = {
       path: 'A02-A/EL/20261103/白班/8/NG_脏污_B/cache-me.jpg',
       absolutePath: file,
       name: 'cache-me.jpg',
       machine: 'A02-A',
     }
 
-    const first = await measureImageSizes([image])
+    const first = await measureImageSizes([legacyImage])
     assert.equal(first.totalBytes, 4)
 
-    // 同名文件被改写后，缓存仍给第一次的结论：产出图只读，不会天天变
+    // 同名文件被改写后，旧记录内部缓存仍给第一次结论；随后启动的 CopyTaskRunner 也零 stat 复用
     await writeFile(file, 'abcdefgh')
-    const second = await measureImageSizes([image])
+    const second = await measureImageSizes([legacyImage])
     assert.equal(second.totalBytes, 4)
-    assert.equal(await cachedSizeOf(file), 4)
+
+    let runnerStatCalls = 0
+    const dst = await mkdtemp(join(tmpdir(), 'qf-dst-known-size-'))
+    const sizedFile = join(src, 'already-sized.jpg')
+    await writeFile(sizedFile, 'hello!')
+
+    const runner = new CopyTaskRunner({
+      scanTaskId: 's-sized',
+      targetDir: dst,
+      params: { machines: ['A02-A'], layout: 'flat', conflict: 'rename' },
+      images: [
+        legacyImage,
+        {
+          path: 'A02-A/EL/20261103/白班/8/NG_脏污_B/already-sized.jpg',
+          absolutePath: sizedFile,
+          name: 'already-sized.jpg',
+          machine: 'A02-A',
+          size: 6,
+        },
+      ],
+      emit: () => undefined,
+      statFile: async () => {
+        runnerStatCalls += 1
+        return { size: 999 }
+      },
+    })
+    runner.start()
+    await runner.waitSettled()
+
+    const snap = runner.snapshot()
+    assert.equal(runnerStatCalls, 0, '历史 size 直通与预检查缓存均不触发 stat')
+    assert.equal(snap.progress.totalBytes, 10)
+    assert.equal(snap.progress.copiedBytes, 10)
+
+    // 共享根熔断：网络错误首张即熔断同根，非网络连续失败 3 张熔断该根，不影响健康根
+    const probedPaths: string[] = []
+    const circuit = await measureImageSizes(
+      [
+        {
+          path: '1.jpg',
+          absolutePath: '\\\\10.0.0.99\\el\\1.jpg',
+          name: '1.jpg',
+        },
+        {
+          path: '2.jpg',
+          absolutePath: '\\\\10.0.0.99\\el\\2.jpg',
+          name: '2.jpg',
+        },
+        ...[1, 2, 3, 4, 5].map((n) => ({
+          path: `bad-${n}.jpg`,
+          absolutePath: `\\\\10.0.0.88\\el\\bad-${n}.jpg`,
+          name: `bad-${n}.jpg`,
+        })),
+        {
+          path: 'ok.jpg',
+          absolutePath: '\\\\10.0.0.77\\el\\ok.jpg',
+          name: 'ok.jpg',
+        },
+      ],
+      {
+        concurrency: 1,
+        cache: new Map(),
+        statFile: async (targetPath) => {
+          probedPaths.push(targetPath)
+          if (targetPath.includes('10.0.0.99')) return { networkError: true }
+          if (targetPath.includes('10.0.0.88')) return {}
+          return { size: 512 }
+        },
+      },
+    )
+
+    assert.equal(circuit.totalBytes, 512)
+    assert.equal(circuit.sizeUnknown, 7)
+    assert.equal(
+      probedPaths.filter((p) => p.includes('10.0.0.99')).length,
+      1,
+      '网络错误必须首张立刻熔断该共享根',
+    )
+    assert.equal(
+      probedPaths.filter((p) => p.includes('10.0.0.88')).length,
+      3,
+      '连续 3 次非网络失败后熔断该共享根，跳过第 4、5 张',
+    )
   })
 
   await test('复制面板: 体积文案', async () => {
