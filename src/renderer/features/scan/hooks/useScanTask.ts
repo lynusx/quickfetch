@@ -11,7 +11,6 @@ import {
   SCAN_CATEGORY_META,
   normalizeScanCategory,
 } from '@shared/scanCategories'
-import { copyStoreOf } from '@/features/copy'
 import {
   scanStoreOf,
   useAoiScanStore,
@@ -166,8 +165,6 @@ export const useScanTask = ({
   const start = useCallback(async () => {
     setError(null)
     setCreating(true)
-    // 新一轮扫描开始前清掉本类别上一轮的复制任务，否则进度条还挂着旧目录的数据
-    copyStoreOf(category).getState().reset()
 
     try {
       const created = await window.electronAPI.createScanTask({

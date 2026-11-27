@@ -135,7 +135,11 @@ import {
   cachedSizeOf,
   measureImageSizes,
 } from '../src/main/services/copy/measure'
-import { copyStoreOf } from '../src/renderer/features/copy/copyStore'
+import {
+  copyStoreOf,
+  createCopyStore,
+} from '../src/renderer/features/copy/copyStore'
+import { scanStoreOf } from '../src/renderer/features/scan/stores/scanStore'
 import {
   AOI_IMAGE_DIRS,
   DEFAULT_AOI_IMAGE_KIND,
@@ -659,29 +663,94 @@ const copyTests = async () => {
     assert.equal(filterByMachines(images, ['B01-A']).length, 0)
   })
 
-  await test('复制: 取消全选后不会被同步重新补全', async () => {
-    const store = copyStoreOf('el').getState()
+  await test('复制会话: 跟随扫描任务自动重置、保留目标目录，表头全选恢复渐进自动补选', async () => {
+    const store = createCopyStore('el')
+    store.getState().setTarget('/saved-target', 'saved-target')
 
-    store.reset()
-    store.syncMachines('t1', ['A02-A', 'A02-B'])
-    assert.deepEqual(copyStoreOf('el').getState().machines, ['A02-A', 'A02-B'])
+    // 任务 t1 初始命中两台机台 -> 默认全选
+    store.getState().syncScanTask({
+      id: 't1',
+      branches: [
+        { machine: 'A02-A', status: 'hit', matchedDirs: 1, images: 3 },
+        { machine: 'A02-B', status: 'hit', matchedDirs: 1, images: 2 },
+        { machine: 'A02-C', status: 'empty', matchedDirs: 0, images: 0 },
+      ],
+    })
+    assert.deepEqual(store.getState().machines, ['A02-A', 'A02-B'])
 
-    store.setMachines([])
-    store.syncMachines('t1', ['A02-A', 'A02-B'])
+    // 用户取消全选 -> 同一任务后续新命中机台不得强行补回
+    store.getState().toggleAll(['A02-A', 'A02-B'], false)
+    store.getState().syncScanTask({
+      id: 't1',
+      branches: [
+        { machine: 'A02-A', status: 'hit', matchedDirs: 1, images: 3 },
+        { machine: 'A02-B', status: 'hit', matchedDirs: 1, images: 2 },
+        { machine: 'A02-D', status: 'hit', matchedDirs: 1, images: 4 },
+      ],
+    })
     assert.deepEqual(
-      copyStoreOf('el').getState().machines,
+      store.getState().machines,
       [],
-      '用户取消全选后，同一任务的同步不能把机台补回来',
+      '用户取消全选后，同一任务的渐进更新不能把机台补回来',
     )
 
-    store.syncMachines('t2', ['B01-A'])
+    // 扫描途中用户再次勾选表头全选 -> selectionTouched 归零，后续新命中机台继续自动补选
+    store.getState().toggleAll(['A02-A', 'A02-B', 'A02-D'], true)
+    store.getState().syncScanTask({
+      id: 't1',
+      branches: [
+        { machine: 'A02-A', status: 'hit', matchedDirs: 1, images: 3 },
+        { machine: 'A02-B', status: 'hit', matchedDirs: 1, images: 2 },
+        { machine: 'A02-D', status: 'hit', matchedDirs: 1, images: 4 },
+        { machine: 'A02-E', status: 'hit', matchedDirs: 1, images: 1 },
+      ],
+    })
     assert.deepEqual(
-      copyStoreOf('el').getState().machines,
-      ['B01-A'],
-      '换了扫描任务要重新默认全选',
+      store.getState().machines,
+      ['A02-A', 'A02-B', 'A02-D', 'A02-E'],
+      '重新勾选表头全选后，渐进扫描后续命中的机台应自动补选',
     )
 
-    copyStoreOf('el').getState().reset()
+    // 绑定 scanStoreOf('el')：切换或清除扫描结果时自动重置复制状态并保留目标目录
+    const boundCopy = copyStoreOf('el')
+    const boundScan = scanStoreOf('el')
+    boundCopy.getState().setTarget('/keep-dir', 'keep-dir')
+    boundCopy.getState().setError('上一轮复制失败')
+
+    boundScan.getState().setTask({
+      id: 'scan-live-1',
+      status: 'completed',
+      params: {
+        category: 'el',
+        machines: ['B01-A'],
+        date: '20261104',
+        shift: '白班',
+        slots: ['8'],
+        types: ['NG'],
+      },
+      progress: {} as never,
+      branches: [
+        { machine: 'B01-A', status: 'hit', matchedDirs: 1, images: 5 },
+      ],
+      pauseReason: null,
+      error: null,
+      createdAt: 1,
+      startedAt: 1,
+      finishedAt: 2,
+      totalImages: 5,
+      preview: [],
+      elapsedMs: 1,
+    })
+    assert.deepEqual(boundCopy.getState().machines, ['B01-A'])
+    assert.equal(boundCopy.getState().error, null)
+    assert.equal(boundCopy.getState().targetDir, '/keep-dir')
+
+    boundCopy.getState().setError('本轮复制异常')
+    boundScan.getState().setTask(null)
+    assert.deepEqual(boundCopy.getState().machines, [])
+    assert.equal(boundCopy.getState().error, null)
+    assert.equal(boundCopy.getState().targetDir, '/keep-dir')
+    boundCopy.getState().clearTarget()
   })
 
   await test('复制: 实时网速按最近 5 秒滑动窗口', async () => {

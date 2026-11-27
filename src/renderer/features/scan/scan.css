@@ -1,5 +1,4 @@
-/* 扫描特性样式：扫描页与任务面板。布局与文本颜色由 Radix props 表达，
-   本文件只保留边框、背景、路径输入字体、只读交互态与吸底复制栏磨砂层。 */
+/* 扫描特性样式：扫描页只读交互态与跳过项展开框。 */
 
 .skipped-box {
   border: 1px solid var(--gray-a4);
@@ -15,34 +14,4 @@
 .scope-matrix-grid[data-readonly='true'] {
   opacity: 0.72;
   pointer-events: none;
-}
-
-.sticky-copy-bar {
-  z-index: 2;
-}
-
-.sticky-copy-card {
-  background: color-mix(in srgb, var(--app-surface) 92%, transparent);
-  backdrop-filter: blur(12px);
-  box-shadow: var(--shadow-4);
-}
-
-.copy-done-icon {
-  color: var(--green-11);
-}
-
-.copy-failure-list {
-  border: 1px solid var(--red-a5);
-  border-radius: var(--radius-2);
-  background: var(--red-a2);
-}
-
-.copy-failure-row + .copy-failure-row {
-  border-top: 1px solid var(--red-a4);
-}
-
-/* 目录输入框显示绝对路径，使用等宽字体 */
-.dir-input {
-  width: 100%;
-  font-family: var(--code-font-family);
 }

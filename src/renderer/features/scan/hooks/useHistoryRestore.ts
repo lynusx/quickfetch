@@ -1,7 +1,6 @@
 import { useCallback } from 'react'
 
 import { useToast } from '@/hooks/useToast'
-import { copyStoreOf } from '@/features/copy'
 import { useSettingsStore } from '@/features/settings'
 import { scanScopeOf } from '../scanScope'
 import { scanStoreOf } from '../stores/scanStore'
@@ -62,10 +61,7 @@ export const useHistoryRestore = (
         // 否则 React 可能先跑一次 effect，把恢复当成用户改范围
         onRestored()
 
-        // 上一轮的复制进度属于另一次结果，留着会让「复制」按钮状态错乱
-        copyStoreOf(category).getState().reset()
-
-        // 筛选已同步归一化，直接落任务；不再等 setTimeout
+        // 筛选已同步归一化，直接落任务（copyStore 监听 scanStore 自动重置上一轮复制状态）
         scanStoreOf(category).getState().setTask(loaded)
 
         showToast(

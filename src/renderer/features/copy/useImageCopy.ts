@@ -1,13 +1,79 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 
-import type { CopyTask, ScanCategory } from '@shared/ipc'
+import type { CopyTask, ScanCategory, ScanTask } from '@shared/ipc'
 import { isFinalCopyStatus } from '@shared/ipc'
-import { copyStoreOf } from './copyStore'
-import { copyTaskMatchesCategory, deriveCopyReadModel } from './copyReadModel'
-import { scanStoreOf } from '@/features/scan'
+import { scanStoreOf } from '@/features/scan/stores/scanStore'
 import { selectPreferences, useSettingsStore } from '@/features/settings'
 import { formatFileSize } from '@/utils/common'
 import { toErrorMessage } from '@/utils/error'
+
+import { copyTaskMatchesCategory, deriveCopyReadModel } from './copyReadModel'
+import { copyStoreOf, hitMachinesOf } from './copyStore'
+
+export interface CopyTableSelection {
+  machines: string[]
+  selectableMachines: string[]
+  allSelectableChecked: boolean
+  someSelectableChecked: boolean
+  /** 复制运行或暂停期间锁定勾选框，防止中途篡改范围 */
+  locked: boolean
+  toggleAll: (checked: boolean | 'indeterminate') => void
+  toggleMachine: (machine: string, checked: boolean | 'indeterminate') => void
+}
+
+/**
+ * 供扫描结果表使用的窄订阅勾选接口：
+ * 只订阅 `machines` 与复制任务运行锁，预检查计算与复制进度刷新不会重渲染整张结果表。
+ */
+export const useCopyTableSelection = (
+  category: ScanCategory,
+  scanTask: Pick<ScanTask, 'branches'>,
+): CopyTableSelection => {
+  const copyStore = copyStoreOf(category)
+  const { machines, locked } = copyStore(
+    useShallow((state) => ({
+      machines: state.machines,
+      locked:
+        state.task?.status === 'running' ||
+        state.task?.status === 'pending' ||
+        state.task?.status === 'paused',
+    })),
+  )
+
+  const selectableMachines = useMemo(() => hitMachinesOf(scanTask), [scanTask])
+
+  const allSelectableChecked =
+    selectableMachines.length > 0 &&
+    selectableMachines.every((machine) => machines.includes(machine))
+  const someSelectableChecked = selectableMachines.some((machine) =>
+    machines.includes(machine),
+  )
+
+  const toggleAll = useCallback(
+    (checked: boolean | 'indeterminate') => {
+      copyStore.getState().toggleAll(selectableMachines, Boolean(checked))
+    },
+    [copyStore, selectableMachines],
+  )
+
+  const toggleMachine = useCallback(
+    (machine: string, checked: boolean | 'indeterminate') => {
+      copyStore.getState().toggleMachine(machine, Boolean(checked))
+    },
+    [copyStore],
+  )
+
+  return {
+    machines,
+    selectableMachines,
+    allSelectableChecked,
+    someSelectableChecked,
+    locked,
+    toggleAll,
+    toggleMachine,
+  }
+}
 
 interface UseImageCopyProps {
   category: ScanCategory
@@ -19,15 +85,7 @@ interface UseImageCopyProps {
 }
 
 /**
- * 复制流程的编排。
- *
- * 顺序是刻意固定的：先勾机台与分组 → 预检查给出规模 → 再让用户选目录 → 最后启动。
- * 反过来的话（先选目录再发现只复制 3 张）用户会觉得流程很蠢。
- *
- * 目标目录是硬前置：没选之前「开始复制」保持禁用，不再由 start 内部弹框兜底。
- *
- * 复制源来自对应类别的扫描结果：EL 面板复制 EL 扫到的图，力禧特面板复制
- * 力禧特扫到的图，两边的 scan/copy store 各自独立。
+ * 复制会话编排（仅供吸底复制栏消费）：订阅主进程复制事件、防抖计算预检查、执行开始/暂停/继续/取消/重试。
  */
 export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
   const scanStore = scanStoreOf(category)
@@ -36,7 +94,6 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
   const task = scanStore((state) => state.task)
   const copying = copyStore((state) => state.task)
   const machines = copyStore((state) => state.machines)
-  // 分组方式与重名策略来自设置页，主进程与本进程读的是同一份持久化配置
   const preferences = useSettingsStore(selectPreferences)
   const layout = preferences.copyLayout
   const conflict = preferences.copyConflict
@@ -46,33 +103,25 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
   const previewing = copyStore((state) => state.previewing)
   const busy = copyStore((state) => state.busy)
   const error = copyStore((state) => state.error)
+  const showFailures = copyStore((state) => state.showFailures)
 
   const setTask = copyStore((state) => state.setTask)
   const patchTask = copyStore((state) => state.patchTask)
-  const syncMachines = copyStore((state) => state.syncMachines)
   const setPreview = copyStore((state) => state.setPreview)
   const setPreviewing = copyStore((state) => state.setPreviewing)
   const setBusy = copyStore((state) => state.setBusy)
   const setError = copyStore((state) => state.setError)
   const setTarget = copyStore((state) => state.setTarget)
+  const setShowFailures = copyStore((state) => state.setShowFailures)
 
-  /**
-   * 已经弹过终态提示的「任务 id + 终态 + 完成时间」。
-   *
-   * 只判 isFinal 不够：重试或重新复制会再发一次终态快照，
-   * 同一批次会弹两遍「复制完成」。带上 finishedAt 就能区分是不是新一轮结束。
-   */
   const toasted = useRef(new Set<string>())
 
-  // 订阅主进程推送：复制进度、状态变化全靠它，暂停/取消后的收尾也走这里
   useEffect(() => {
     return window.electronAPI.onCopyTaskUpdate((next) => {
-      // 广播混着所有类别；先按类别早退，避免进度和 toast 串到别的页面
       if (!copyTaskMatchesCategory(category, next)) return
 
       patchTask(next)
 
-      // 只在「刚结束」这一帧提示一次，后续重复推送不再打扰
       if (!isFinalCopyStatus(next.status)) return
       if (next.status === 'canceled') return
 
@@ -91,7 +140,6 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
         : ''
       const { copied, failed, alreadyExists, skipped, total, totalBytes } =
         next.progress
-      // 跳过项算完成，但结果里要单独说清，不然「已复制 0 张」像是没干活
       const existsText = alreadyExists ? `，${alreadyExists} 张目标已存在` : ''
       const skippedText = skipped ? `，${skipped} 张源内重名跳过` : ''
       const sizeText =
@@ -112,18 +160,14 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
     })
   }, [category, patchTask, setError, showToast])
 
-  /** 机台列表：优先用当前任务各机台的实际图片数，没有则回落到参数里的机台 */
   const machineStats = useMemo(() => {
     if (!task) return []
 
     const counts = new Map<string, number>()
-
     for (const branch of task.branches) {
       counts.set(branch.machine, branch.images)
     }
 
-    // 只列出真正有图片的机台：勾选一个 0 张的机台没意义，
-    // 而且会让「会复制多少张」的预检查数字对不上
     return [...counts.entries()]
       .filter(([, images]) => images > 0)
       .map(([machine, images]) => ({ machine, images }))
@@ -132,22 +176,6 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
       )
   }, [task])
 
-  /**
-   * 新扫描任务默认全选全部机台。
-   *
-   * 同步状态放在 store 里而不是 hook ref：切换页面再回来时勾选仍然有效。
-   * 用户手动改过勾选后（selectionTouched），同一任务内不再被覆盖。
-   */
-  useEffect(() => {
-    if (!task) return
-
-    syncMachines(
-      task.id,
-      machineStats.map((item) => item.machine),
-    )
-  }, [task, machineStats, syncMachines])
-
-  // 显示值、动作值（能否开始、打开哪个目录）都只从 read model 取
   const readModel = useMemo(
     () =>
       deriveCopyReadModel({
@@ -161,23 +189,13 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
     [copying, task, machines, machineStats, targetDir, busy],
   )
 
-  /**
-   * 预检查的请求序号。
-   *
-   * 预检查现在要 stat 一遍选中文件，慢的时候可能上一轮还没回来、
-   * 用户已经改了勾选。只认最后一次发起的请求，避免旧结果覆盖新选择。
-   */
   const previewSeq = useRef(0)
 
-  /** 预检查：勾选变化后重算一次，让界面实时显示「将复制 N 张、建 M 个目录」 */
   const refreshPreview = useCallback(async () => {
     const seq = (previewSeq.current += 1)
 
-    // 一台都没选时不请求预检查：否则主进程会按空列表返回 0 张，
-    // 界面上「将复制 0 张」像是任务本身没图。
     if (!task || !machineStats.length || !machines.length) {
       setPreview(null)
-      // 上一轮请求还在路上时，它会因为序号过期而不去关「计算中」，这里补上
       setPreviewing(false)
       return
     }
@@ -207,8 +225,6 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
     machineStats.length,
     machines,
     layout,
-    // 冲突数要靠目标目录和策略才能算出来，漏在依赖外会导致
-    // 选完目录后预检查仍显示「没有冲突」
     conflict,
     targetDir,
     setPreview,
@@ -216,8 +232,6 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
     setError,
   ])
 
-  // 预检查现在还要 stat 一遍选中文件（体积），连续勾几个机台时不能每点一次
-  // 就发一轮网络请求：等手停下来 250ms 再算。
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void refreshPreview()
@@ -239,12 +253,6 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
     return picked.path
   }, [setTarget, setError])
 
-  /**
-   * 开始复制。
-   *
-   * 目标目录必须已经选好 —— 界面上的按钮在这之前是禁用的，这里再拦一道
-   * 并给出明确提示，避免有人从别的入口（比如覆盖确认弹窗）绕过。
-   */
   const handleStart = useCallback(async () => {
     if (!task) {
       showToast('没有可复制的图片', '请先完成一次扫描', 'info')
@@ -292,7 +300,6 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
     showToast,
   ])
 
-  /** 暂停 / 恢复 / 取消 / 重试 都是同一个形状，抽出来省重复 */
   const run = useCallback(
     async (
       action: (id: string) => Promise<CopyTask | null>,
@@ -340,7 +347,6 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
   )
 
   const handleReveal = useCallback(async () => {
-    // 打开的一定是界面上显示的那个目录：revealDir 与 activeDir 同源
     const dir = readModel.revealDir
 
     if (!dir) return
@@ -359,7 +365,10 @@ export const useImageCopy = ({ category, showToast }: UseImageCopyProps) => {
     targetName,
     busy,
     error,
-    // 显示与动作共用一份派生：面板不再自己算一遍
+    layout,
+    conflict,
+    showFailures,
+    setShowFailures,
     readModel,
     canCopy: readModel.canCopy,
     handleStart,

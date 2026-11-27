@@ -1,0 +1,25 @@
+/* 吸底复制栏外观样式：磨砂卡片、完成态图标与失败明细列表边框。 */
+
+.sticky-copy-bar {
+  z-index: 2;
+}
+
+.sticky-copy-card {
+  background: color-mix(in srgb, var(--app-surface) 92%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-4);
+}
+
+.copy-done-icon {
+  color: var(--green-11);
+}
+
+.copy-failure-list {
+  border: 1px solid var(--red-a5);
+  border-radius: var(--radius-2);
+  background: var(--red-a2);
+}
+
+.copy-failure-row + .copy-failure-row {
+  border-top: 1px solid var(--red-a4);
+}

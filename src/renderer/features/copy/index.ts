@@ -1,3 +1,5 @@
-export { default as CopyPanel } from './copy-panel'
-export * from './useImageCopy'
-export * from './copyStore'
+export { StickyCopyBar } from './sticky-copy-bar'
+export { useCopyTableSelection, useImageCopy } from './useImageCopy'
+export type { CopyTableSelection } from './useImageCopy'
+export { createCopyStore, hitMachinesOf } from './copyStore'
+export type { CopyAction, CopyState, CopyStore } from './copyStore'

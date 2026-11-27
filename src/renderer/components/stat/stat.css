@@ -1,8 +1,0 @@
-/* 统计：Stat / StatGrid。网格列模板由 Grid columns 响应式 prop 接管，
-   标签与单位颜色由 Text color="gray" 表达，本文件只保留边框与背景。 */
-
-.stat {
-  border: 1px solid var(--gray-a4);
-  border-radius: var(--radius-3);
-  background: var(--gray-a2);
-}

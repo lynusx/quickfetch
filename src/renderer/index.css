@@ -184,6 +184,12 @@ body {
   background: var(--red-9);
 }
 
+/* 目录输入框显示绝对路径，跨 scan / copy 共享等宽样式 */
+.dir-input {
+  width: 100%;
+  font-family: var(--code-font-family);
+}
+
 @media (max-width: 1080px) {
   .radix-themes {
     --app-sidebar-width: 214px;
